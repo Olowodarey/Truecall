@@ -178,7 +178,7 @@ This is **skill-based prediction**, not gambling.
 - Event indexing
 - UI optimization
 
-This hybrid approach ensures scalability while preserving verifiability.
+
 
 ---
 
@@ -223,30 +223,6 @@ Stellar is used **only where it adds real value**.
 ## 🌍 Vision
 
 To become the **standard global infrastructure for fair prediction challenges**, enabling creators and communities everywhere to run transparent competitions and reward participants instantly — with borderless payments powered by Stellar.
-
----
-
-## 📁 Project Structure
-
-This repository uses the recommended structure for a Soroban project:
-
-```text
-.
-├── contracts
-│   └── hello_world
-│       ├── src
-│       │   ├── lib.rs
-│       │   └── test.rs
-│       └── Cargo.toml
-├── frontend
-│   └── [Next.js application files]
-├── Cargo.toml
-└── README.md
-```
-
-- New Soroban contracts can be put in `contracts`, each in their own directory. There is already a `hello_world` contract in there to get you started.
-- Contracts should have their own `Cargo.toml` files that rely on the top-level `Cargo.toml` workspace for their dependencies.
-- Frontend is built with Next.js and located in the `frontend` directory.
 
 ---
 
