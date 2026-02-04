@@ -1,26 +1,69 @@
-import Header from '../components/Header';
-import HeroSection from '../components/HeroSection';
-import StatsSection from '../components/StatsSection';
-import TournamentsSection from '../components/TournamentsSection';
-import ArchitectureSection from '../components/ArchitectureSection';
-import Footer from '../components/Footer';
-import UnifiedBackground from '../components/UnifiedBackground';
+import Header from "../components/Header";
+import HeroSection from "../components/HeroSection";
+import StatsSection from "../components/StatsSection";
+import HowItWorksSection from "../components/HowItWorksSection";
+import TournamentsSection from "../components/TournamentsSection";
+import ArchitectureSection from "../components/ArchitectureSection";
+import Footer from "../components/Footer";
 
 export default function Home() {
   return (
-    <div className="relative min-h-screen">
-      {/* Global Background */}
-      <UnifiedBackground 
-        variant="minimal"
-        showParticles={false}
-        className="fixed inset-0 -z-10"
-      />
-      <Header />
-      <HeroSection />
-      <StatsSection />
-      <TournamentsSection />
-      <ArchitectureSection />
-      <Footer />
+    <div className="relative min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
+      {/* Global Network Lines Background */}
+      <div className="absolute inset-0 w-full h-full z-0">
+        <svg
+          className="w-full h-full opacity-15"
+          viewBox="0 0 1000 1000"
+          preserveAspectRatio="xMidYMid slice"
+        >
+          <defs>
+            <linearGradient
+              id="globalLineGradient"
+              x1="0%"
+              y1="0%"
+              x2="100%"
+              y2="100%"
+            >
+              <stop offset="0%" stopColor="#f97316" stopOpacity="0.3" />
+              <stop offset="100%" stopColor="#eab308" stopOpacity="0.2" />
+            </linearGradient>
+          </defs>
+          <path
+            d="M100,200 Q300,100 500,200 T900,200"
+            stroke="url(#globalLineGradient)"
+            strokeWidth="2"
+            fill="none"
+          />
+          <path
+            d="M200,400 Q400,300 600,400 T1000,400"
+            stroke="url(#globalLineGradient)"
+            strokeWidth="2"
+            fill="none"
+          />
+          <path
+            d="M50,600 Q250,500 450,600 T850,600"
+            stroke="url(#globalLineGradient)"
+            strokeWidth="2"
+            fill="none"
+          />
+          <path
+            d="M150,800 Q350,700 550,800 T950,800"
+            stroke="url(#globalLineGradient)"
+            strokeWidth="2"
+            fill="none"
+          />
+        </svg>
+      </div>
+
+      <div className="relative z-10">
+        <Header />
+        <HeroSection />
+        {/* <StatsSection /> */}
+        <HowItWorksSection />
+        {/* <TournamentsSection /> */}
+        {/* <ArchitectureSection /> */}
+        <Footer />
+      </div>
     </div>
   );
 }

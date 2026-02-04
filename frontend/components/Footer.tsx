@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import UnifiedBackground from './UnifiedBackground';
 
 export default function Footer() {
   const footerSections = [
@@ -34,13 +33,6 @@ export default function Footer() {
 
   return (
     <footer className="relative border-t border-gray-800">
-      {/* Unified Background */}
-      <UnifiedBackground 
-        variant="minimal"
-        showParticles={true}
-        particleCount={60}
-        opacity={0.15}
-      />
       <div className="relative z-10 max-w-7xl mx-auto px-6 py-12">
         <div className="grid lg:grid-cols-4 gap-8">
           <div className="space-y-4">
