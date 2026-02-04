@@ -1,26 +1,13 @@
 {
-  "name": "truecall",
-  "version": "0.1.0",
+  "name": "truecall1-monorepo",
   "private": true,
+  "workspaces": [
+    "contracts",
+    "frontend"
+  ],
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
-  },
-  "dependencies": {
-    "next": "16.1.3",
-    "react": "19.2.3",
-    "react-dom": "19.2.3"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.1.3",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+    "contracts:check": "npm run check --workspace=contracts",
+    "frontend:dev": "npm run dev --workspace=frontend",
+    "frontend:build": "npm run build --workspace=frontend"
   }
 }
