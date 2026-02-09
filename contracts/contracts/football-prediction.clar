@@ -69,6 +69,18 @@
     { joined: bool }
 )
 
+;; Track participant count per event
+(define-map event-participant-count
+    { event-id: uint }
+    { count: uint }
+)
+
+;; Store participants by index for retrieval
+(define-map event-participant-by-index
+    { event-id: uint, index: uint }
+    { participant: principal }
+)
+
 ;; Read-only functions
 
 ;; Get event details
@@ -92,6 +104,18 @@
 ;; Check if user has joined an event
 (define-read-only (has-joined-event (event-id uint) (participant principal))
     (is-some (map-get? event-participants { event-id: event-id, participant: participant }))
+)
+
+;; Get participant count for an event
+(define-read-only (get-participant-count (event-id uint))
+    (default-to u0 
+        (get count (map-get? event-participant-count { event-id: event-id }))
+    )
+)
+
+;; Get participant by index
+(define-read-only (get-participant-at-index (event-id uint) (index uint))
+    (get participant (map-get? event-participant-by-index { event-id: event-id, index: index }))
 )
 
 ;; Public functions
@@ -159,9 +183,26 @@
                  err-unauthorized)
         
         ;; Record participation
-        (map-set event-participants
-            { event-id: event-id, participant: tx-sender }
-            { joined: true }
+        (let
+            (
+                (current-count (get-participant-count event-id))
+            )
+            (map-set event-participants
+                { event-id: event-id, participant: tx-sender }
+                { joined: true }
+            )
+            
+            ;; Add participant to indexed list
+            (map-set event-participant-by-index
+                { event-id: event-id, index: current-count }
+                { participant: tx-sender }
+            )
+            
+            ;; Increment participant count
+            (map-set event-participant-count
+                { event-id: event-id }
+                { count: (+ current-count u1) }
+            )
         )
         
         ;; Store prediction
