@@ -13,6 +13,7 @@
 (define-constant err-already-predicted (err u107))
 (define-constant err-event-not-settled (err u108))
 (define-constant err-event-already-settled (err u109))
+(define-constant err-match-started (err u110))
 
 ;; Data Variables
 (define-data-var event-nonce uint u0)
@@ -172,6 +173,9 @@
         
         ;; Verify event is open
         (asserts! (is-eq (get status event) "open") err-event-closed)
+        
+        ;; Verify match hasn't started yet (using burn-block-height as proxy for time)
+        (asserts! (< burn-block-height (get match-time event)) err-match-started)
         
         ;; Verify user hasn't already predicted
         (asserts! (is-none (get-prediction event-id tx-sender)) err-already-predicted)
