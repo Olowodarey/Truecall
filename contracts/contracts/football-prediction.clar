@@ -262,11 +262,12 @@
     )
 )
 
-;; Submit result (oracle only) and award points
+;; Submit result (oracle only) and award points automatically
 (define-public (submit-result (event-id uint) (final-result uint))
     (let
         (
             (event (unwrap! (get-event event-id) err-not-found))
+            (participant-count (get-participant-count event-id))
         )
         ;; Only oracle can submit
         (asserts! (is-eq tx-sender (get oracle event)) err-unauthorized)
@@ -288,6 +289,9 @@
                 final-result: (some final-result)
             })
         )
+        
+        ;; Automatically award points to all participants
+        (process-participants event-id final-result u0 participant-count)
         
         (ok true)
     )
@@ -343,5 +347,48 @@
             (merge event { oracle: new-oracle })
         )
         (ok true)
+    )
+)
+
+;; Private helper function to award points to a participant
+(define-private (award-points-to-participant (event-id uint) (participant principal) (final-result uint))
+    (let
+        (
+            (prediction (map-get? predictions { event-id: event-id, participant: participant }))
+            (stats (get-user-stats participant))
+        )
+        (match prediction
+            pred
+            (if (is-eq (get predicted-outcome pred) final-result)
+                ;; Award points for correct prediction
+                (map-set leaderboard
+                    { participant: participant }
+                    {
+                        total-points: (+ (get total-points stats) points-per-correct-prediction),
+                        correct-predictions: (+ (get correct-predictions stats) u1),
+                        total-predictions: (get total-predictions stats)
+                    }
+                )
+                ;; No points for incorrect prediction
+                true
+            )
+            ;; No prediction found, do nothing
+            true
+        )
+    )
+)
+
+;; Private recursive helper to process all participants
+(define-private (process-participants (event-id uint) (final-result uint) (current-index uint) (total-count uint))
+    (if (< current-index total-count)
+        (begin
+            (match (get-participant-at-index event-id current-index)
+                participant
+                (award-points-to-participant event-id participant final-result)
+                true
+            )
+            (process-participants event-id final-result (+ current-index u1) total-count)
+        )
+        true
     )
 )
