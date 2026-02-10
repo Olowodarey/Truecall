@@ -104,6 +104,12 @@
     { event-id: uint }
 )
 
+;; Map event name to event ID for lookup
+(define-map event-name-to-id
+    { event-name: (string-ascii 100) }
+    { event-id: uint }
+)
+
 ;; Read-only functions
 
 ;; Get event details
@@ -175,6 +181,20 @@
     )
 )
 
+;; Get event ID by event name
+(define-read-only (get-event-id-by-name (event-name (string-ascii 100)))
+    (get event-id (map-get? event-name-to-id { event-name: event-name }))
+)
+
+;; Get event by name
+(define-read-only (get-event-by-name (event-name (string-ascii 100)))
+    (match (get-event-id-by-name event-name)
+        event-id
+        (get-event event-id)
+        none
+    )
+)
+
 ;; Public functions
 
 ;; Create a new event
@@ -212,6 +232,12 @@
             }
         )
         
+        ;; Map event name to ID for lookup
+        (map-set event-name-to-id
+            { event-name: event-name }
+            { event-id: event-id }
+        )
+        
         ;; Track event by creator
         (map-set creator-event-by-index
             { creator: tx-sender, index: creator-count }
@@ -238,12 +264,13 @@
 
 ;; Join event and place prediction
 (define-public (join-event 
-    (event-id uint)
+    (event-name (string-ascii 100))
     (access-code (string-ascii 50))
     (predicted-outcome uint)
 )
     (let
         (
+            (event-id (unwrap! (get-event-id-by-name event-name) err-not-found))
             (event (unwrap! (get-event event-id) err-not-found))
             (code-hash (sha256 (unwrap-panic (to-consensus-buff? access-code))))
         )
