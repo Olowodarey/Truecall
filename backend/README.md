@@ -1,98 +1,141 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Football Prediction Oracle Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+NestJS backend service that acts as an oracle for the football prediction smart contract on Stacks blockchain.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Features
 
-## Description
+- 🏈 **Football API Integration** - Fetches match data from API-Football or TheSportsDB
+- ⛓️ **Blockchain Oracle** - Submits match results to Stacks smart contract
+- ⏰ **Automated Scheduling** - Cron jobs for match syncing and result submission
+- 💾 **Database** - PostgreSQL for storing matches and events
+- 🔐 **Secure** - Environment-based configuration
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Setup
 
-## Project setup
+### Prerequisites
+
+- Node.js 18+
+- PostgreSQL database
+- Sports API key (API-Football or TheSportsDB)
+- Stacks wallet with testnet STX
+
+### Installation
 
 ```bash
-$ npm install
+# Install dependencies
+pnpm install
+
+# Copy environment template
+cp .env.example .env
+
+# Edit .env with your configuration
+nano .env
 ```
 
-## Compile and run the project
+### Environment Variables
+
+Create a `.env` file with the following variables:
+
+```env
+# Sports API
+SPORTS_API_KEY=your_api_key_here
+SPORTS_API_PROVIDER=api-football
+SPORTS_API_BASE_URL=https://v3.football.api-sports.io
+
+# Stacks Blockchain
+STACKS_NETWORK=testnet
+CONTRACT_ADDRESS=your_contract_address
+CONTRACT_NAME=football-prediction
+ORACLE_PRIVATE_KEY=your_private_key
+ORACLE_ADDRESS=your_address
+
+# Database
+DATABASE_HOST=localhost
+DATABASE_PORT=5432
+DATABASE_USERNAME=postgres
+DATABASE_PASSWORD=postgres
+DATABASE_NAME=football_oracle
+
+# Server
+PORT=3001
+NODE_ENV=development
+```
+
+### Database Setup
 
 ```bash
-# development
-$ npm run start
+# Create database
+createdb football_oracle
 
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+# Run migrations (auto-sync enabled in development)
+pnpm run start:dev
 ```
 
-## Run tests
+## Running the Application
 
 ```bash
-# unit tests
-$ npm run test
+# Development
+pnpm run start:dev
 
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+# Production
+pnpm run build
+pnpm run start:prod
 ```
 
-## Deployment
+## API Endpoints
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+### Football Matches
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+- `GET /api/matches/upcoming` - Get upcoming matches
+- `GET /api/matches/completed` - Get completed matches
+- `GET /api/matches/all` - Get all matches
+- `GET /api/matches/:id` - Get match by ID
+- `POST /api/matches/sync` - Manually sync matches from API
+
+### Oracle Operations
+
+- `POST /api/oracle/create-event` - Create a new prediction event
+- `POST /api/oracle/submit-result` - Submit match result to contract
+- `POST /api/oracle/close-event/:id` - Close an event
+- `GET /api/oracle/events` - Get all events
+- `GET /api/oracle/events/:id` - Get event by ID
+
+## Automated Tasks
+
+The scheduler runs the following cron jobs:
+
+- **Every 30 minutes**: Check for completed matches and submit results
+- **Every hour**: Sync matches from sports API
+- **Every 10 minutes**: Close events for matches starting soon
+
+## Architecture
+
+```
+┌─────────────────┐      ┌──────────────────┐      ┌─────────────────┐
+│  Sports API     │─────▶│  Backend Oracle  │─────▶│ Stacks Contract │
+│  (API-Football) │      │  (NestJS)        │      │  (Clarity)      │
+└─────────────────┘      └──────────────────┘      └─────────────────┘
+                                 │
+                                 ▼
+                          ┌──────────────┐
+                          │  PostgreSQL  │
+                          │  (Database)  │
+                          └──────────────┘
+```
+
+## Development
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+# Run tests
+pnpm run test
+
+# Run linter
+pnpm run lint
+
+# Format code
+pnpm run format
 ```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
 
 ## License
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+MIT
