@@ -1,4 +1,5 @@
 import Link from "next/link";
+import WalletButton from "./WalletButton";
 
 export default function Header() {
   return (
@@ -39,9 +40,7 @@ export default function Header() {
             </div>
           </div>
 
-          <button className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition-colors">
-            Connect Wallet
-          </button>
+          <WalletButton />
         </nav>
       </div>
     </header>
