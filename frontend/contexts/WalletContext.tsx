@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { AppConfig, UserSession } from "@stacks/connect";
+import { AppConfig, UserSession, openAuthRequest } from "@stacks/connect";
 
 interface WalletContextType {
   userSession: UserSession;
