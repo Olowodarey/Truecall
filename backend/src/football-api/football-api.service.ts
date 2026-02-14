@@ -132,6 +132,19 @@ export class FootballApiService {
   }
 
   /**
+   * Get upcoming matches from database
+   */
+  async getUpcomingMatches(): Promise<Match[]> {
+    const now = Math.floor(Date.now() / 1000);
+    return this.matchRepository.find({
+      where: {
+        status: MatchStatus.SCHEDULED,
+      },
+      order: { matchTime: 'ASC' },
+    });
+  }
+
+  /**
    * Update match status
    */
   async updateMatchStatus(

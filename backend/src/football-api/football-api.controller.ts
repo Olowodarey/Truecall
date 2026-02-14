@@ -11,7 +11,8 @@ export class FootballApiController {
     @Query('league') league?: string,
     @Query('date') date?: string,
   ): Promise<Match[]> {
-    return this.footballApiService.fetchUpcomingMatches(league, date);
+    // Return matches from database instead of fetching from external API
+    return this.footballApiService.getUpcomingMatches();
   }
 
   @Get('completed')
