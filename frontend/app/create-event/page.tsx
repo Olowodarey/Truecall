@@ -243,7 +243,7 @@ export default function CreateEventPage() {
                     {matches.map((match) => (
                       <option key={match.id} value={match.id}>
                         {match.homeTeam} vs {match.awayTeam} -{" "}
-                        {format(new Date(match.matchTime), "PPP")}
+                        {format(new Date(match.matchTime * 1000), "PPP")}
                       </option>
                     ))}
                   </select>
@@ -270,7 +270,7 @@ export default function CreateEventPage() {
                     </div>
                   </div>
                   <p className="text-center text-sm text-gray-400 mt-2">
-                    {format(new Date(selectedMatch.matchTime), "PPP p")}
+                    {format(new Date(selectedMatch.matchTime * 1000), "PPP p")}
                   </p>
                 </div>
               )}
