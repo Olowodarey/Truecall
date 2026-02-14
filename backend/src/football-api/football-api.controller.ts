@@ -40,13 +40,4 @@ export class FootballApiController {
       count: matches.length,
     };
   }
-
-  @Post('create-test-matches')
-  async createTestMatches(): Promise<{ message: string; matches: Match[] }> {
-    const matches = await this.footballApiService.createTestMatches();
-    return {
-      message: 'Test matches created successfully',
-      matches,
-    };
-  }
 }
