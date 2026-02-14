@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { AppConfig, UserSession } from "@stacks/connect";
-import { connect } from "@stacks/connect";
+import { connect as stacksConnect } from "@stacks/connect";
 
 interface WalletContextType {
   userSession: UserSession;
@@ -29,24 +29,20 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }, [userSession]);
 
-  const connectWallet = () => {
-    connect({
-      appDetails: {
-        name: "TrueCall",
-        icon: window.location.origin + "/logo.png",
-      },
-      onFinish: () => {
-        if (userSession.isUserSignedIn()) {
-          const userData = userSession.loadUserData();
-          setIsConnected(true);
-          setUserAddress(userData.profile.stxAddress.testnet);
-        }
-      },
-      onCancel: () => {
-        console.log("User cancelled wallet connection");
-      },
-      userSession,
-    });
+  const connectWallet = async () => {
+    try {
+      const response = await stacksConnect({
+        userSession,
+      });
+
+      if (response && userSession.isUserSignedIn()) {
+        const userData = userSession.loadUserData();
+        setIsConnected(true);
+        setUserAddress(userData.profile.stxAddress.testnet);
+      }
+    } catch (error) {
+      console.error("Wallet connection error:", error);
+    }
   };
 
   const disconnect = () => {
