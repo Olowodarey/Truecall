@@ -84,7 +84,6 @@ export default function ProfilePage() {
       <Header />
 
       <main className="relative z-10 container mx-auto px-4 pt-32 pb-20">
-      <main className="relative z-10 container mx-auto px-4 pt-32 pb-20">
         <div className="flex flex-col md:flex-row items-center justify-between mb-12 gap-8">
           <div className="flex items-center gap-6">
             <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-orange-500 to-yellow-500 p-1">
@@ -112,7 +111,6 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        <div className="space-y-12">
         <div className="space-y-12">
           {/* Rewards Section */}
           <section>
