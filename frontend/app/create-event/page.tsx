@@ -94,7 +94,7 @@ export default function CreateEventPage() {
   const selectedMatch = matches.find((m) => m.id === selectedMatchId);
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
+    <div className="relative pt-20 min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
       {/* Background Pattern */}
       <div className="absolute inset-0 w-full h-full z-0">
         <svg
