@@ -37,6 +37,12 @@ export default function Header() {
               >
                 Tournaments
               </Link>
+              <Link
+                href="/profile"
+                className="text-gray-300 hover:text-white transition-colors"
+              >
+                Profile
+              </Link>
             </div>
           </div>
 

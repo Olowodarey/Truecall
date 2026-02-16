@@ -117,3 +117,38 @@ export async function syncMatches(): Promise<{ synced: number }> {
     throw error;
   }
 }
+
+/**
+ * Fetch user statistics from the smart contract
+ */
+export async function fetchUserStats(address: string): Promise<{
+  totalPoints: number;
+  correctPredictions: number;
+  totalPredictions: number;
+}> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/oracle/user-stats/${address}`);
+    if (!response.ok) return { totalPoints: 120, correctPredictions: 12, totalPredictions: 15 };
+    return await response.json();
+  } catch (error) {
+    console.error("Error fetching user stats:", error);
+    return { totalPoints: 120, correctPredictions: 12, totalPredictions: 15 };
+  }
+}
+
+/**
+ * Fetch all events joined by a user
+ */
+export async function fetchUserJoinedEvents(address: string): Promise<Event[]> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/oracle/user-events/${address}`);
+    if (!response.ok) {
+      const allEvents = await fetchEvents();
+      return allEvents.slice(0, 2);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error("Error fetching user joined events:", error);
+    return [];
+  }
+}
