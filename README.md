@@ -1,97 +1,43 @@
-# TrueCall – Decentralized Hybrid Prediction Platform on Stacks
 
-![TrueCall Logo](./logo.png)
+# TrueCall
 
-**Fair, transparent prediction challenges for creators & communities.**
-Hybrid resolution using **Pyth Oracle** for numeric events and **creator-submitted answers verified by a trusted admin** for major events (sports, competitions, etc.)
-Built on **Stacks blockchain** with **Clarity smart contracts**.
+## Overview
 
----
+**TrueCall** is a decentralized **prediction market platform** designed to operate across multiple blockchain networks.
 
-## Key Features (Updated)
+The project enables users to create and participate in prediction challenges in a transparent and trust-minimized way using smart contract technology.
 
-### Hybrid Resolution
+## What is TrueCall?
 
-- **Pyth Oracle:** Automatic resolution for numeric events (crypto/price-based predictions).
-- **Creator-Submitted Answers Verified by Admin:** For major events like sports, the **creator provides the correct outcome**, and the **trusted admin only confirms** it on-chain. The admin **cannot modify or choose outcomes**, ensuring full transparency and fairness.
+TrueCall is a prediction platform that lets users:
 
-### Prediction Mechanics
+✔ Participate in prediction challenges (such as sports results, price predictions, and other real-world events)
+✔ Submit predictions directly on-chain using smart contracts
 
-- Users submit **predictions on-chain**.
-- Each event must have **at least 3 prediction options**.
-- On-chain timestamps prevent disputes.
-- **Admin role is limited to verifying creator-submitted answers**, never arbitrarily resolving events.
+By leveraging decentralized infrastructure, TrueCall ensures transparency, security, and verifiable outcomes for all participants.
 
----
+## How It Works
 
-## Event & Prediction Flow (Updated)
+1. **Create a Prediction Market**
+   Users can create prediction events with defined outcomes and timelines.
 
-1. **Event Creation (Creator)**
-   - Define `title`, `prediction options` (≥3), start & end block.
-   - Creator submits the **correct answer** after event ends (or before for scheduled events).
-   - Optional reward locked (STX) for winners.
+2. **Participate in Markets**
+   Other users can join and submit their predictions before the deadline.
 
-2. **User Participation**
-   - Submit a prediction on-chain before the event ends.
-   - Prediction stored with timestamp for transparency.
+3. **On-Chain Submission**
+   All predictions are recorded via smart contracts.
 
-3. **Event Resolution**
-   - After event ends:
-     - **Numeric predictions:** Resolved automatically via **Pyth Oracle**.
-     - **Major events:** Creator submits the correct outcome. **Admin only verifies and confirms** it on-chain.
+4. **Outcome Resolution**
+   Once the event concludes, results are recorded and rewards are distributed according to the contract rules.
 
-   - Contract calculates points based on correct predictions.
+## Architecture
 
-4. **Leaderboard Update**
-   - Users earn points based on correct predictions.
-   - Leaderboards update in real-time for each event or season.
+* Smart Contracts (Multi-chain compatible)
+* Web-based Frontend
+* Modular backend infrastructure
 
-5. **Rewards & NFT Badges**
-   - Winners automatically receive STX rewards (if enabled).
-   - Optional NFT badges minted as proof of skill.
+## Goal
+
+TrueCall aims to provide a decentralized and transparent environment where users can confidently participate in prediction markets without relying on centralized intermediaries, while remaining flexible across multiple blockchain ecosystems.
 
 ---
-
-**Notes:**
-
-- `creator-submitted-answer` is the definitive outcome.
-- `admin-verified` confirms the answer is valid and accepted on-chain.
-- Admin cannot change the answer, only verify it.
-
----
-
-## 🔑 Admin Role
-
-- Admin **cannot modify predictions or outcomes**.
-- Admin **only verifies** the answer submitted by the creator.
-- This ensures that all events remain **transparent, fair, and verifiable**.
-
----
-
-This makes the **hybrid model fully transparent**:
-
-- Pyth handles numeric data automatically.
-- Creator submits the outcome for non-numeric events.
-- Admin confirms it.
-- Users’ predictions are scored automatically and leaderboard updated.
-
----
-
-## 🚀 Getting Started (Mono-repo)
-
-This is a mono-repo structure:
-
-- `contracts/`: Stacks/Clarity smart contracts (Clarinet project).
-- `frontend/`: Next.js web application.
-
-### Prerequisites
-
-- Clarinet (for contracts)
-- Node.js & npm (for frontend)
-
-### Scripts
-
-Run these from the root:
-
-- `npm run frontend:dev`: Start Next.js dev server.
-- `npm run contracts:check`: Check Clarity contracts.
