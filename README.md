@@ -3,7 +3,7 @@
 
 ## Overview
 
-**TrueCall** is a decentralized **prediction market platform** designed to operate across multiple blockchain networks.
+**TrueCall** is a decentralized **prediction market platform** 
 
 The project enables users to create and participate in prediction challenges in a transparent and trust-minimized way using smart contract technology.
 
@@ -32,7 +32,7 @@ By leveraging decentralized infrastructure, TrueCall ensures transparency, secur
 
 ## Architecture
 
-* Smart Contracts (Multi-chain compatible)
+* Smart Contracts
 * Web-based Frontend
 * Modular backend infrastructure
 
