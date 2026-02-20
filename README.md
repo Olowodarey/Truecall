@@ -3,9 +3,7 @@
 
 ## Overview
 
-**TrueCall** is a decentralized **prediction market platform** 
-
-The project enables users to create and participate in prediction challenges in a transparent and trust-minimized way using smart contract technology.
+TrueCall is a decentralized multi-chain prediction market platform that allows users to participate in both standard prediction events and competitive leaderboard-based challenges. Users can submit predictions on real-world outcomes such as sports results, crypto prices, or other measurable events, all recorded transparently through smart contracts. In addition to regular markets, TrueCall introduces ranked competitions where participants earn points based on performance and compete on public leaderboards for top rewards. By combining prediction markets with gamified competition, TrueCall creates an engaging, transparent, and trust-minimized ecosystem where users can test their insights, compete globally, and earn based on accuracy.
 
 ## What is TrueCall?
 
