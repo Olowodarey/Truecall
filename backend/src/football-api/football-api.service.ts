@@ -114,18 +114,6 @@ export class FootballApiService {
   }
 
   /**
-   * Fetch completed matches that haven't been submitted to contract
-   */
-  async getCompletedMatches(): Promise<Match[]> {
-    return this.matchRepository.find({
-      where: {
-        status: MatchStatus.COMPLETED,
-        submittedToContract: false,
-      },
-    });
-  }
-
-  /**
    * Get match by ID
    */
   async getMatchById(id: number): Promise<Match | null> {
@@ -179,27 +167,6 @@ export class FootballApiService {
   }
 
   /**
-   * Mark match as submitted to contract
-   */
-  async markAsSubmitted(
-    matchId: number,
-    transactionId: string,
-  ): Promise<Match> {
-    const match = await this.matchRepository.findOne({
-      where: { id: matchId },
-    });
-
-    if (!match) {
-      throw new Error(`Match with ID ${matchId} not found`);
-    }
-
-    match.submittedToContract = true;
-    match.transactionId = transactionId;
-
-    return this.matchRepository.save(match);
-  }
-
-  /**
    * Process API-Football response
    */
   private async processApiFootballResponse(data: any): Promise<Match[]> {
@@ -211,7 +178,19 @@ export class FootballApiService {
       });
 
       if (existingMatch) {
-        matches.push(existingMatch);
+        // Update existing match with latest score/status
+        existingMatch.status = this.mapApiFootballStatus(
+          fixture.fixture.status.short,
+        );
+        existingMatch.homeScore = fixture.goals.home;
+        existingMatch.awayScore = fixture.goals.away;
+        existingMatch.result = this.calculateResult(
+          fixture.goals.home,
+          fixture.goals.away,
+        );
+
+        const saved = await this.matchRepository.save(existingMatch);
+        matches.push(saved);
         continue;
       }
 
@@ -245,7 +224,20 @@ export class FootballApiService {
       });
 
       if (existingMatch) {
-        matches.push(existingMatch);
+        existingMatch.status = MatchStatus.SCHEDULED; // Simplified for this provider
+        existingMatch.homeScore = event.intHomeScore
+          ? parseInt(event.intHomeScore)
+          : null;
+        existingMatch.awayScore = event.intAwayScore
+          ? parseInt(event.intAwayScore)
+          : null;
+        existingMatch.result = this.calculateResult(
+          existingMatch.homeScore ?? null,
+          existingMatch.awayScore ?? null,
+        );
+
+        const saved = await this.matchRepository.save(existingMatch);
+        matches.push(saved);
         continue;
       }
 
@@ -295,8 +287,8 @@ export class FootballApiService {
    * Calculate match result from scores
    */
   private calculateResult(
-    homeScore: number,
-    awayScore: number,
+    homeScore: number | null,
+    awayScore: number | null,
   ): MatchResult | null {
     if (homeScore === null || awayScore === null) {
       return null;

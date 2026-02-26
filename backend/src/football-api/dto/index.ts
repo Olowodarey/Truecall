@@ -8,15 +8,3 @@ export class MatchDto {
   awayScore?: number;
   result?: number;
 }
-
-export class CreateEventDto {
-  eventName: string;
-  matchId: number;
-  accessCode: string;
-  oracle: string;
-}
-
-export class SubmitResultDto {
-  matchId: number;
-  result: number;
-}

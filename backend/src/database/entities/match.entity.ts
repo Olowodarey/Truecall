@@ -52,15 +52,6 @@ export class Match {
   @Column({ type: 'int', nullable: true })
   awayScore: number | null;
 
-  @Column({ type: 'int', nullable: true })
-  eventId: number | null;
-
-  @Column({ default: false })
-  submittedToContract: boolean;
-
-  @Column({ type: 'varchar', nullable: true })
-  transactionId: string | null;
-
   @CreateDateColumn()
   createdAt: Date;
 

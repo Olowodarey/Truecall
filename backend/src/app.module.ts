@@ -5,9 +5,8 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { FootballApiModule } from './football-api/football-api.module';
-import { OracleModule } from './oracle/oracle.module';
 import { SchedulerModule } from './scheduler/scheduler.module';
-import { Match, Event } from './database/entities';
+import { Match } from './database/entities';
 
 @Module({
   imports: [
@@ -22,13 +21,12 @@ import { Match, Event } from './database/entities';
       username: process.env.DATABASE_USERNAME || 'postgres',
       password: process.env.DATABASE_PASSWORD || 'postgres',
       database: process.env.DATABASE_NAME || 'football_oracle',
-      entities: [Match, Event],
+      entities: [Match],
       synchronize: true, // Set to false in production
       logging: process.env.NODE_ENV === 'development',
     }),
     ScheduleModule.forRoot(),
     FootballApiModule,
-    OracleModule,
     SchedulerModule,
   ],
   controllers: [AppController],

@@ -15,11 +15,6 @@ export class FootballApiController {
     return this.footballApiService.getUpcomingMatches();
   }
 
-  @Get('completed')
-  async getCompletedMatches(): Promise<Match[]> {
-    return this.footballApiService.getCompletedMatches();
-  }
-
   @Get('all')
   async getAllMatches(): Promise<Match[]> {
     return this.footballApiService.getAllMatches();
