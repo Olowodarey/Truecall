@@ -46,3 +46,8 @@ const MOCK_MARKETS: MarketAsset[] = [
     targetPrice: 2500.00,
     endTime: "End of Month",
     category: "Commodity",
+    totalPool: "2,100 STX"
+  },
+  {
+    id: "nvda-1200",
+    name: "Nvidia",
