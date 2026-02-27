@@ -21,3 +21,8 @@ const MOCK_MARKETS: MarketAsset[] = [
     symbol: "ETH",
     currentPrice: 3820.50,
     "24hChange": -1.2,
+    targetPrice: 4000.00,
+    endTime: "End of Week",
+    category: "Crypto",
+    totalPool: "840 STX"
+  },
