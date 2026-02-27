@@ -31,3 +31,8 @@ const MOCK_MARKETS: MarketAsset[] = [
     name: "Tesla",
     symbol: "TSLA",
     currentPrice: 235.40,
+    "24hChange": 5.1,
+    targetPrice: 250.00,
+    endTime: "Friday Close",
+    category: "Stock",
+    totalPool: "520 STX"
