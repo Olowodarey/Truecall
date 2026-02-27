@@ -43,3 +43,8 @@ export default function MarketCard({ asset }: { asset: MarketAsset }) {
           <p className={`text-xs font-bold mt-1 ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
             {isPositive ? '↑' : '↓'} {Math.abs(asset["24hChange"])}%
           </p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-gray-500 mb-1 font-semibold uppercase tracking-wider">Target Price</p>
+          <p className="text-lg font-bold text-white">${asset.targetPrice.toLocaleString()}</p>
+          <p className="text-xs text-gray-400 mt-1 font-medium">By {asset.endTime}</p>
