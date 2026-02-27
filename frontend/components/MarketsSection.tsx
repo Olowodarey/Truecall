@@ -26,3 +26,8 @@ const MOCK_MARKETS: MarketAsset[] = [
     category: "Crypto",
     totalPool: "840 STX"
   },
+  {
+    id: "tsla-250",
+    name: "Tesla",
+    symbol: "TSLA",
+    currentPrice: 235.40,
