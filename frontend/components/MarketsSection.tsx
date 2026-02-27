@@ -61,3 +61,8 @@ const MOCK_MARKETS: MarketAsset[] = [
   },
   {
     id: "sol-200",
+    name: "Solana",
+    symbol: "SOL",
+    currentPrice: 185.30,
+    "24hChange": 8.4,
+    targetPrice: 200.00,
