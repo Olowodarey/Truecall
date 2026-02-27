@@ -63,3 +63,8 @@ export default function MarketCard({ asset }: { asset: MarketAsset }) {
             className={`flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${prediction === "DOWN" ? 'bg-red-500 text-white shadow-lg shadow-red-500/25' : 'bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20'}`}
           >
             <span>↓</span> Down
+          </button>
+          <button 
+            onClick={() => setPrediction("UP")}
+            className={`flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${prediction === "UP" ? 'bg-green-500 text-white shadow-lg shadow-green-500/25' : 'bg-green-500/10 text-green-400 hover:bg-green-500/20 border border-green-500/20'}`}
+          >
