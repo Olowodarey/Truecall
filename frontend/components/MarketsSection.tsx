@@ -81,3 +81,8 @@ export default function MarketsSection() {
 
   const categories = ["All", "Crypto", "Stock", "Commodity"];
 
+  return (
+    <div className="space-y-8">
+      {/* Filters */}
+      <div className="flex flex-wrap items-center justify-center gap-3">
+        {categories.map(cat => (
