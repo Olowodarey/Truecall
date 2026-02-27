@@ -56,3 +56,8 @@ const MOCK_MARKETS: MarketAsset[] = [
     "24hChange": 3.8,
     targetPrice: 1200.00,
     endTime: "Friday Close",
+    category: "Stock",
+    totalPool: "3,400 STX"
+  },
+  {
+    id: "sol-200",
