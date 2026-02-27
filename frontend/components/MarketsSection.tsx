@@ -16,3 +16,8 @@ const MOCK_MARKETS: MarketAsset[] = [
     totalPool: "1,250 STX"
   },
   {
+    id: "eth-4k",
+    name: "Ethereum",
+    symbol: "ETH",
+    currentPrice: 3820.50,
+    "24hChange": -1.2,
