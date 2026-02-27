@@ -111,3 +111,7 @@ export default function MarketsSection() {
         <div className="text-center py-20 bg-gray-800/20 rounded-2xl border border-gray-800 border-dashed">
           <p className="text-gray-400 font-medium">No active markets found for this category.</p>
         </div>
+      )}
+    </div>
+  );
+}
