@@ -48,3 +48,8 @@ export default function MarketCard({ asset }: { asset: MarketAsset }) {
           <p className="text-xs text-gray-500 mb-1 font-semibold uppercase tracking-wider">Target Price</p>
           <p className="text-lg font-bold text-white">${asset.targetPrice.toLocaleString()}</p>
           <p className="text-xs text-gray-400 mt-1 font-medium">By {asset.endTime}</p>
+        </div>
+      </div>
+
+      <div className="mt-auto space-y-4">
+        <div className="flex justify-between items-center text-sm">
