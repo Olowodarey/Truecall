@@ -8,3 +8,8 @@ export default function MarketsPage() {
     <div className="relative min-h-screen bg-linear-to-br from-gray-900 via-black to-gray-900">
       <div className="absolute inset-0 opacity-40 z-0">
         <UnifiedBackground variant="minimal" showParticles={true} particleCount={150} />
+      </div>
+
+      <div className="relative z-10 flex flex-col min-h-screen">
+        <Header />
+        
