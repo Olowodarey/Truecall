@@ -91,3 +91,8 @@ export default function MarketsSection() {
             onClick={() => setFilter(cat as any)}
             className={`px-6 py-2.5 rounded-full font-semibold text-sm transition-all duration-300 ${
               filter === cat 
+                ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30' 
+                : 'bg-gray-800/50 text-gray-400 hover:bg-gray-700/50 hover:text-white border border-gray-700/50'
+            }`}
+          >
+            {cat}
