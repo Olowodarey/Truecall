@@ -101,3 +101,8 @@ export default function MarketsSection() {
       </div>
 
       {/* Grid */}
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredMarkets.map(market => (
+          <MarketCard key={market.id} asset={market} />
+        ))}
+      </div>
