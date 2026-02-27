@@ -73,3 +73,5 @@ export default function MarketCard({ asset }: { asset: MarketAsset }) {
         </div>
       </div>
     </div>
+  );
+}
