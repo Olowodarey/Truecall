@@ -51,3 +51,8 @@ const MOCK_MARKETS: MarketAsset[] = [
   {
     id: "nvda-1200",
     name: "Nvidia",
+    symbol: "NVDA",
+    currentPrice: 1150.20,
+    "24hChange": 3.8,
+    targetPrice: 1200.00,
+    endTime: "Friday Close",
