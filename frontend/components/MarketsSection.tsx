@@ -86,3 +86,8 @@ export default function MarketsSection() {
       {/* Filters */}
       <div className="flex flex-wrap items-center justify-center gap-3">
         {categories.map(cat => (
+          <button
+            key={cat}
+            onClick={() => setFilter(cat as any)}
+            className={`px-6 py-2.5 rounded-full font-semibold text-sm transition-all duration-300 ${
+              filter === cat 
