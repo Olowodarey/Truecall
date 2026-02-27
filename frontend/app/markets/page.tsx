@@ -23,3 +23,8 @@ export default function MarketsPage() {
                 Predict the future prices of top cryptocurrencies, stocks, and commodities. Provably fair, fully on-chain.
               </p>
             </div>
+            
+            <MarketsSection />
+          </div>
+        </main>
+
