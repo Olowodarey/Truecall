@@ -11,3 +11,8 @@ const MOCK_MARKETS: MarketAsset[] = [
     currentPrice: 94250.00,
     "24hChange": 2.4,
     targetPrice: 100000.00,
+    endTime: "End of Month",
+    category: "Crypto",
+    totalPool: "1,250 STX"
+  },
+  {
