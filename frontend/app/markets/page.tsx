@@ -18,3 +18,8 @@ export default function MarketsPage() {
             <div className="text-center space-y-4">
               <h1 className="text-5xl md:text-6xl font-black text-white tracking-tight">
                 Global <span className="text-transparent bg-clip-text bg-linear-to-r from-blue-400 to-indigo-500">Markets</span>
+              </h1>
+              <p className="text-lg text-gray-400 max-w-2xl mx-auto">
+                Predict the future prices of top cryptocurrencies, stocks, and commodities. Provably fair, fully on-chain.
+              </p>
+            </div>
