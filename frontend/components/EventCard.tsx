@@ -106,7 +106,7 @@ export default function EventCard({ event, onJoinEvent }: EventCardProps) {
             </p>
             {match.homeScore !== null && match.awayScore !== null && (
               <p className="text-center text-gray-400 text-sm mt-1">
-                Score: {match.homeScore} - {match.awayScore}
+               match  Score: {match.homeScore} - {match.awayScore}
               </p>
             )}
           </div>
