@@ -71,3 +71,8 @@ const MOCK_MARKETS: MarketAsset[] = [
     totalPool: "1,890 STX"
   }
 ];
+
+export default function MarketsSection() {
+  const [filter, setFilter] = useState<"All" | "Crypto" | "Stock" | "Commodity">("All");
+
+  const filteredMarkets = filter === "All" 
