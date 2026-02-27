@@ -96,3 +96,8 @@ export default function MarketsSection() {
             }`}
           >
             {cat}
+          </button>
+        ))}
+      </div>
+
+      {/* Grid */}
