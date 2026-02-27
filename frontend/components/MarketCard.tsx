@@ -53,3 +53,8 @@ export default function MarketCard({ asset }: { asset: MarketAsset }) {
 
       <div className="mt-auto space-y-4">
         <div className="flex justify-between items-center text-sm">
+          <span className="text-gray-400">Total Pool</span>
+          <span className="font-bold text-white">{asset.totalPool}</span>
+        </div>
+        
+        <div className="grid grid-cols-2 gap-3">
