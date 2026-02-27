@@ -33,3 +33,8 @@ export default function MarketCard({ asset }: { asset: MarketAsset }) {
         <div>
           <h3 className="text-xl font-bold text-white leading-tight">{asset.name}</h3>
           <p className="text-sm font-medium text-gray-400">{asset.symbol}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 mb-6 p-4 rounded-xl bg-gray-900/50 border border-gray-800/50">
+        <div>
