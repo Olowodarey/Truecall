@@ -76,3 +76,8 @@ export default function MarketsSection() {
   const [filter, setFilter] = useState<"All" | "Crypto" | "Stock" | "Commodity">("All");
 
   const filteredMarkets = filter === "All" 
+    ? MOCK_MARKETS 
+    : MOCK_MARKETS.filter(m => m.category === filter);
+
+  const categories = ["All", "Crypto", "Stock", "Commodity"];
+
