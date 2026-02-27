@@ -41,6 +41,12 @@ export default function Header() {
                 Tournaments
               </Link>
               <Link
+                href="/markets"
+                className="text-gray-300 hover:text-white transition-colors"
+              >
+                Markets
+              </Link>
+              <Link
                 href="/profile"
                 className="text-gray-300 hover:text-white transition-colors"
               >
