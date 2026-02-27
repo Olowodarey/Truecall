@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+
 import WalletButton from "./WalletButton";
 
 export default function Header() {

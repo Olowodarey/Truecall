@@ -14,6 +14,9 @@ importers:
       '@stacks/connect':
         specifier: ^8.2.4
         version: 8.2.4(@types/react@19.2.11)(lit@3.3.0)(react@19.2.3)(typescript@5.9.3)(zod@3.22.4)
+      '@stacks/network':
+        specifier: ^7.3.1
+        version: 7.3.1
       '@stacks/transactions':
         specifier: ^7.3.1
         version: 7.3.1
