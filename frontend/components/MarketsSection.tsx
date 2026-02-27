@@ -41,3 +41,8 @@ const MOCK_MARKETS: MarketAsset[] = [
     id: "gold-2500",
     name: "Gold",
     symbol: "XAU",
+    currentPrice: 2480.90,
+    "24hChange": 0.3,
+    targetPrice: 2500.00,
+    endTime: "End of Month",
+    category: "Commodity",
