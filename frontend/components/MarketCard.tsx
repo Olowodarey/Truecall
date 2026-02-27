@@ -58,3 +58,8 @@ export default function MarketCard({ asset }: { asset: MarketAsset }) {
         </div>
         
         <div className="grid grid-cols-2 gap-3">
+          <button 
+            onClick={() => setPrediction("DOWN")}
+            className={`flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${prediction === "DOWN" ? 'bg-red-500 text-white shadow-lg shadow-red-500/25' : 'bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20'}`}
+          >
+            <span>↓</span> Down
