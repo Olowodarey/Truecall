@@ -28,3 +28,8 @@ export default function MarketCard({ asset }: { asset: MarketAsset }) {
 
       <div className="flex items-center gap-4 mb-6 mt-2">
         <div className="w-12 h-12 rounded-full bg-gray-700/50 flex items-center justify-center text-xl font-bold border border-gray-600/50 shadow-inner">
+          {asset.symbol.substring(0, 1)}
+        </div>
+        <div>
+          <h3 className="text-xl font-bold text-white leading-tight">{asset.name}</h3>
+          <p className="text-sm font-medium text-gray-400">{asset.symbol}</p>
