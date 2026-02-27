@@ -58,36 +58,42 @@ export class FootballApiService {
 
         this.logger.log(`Fetching matches from ${fromDate} to ${toDate}`);
 
-        // Fetch matches from each league
-        for (const leagueId of leagues) {
-          try {
-            const response = await axios.get(`${this.apiBaseUrl}/fixtures`, {
-              headers: {
-                'x-rapidapi-key': this.apiKey,
-                'x-rapidapi-host': 'v3.football.api-sports.io',
-              },
-              params: {
-                league: leagueId,
-                from: fromDate,
-                to: toDate,
-              },
-            });
+        // Fetch matches from leagues in parallel
+        await Promise.all(
+          leagues.map(async (leagueId) => {
+            try {
+              const response = await axios.get(`${this.apiBaseUrl}/fixtures`, {
+                headers: {
+                  'x-rapidapi-key': this.apiKey,
+                  'x-rapidapi-host': 'v3.football.api-sports.io',
+                },
+                params: {
+                  league: leagueId,
+                  season:
+                    today.getMonth() < 7
+                      ? today.getFullYear() - 1
+                      : today.getFullYear(),
+                  from: fromDate,
+                  to: toDate,
+                },
+              });
 
-            const matches = await this.processApiFootballResponse(
-              response.data,
-            );
-            allMatches.push(...matches);
+              const matches = await this.processApiFootballResponse(
+                response.data,
+              );
+              allMatches.push(...matches);
 
-            this.logger.log(
-              `Fetched ${matches.length} matches from league ${leagueId}`,
-            );
-          } catch (error) {
-            this.logger.warn(
-              `Failed to fetch from league ${leagueId}: ${error.message}`,
-            );
-            // Continue with other leagues even if one fails
-          }
-        }
+              this.logger.log(
+                `Fetched ${matches.length} matches from league ${leagueId}`,
+              );
+            } catch (error) {
+              this.logger.warn(
+                `Failed to fetch from league ${leagueId}: ${error.message}`,
+              );
+              // Continue with other leagues even if one fails
+            }
+          }),
+        );
 
         return allMatches;
       }
@@ -170,44 +176,45 @@ export class FootballApiService {
    * Process API-Football response
    */
   private async processApiFootballResponse(data: any): Promise<Match[]> {
-    const matches: Match[] = [];
+    const fixtures = data.response || [];
 
-    for (const fixture of data.response || []) {
-      const existingMatch = await this.matchRepository.findOne({
-        where: { externalId: fixture.fixture.id.toString() },
-      });
+    const matches = await Promise.all(
+      fixtures.map(async (fixture: any): Promise<Match> => {
+        const existingMatch = await this.matchRepository.findOne({
+          where: { externalId: fixture.fixture.id.toString() },
+        });
 
-      if (existingMatch) {
-        // Update existing match with latest score/status
-        existingMatch.status = this.mapApiFootballStatus(
-          fixture.fixture.status.short,
-        );
-        existingMatch.homeScore = fixture.goals.home;
-        existingMatch.awayScore = fixture.goals.away;
-        existingMatch.result = this.calculateResult(
-          fixture.goals.home,
-          fixture.goals.away,
-        );
+        if (existingMatch) {
+          // Update existing match with latest score/status
+          existingMatch.status = this.mapApiFootballStatus(
+            fixture.fixture.status.short,
+          );
+          existingMatch.homeScore = fixture.goals.home;
+          existingMatch.awayScore = fixture.goals.away;
+          existingMatch.result = this.calculateResult(
+            fixture.goals.home,
+            fixture.goals.away,
+          );
 
-        const saved = await this.matchRepository.save(existingMatch);
-        matches.push(saved);
-        continue;
-      }
+          return await this.matchRepository.save(existingMatch);
+        }
 
-      const match = this.matchRepository.create({
-        externalId: fixture.fixture.id.toString(),
-        homeTeam: fixture.teams.home.name,
-        awayTeam: fixture.teams.away.name,
-        matchTime: Math.floor(new Date(fixture.fixture.date).getTime() / 1000),
-        status: this.mapApiFootballStatus(fixture.fixture.status.short),
-        homeScore: fixture.goals.home,
-        awayScore: fixture.goals.away,
-        result: this.calculateResult(fixture.goals.home, fixture.goals.away),
-      });
+        const match = this.matchRepository.create({
+          externalId: fixture.fixture.id.toString(),
+          homeTeam: fixture.teams.home.name,
+          awayTeam: fixture.teams.away.name,
+          matchTime: Math.floor(
+            new Date(fixture.fixture.date).getTime() / 1000,
+          ),
+          status: this.mapApiFootballStatus(fixture.fixture.status.short),
+          homeScore: fixture.goals.home,
+          awayScore: fixture.goals.away,
+          result: this.calculateResult(fixture.goals.home, fixture.goals.away),
+        });
 
-      const saved = await this.matchRepository.save(match);
-      matches.push(saved);
-    }
+        return await this.matchRepository.save(match);
+      }),
+    );
 
     return matches;
   }
@@ -216,46 +223,45 @@ export class FootballApiService {
    * Process TheSportsDB response
    */
   private async processTheSportsDBResponse(data: any): Promise<Match[]> {
-    const matches: Match[] = [];
+    const events = data.events || [];
 
-    for (const event of data.events || []) {
-      const existingMatch = await this.matchRepository.findOne({
-        where: { externalId: event.idEvent },
-      });
+    const matches = await Promise.all(
+      events.map(async (event: any): Promise<Match> => {
+        const existingMatch = await this.matchRepository.findOne({
+          where: { externalId: event.idEvent },
+        });
 
-      if (existingMatch) {
-        existingMatch.status = MatchStatus.SCHEDULED; // Simplified for this provider
-        existingMatch.homeScore = event.intHomeScore
-          ? parseInt(event.intHomeScore)
-          : null;
-        existingMatch.awayScore = event.intAwayScore
-          ? parseInt(event.intAwayScore)
-          : null;
-        existingMatch.result = this.calculateResult(
-          existingMatch.homeScore ?? null,
-          existingMatch.awayScore ?? null,
-        );
+        if (existingMatch) {
+          existingMatch.status = MatchStatus.SCHEDULED; // Simplified for this provider
+          existingMatch.homeScore = event.intHomeScore
+            ? parseInt(event.intHomeScore)
+            : null;
+          existingMatch.awayScore = event.intAwayScore
+            ? parseInt(event.intAwayScore)
+            : null;
+          existingMatch.result = this.calculateResult(
+            existingMatch.homeScore ?? null,
+            existingMatch.awayScore ?? null,
+          );
 
-        const saved = await this.matchRepository.save(existingMatch);
-        matches.push(saved);
-        continue;
-      }
+          return await this.matchRepository.save(existingMatch);
+        }
 
-      const match = this.matchRepository.create({
-        externalId: event.idEvent,
-        homeTeam: event.strHomeTeam,
-        awayTeam: event.strAwayTeam,
-        matchTime: Math.floor(
-          new Date(event.dateEvent + ' ' + event.strTime).getTime() / 1000,
-        ),
-        status: MatchStatus.SCHEDULED,
-        homeScore: event.intHomeScore ? parseInt(event.intHomeScore) : null,
-        awayScore: event.intAwayScore ? parseInt(event.intAwayScore) : null,
-      });
+        const match = this.matchRepository.create({
+          externalId: event.idEvent,
+          homeTeam: event.strHomeTeam,
+          awayTeam: event.strAwayTeam,
+          matchTime: Math.floor(
+            new Date(event.dateEvent + ' ' + event.strTime).getTime() / 1000,
+          ),
+          status: MatchStatus.SCHEDULED,
+          homeScore: event.intHomeScore ? parseInt(event.intHomeScore) : null,
+          awayScore: event.intAwayScore ? parseInt(event.intAwayScore) : null,
+        });
 
-      const saved = await this.matchRepository.save(match);
-      matches.push(saved);
-    }
+        return await this.matchRepository.save(match);
+      }),
+    );
 
     return matches;
   }
