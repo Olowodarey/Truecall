@@ -36,3 +36,8 @@ const MOCK_MARKETS: MarketAsset[] = [
     endTime: "Friday Close",
     category: "Stock",
     totalPool: "520 STX"
+  },
+  {
+    id: "gold-2500",
+    name: "Gold",
+    symbol: "XAU",
