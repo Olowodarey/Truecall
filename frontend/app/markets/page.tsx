@@ -28,3 +28,8 @@ export default function MarketsPage() {
           </div>
         </main>
 
+        <Footer />
+      </div>
+    </div>
+  );
+}
