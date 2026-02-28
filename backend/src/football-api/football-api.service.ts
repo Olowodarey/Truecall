@@ -100,16 +100,24 @@ export class FootballApiService {
 
       // For TheSportsDB (free tier)
       if (this.provider === 'thesportsdb') {
-        const response = await axios.get(
-          `https://www.thesportsdb.com/api/v1/json/${this.apiKey}/eventsnextleague.php`,
-          {
-            params: {
-              id: league || '4328', // Default to Premier League
+        try {
+          const response = await axios.get(
+            `https://www.thesportsdb.com/api/v1/json/${this.apiKey}/eventsnextleague.php`,
+            {
+              params: {
+                id: league || '4328', // Default to Premier League
+              },
+              timeout: 5000, // 5 seconds timeout
             },
-          },
-        );
+          );
 
-        return this.processTheSportsDBResponse(response.data);
+          return await this.processTheSportsDBResponse(response.data);
+        } catch (error) {
+          this.logger.warn(
+            `Failed to fetch from thesportsdb: ${error.message}`,
+          );
+          return [];
+        }
       }
 
       throw new Error(`Unsupported provider: ${this.provider}`);
