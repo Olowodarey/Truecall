@@ -199,3 +199,46 @@
         )
     )
 )
+
+;; --- FUNCTION 3: predict ---
+;; User submits a YES or NO prediction on a market and stakes STX.
+;; @param market-id   Which market to predict on
+;; @param prediction  true = YES, false = NO
+;; @param stx-amount  Amount of STX to stake (must be > 0)
+(define-public (predict
+    (market-id uint)
+    (prediction bool)
+    (stx-amount uint)
+)
+    (let (
+        (caller tx-sender)
+        (contract-addr (as-contract tx-sender))
+        (market (unwrap! (map-get? markets { market-id: market-id }) err-market-not-found))
+        (pool (get-market-pool market-id))
+        (existing-position (map-get? positions { market-id: market-id, predictor: caller }))
+    )
+        (begin
+            (asserts! (> stx-amount u0) err-zero-stake)
+            (asserts! (not (get resolved market)) err-market-already-resolved)
+            (asserts! (< burn-block-height (get close-block market)) err-event-closed)
+            (asserts! (is-none existing-position) err-already-predicted)
+            ;; Transfer STX from user to contract
+            (try! (stx-transfer? stx-amount caller contract-addr))
+            ;; Record the user's position
+            (map-set positions
+                { market-id: market-id, predictor: caller }
+                { prediction: prediction, stx-amount: stx-amount, sbtc-amount: u0 }
+            )
+            ;; Update pool totals
+            (if prediction
+                (map-set market-pools { market-id: market-id }
+                    (merge pool { yes-stx: (+ (get yes-stx pool) stx-amount) })
+                )
+                (map-set market-pools { market-id: market-id }
+                    (merge pool { no-stx: (+ (get no-stx pool) stx-amount) })
+                )
+            )
+            (ok true)
+        )
+    )
+)

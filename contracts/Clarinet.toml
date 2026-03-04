@@ -5,14 +5,18 @@ authors = []
 telemetry = false
 cache_dir = './.cache'
 requirements = []
-
-[contracts.sip-010-trait]
-path = 'contracts/sip-010-trait.clar'
+[contracts.mock-sbtc]
+path = 'contracts/mock-sbtc.clar'
 clarity_version = 2
 epoch = 'latest'
 
-[contracts.mock-sbtc]
-path = 'contracts/mock-sbtc.clar'
+[contracts.prediction-market]
+path = 'contracts/prediction-market.clar'
+clarity_version = 2
+epoch = 'latest'
+
+[contracts.sip-010-trait]
+path = 'contracts/sip-010-trait.clar'
 clarity_version = 2
 epoch = 'latest'
 
