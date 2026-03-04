@@ -25,6 +25,11 @@ path = 'contracts/prediction-market.clar'
 clarity_version = 2
 epoch = 'latest'
 
+[contracts.reputation-points]
+path = 'contracts/reputation-points.clar'
+clarity_version = 2
+epoch = 'latest'
+
 [contracts.sip-010-trait]
 path = 'contracts/sip-010-trait.clar'
 clarity_version = 2

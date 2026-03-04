@@ -401,6 +401,60 @@
 )
 
 ;; -------------------------------------------------------
+;; FUNCTION 8: batch-award-points  (Gamification)
+;; Keeper automatically awards points to a list of up to 50 winners.
+;; Clarity doesn't allow unbound loops, so we pass lists.
+;; @param market-id  The finalized market
+;; @param winners    List of users who predicted correctly
+;; -------------------------------------------------------
+(define-public (batch-award-points (market-id uint) (winners (list 50 principal)))
+    (let (
+        (market (unwrap! (map-get? markets { market-id: market-id }) err-market-not-found))
+        (final-outcome (unwrap! (get final-outcome market) err-not-pending))
+        (event-id (get event-id market))
+    )
+        (begin
+            (asserts! (is-keeper) err-unauthorized)
+            (asserts! (is-eq (get status market) status-final) err-not-pending)
+            
+            ;; Fold over the list and award 10 points to each valid winner
+            (ok (fold award-single-winner winners { market-id: market-id, event-id: event-id, outcome: final-outcome, success-count: u0 }))
+        )
+    )
+)
+
+;; Helper to process a single winner in the batch
+(define-private (award-single-winner
+    (user principal)
+    (state { market-id: uint, event-id: uint, outcome: bool, success-count: uint })
+)
+    (let (
+        (position (map-get? positions { market-id: (get market-id state), predictor: user }))
+    )
+        (match position
+            pos (if (and
+                        (is-eq (get prediction pos) (get outcome state))
+                        (not (get claimed pos))
+                    )
+                    (begin
+                        ;; Mark claimed
+                        (map-set positions
+                            { market-id: (get market-id state), predictor: user }
+                            (merge pos { claimed: true })
+                        )
+                        ;; Add 10 points
+                        (unwrap-panic (contract-call? .reputation-points add-points (get event-id state) user u10))
+                        ;; Return updated state
+                        (merge state { success-count: (+ (get success-count state) u1) })
+                    )
+                    state ;; Ignore invalid or already claimed
+                )
+            state ;; Ignore users without positions
+        )
+    )
+)
+
+;; -------------------------------------------------------
 ;; READ ONLY FUNCTIONS
 ;; -------------------------------------------------------
 
