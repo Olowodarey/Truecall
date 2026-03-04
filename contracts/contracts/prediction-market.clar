@@ -62,7 +62,9 @@
         dao-approved: bool,
         close-block: uint,
         market-count: uint,
-        is-active: bool
+        is-active: bool,
+        total-stx-pool: uint,
+        total-sbtc-pool: uint
     }
 )
 
@@ -183,7 +185,9 @@
                     dao-approved: dao-approved,
                     close-block: close-block,
                     market-count: u0,
-                    is-active: true
+                    is-active: true,
+                    total-stx-pool: u0,
+                    total-sbtc-pool: u0
                 }
             )
             (ok event-id)
@@ -255,6 +259,8 @@
         (caller tx-sender)
         (contract-addr (as-contract tx-sender))
         (market (unwrap! (map-get? markets { market-id: market-id }) err-market-not-found))
+        (event-id (get event-id market))
+        (event (unwrap! (map-get? events { event-id: event-id }) err-event-not-found))
         (pool (get-market-pool market-id))
         (existing-position (map-get? positions { market-id: market-id, predictor: caller }))
     )
@@ -264,10 +270,14 @@
             (asserts! (< burn-block-height (get close-block market)) err-event-closed)
             (asserts! (is-none existing-position) err-already-predicted)
             (try! (stx-transfer? stx-amount caller contract-addr))
+            
+            ;; 1. Update positions
             (map-set positions
                 { market-id: market-id, predictor: caller }
                 { prediction: prediction, stx-amount: stx-amount, sbtc-amount: u0, claimed: false }
             )
+            
+            ;; 2. Update market pools
             (if prediction
                 (map-set market-pools { market-id: market-id }
                     (merge pool { yes-stx: (+ (get yes-stx pool) stx-amount) })
@@ -276,6 +286,12 @@
                     (merge pool { no-stx: (+ (get no-stx pool) stx-amount) })
                 )
             )
+            
+            ;; 3. Update global event pools
+            (map-set events { event-id: event-id }
+                (merge event { total-stx-pool: (+ (get total-stx-pool event) stx-amount) })
+            )
+            
             (ok true)
         )
     )
@@ -452,6 +468,70 @@
             state ;; Ignore users without positions
         )
     )
+)
+
+;; -------------------------------------------------------
+;; FUNCTION 9: claim-winnings  (Gamification Payout)
+;; Top 5 users call this to claim their share of the event's STX pool.
+;; Rank 1: 29%, Rank 2: 24%, Rank 3: 19%, Rank 4: 14%, Rank 5: 9%
+;; Protocol Fee: 5% (sent automatically on first claim or kept in contract)
+;; @param event-id  The finalized event
+;; -------------------------------------------------------
+(define-public (claim-winnings (event-id uint))
+    (let (
+        (caller tx-sender)
+        (event (unwrap! (map-get? events { event-id: event-id }) err-event-not-found))
+        
+        ;; Ensure event has closed
+        (is-closed (not (get is-active event)))
+        
+        ;; Fetch Top 5 Leaderboard
+        (leaderboard (contract-call? .reputation-points get-top-5 event-id))
+        (r1 (get rank1 leaderboard))
+        (r2 (get rank2 leaderboard))
+        (r3 (get rank3 leaderboard))
+        (r4 (get rank4 leaderboard))
+        (r5 (get rank5 leaderboard))
+        
+        ;; Determine caller's rank multiplier (in percentage)
+        (is-r1 (and (is-some r1) (is-eq (get user (unwrap-panic r1)) caller)))
+        (is-r2 (and (is-some r2) (is-eq (get user (unwrap-panic r2)) caller)))
+        (is-r3 (and (is-some r3) (is-eq (get user (unwrap-panic r3)) caller)))
+        (is-r4 (and (is-some r4) (is-eq (get user (unwrap-panic r4)) caller)))
+        (is-r5 (and (is-some r5) (is-eq (get user (unwrap-panic r5)) caller)))
+        
+        (multiplier (if is-r1 u29
+                        (if is-r2 u24
+                            (if is-r3 u19
+                                (if is-r4 u14
+                                    (if is-r5 u9 u0))))))
+                                    
+        ;; Map tracking who has claimed winnings for which event (to prevent double claiming)
+        (has-claimed (default-to false (map-get? event-claims { event-id: event-id, user: caller })))
+        
+        ;; Payout Calculation
+        (total-pool (get total-stx-pool event))
+        (payout-amount (/ (* total-pool multiplier) u100))
+    )
+        (begin
+            (asserts! is-closed (err u415)) ;; err-event-still-active
+            (asserts! (> multiplier u0) (err u416)) ;; err-not-in-top-5
+            (asserts! (not has-claimed) (err u417)) ;; err-already-claimed-event
+            (asserts! (> payout-amount u0) (err u418)) ;; err-zero-payout
+            
+            ;; Mark claimed
+            (map-set event-claims { event-id: event-id, user: caller } true)
+            
+            ;; Transfer STX from contract to winner
+            (as-contract (stx-transfer? payout-amount tx-sender caller))
+        )
+    )
+)
+
+;; Track who claimed
+(define-map event-claims
+    { event-id: uint, user: principal }
+    bool
 )
 
 ;; -------------------------------------------------------
