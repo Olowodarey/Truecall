@@ -47,7 +47,46 @@
     )
 )
 
+;; @desc Deposit sBTC into the staking contract
+;; @param amount The amount of sBTC to deposit
+;; @param token The sip-010 token contract
+(define-public (deposit-sbtc (amount uint) (token <sip-010-trait>))
+    (let (
+        (caller tx-sender)
+        (current-balance (get balance (default-to { balance: u0 } (map-get? sbtc-balances { user: caller }))))
+    )
+        (begin
+            (asserts! (> amount u0) err-zero-amount)
+            (try! (contract-call? token transfer amount caller (as-contract tx-sender) none))
+            (map-set sbtc-balances { user: caller } { balance: (+ current-balance amount) })
+            (ok true)
+        )
+    )
+)
+
+;; @desc Withdraw sBTC from the staking contract
+;; @param amount The amount of sBTC to withdraw
+;; @param token The sip-010 token contract
+(define-public (withdraw-sbtc (amount uint) (token <sip-010-trait>))
+    (let (
+        (caller tx-sender)
+        (current-balance (get balance (default-to { balance: u0 } (map-get? sbtc-balances { user: caller }))))
+    )
+        (begin
+            (asserts! (> amount u0) err-zero-amount)
+            (asserts! (>= current-balance amount) err-insufficient-balance)
+            (try! (as-contract (contract-call? token transfer amount tx-sender caller none)))
+            (map-set sbtc-balances { user: caller } { balance: (- current-balance amount) })
+            (ok true)
+        )
+    )
+)
+
 ;; read only functions
 (define-read-only (get-stx-balance (user principal))
     (get balance (default-to { balance: u0 } (map-get? stx-balances { user: user })))
+)
+
+(define-read-only (get-sbtc-balance (user principal))
+    (get balance (default-to { balance: u0 } (map-get? sbtc-balances { user: user })))
 )
