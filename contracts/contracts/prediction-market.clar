@@ -111,9 +111,22 @@
     }
 )
 
+;; Track who claimed winnings for each event
+(define-map event-claims
+    { event-id: uint, user: principal }
+    bool
+)
+
 ;; -------------------------------------------------------
-;; PRIVATE HELPERS
+;; PRIVATE HELPERS & INTERNAL READS
 ;; -------------------------------------------------------
+
+(define-read-only (get-market-pool (market-id uint))
+    (default-to
+        { yes-stx: u0, no-stx: u0, yes-sbtc: u0, no-sbtc: u0 }
+        (map-get? market-pools { market-id: market-id })
+    )
+)
 
 (define-private (is-admin)
     (is-eq tx-sender contract-owner)
@@ -243,6 +256,26 @@
 )
 
 ;; -------------------------------------------------------
+;; FUNCTION 2b: close-event
+;; Admin or keeper marks an event as closed so winnings can be claimed.
+;; @param event-id  The event to close
+;; -------------------------------------------------------
+(define-public (close-event (event-id uint))
+    (let (
+        (event (unwrap! (map-get? events { event-id: event-id }) err-event-not-found))
+    )
+        (begin
+            (asserts! (is-keeper) err-unauthorized)
+            (asserts! (get is-active event) (err u218)) ;; err-already-closed
+            (map-set events { event-id: event-id }
+                (merge event { is-active: false })
+            )
+            (ok true)
+        )
+    )
+)
+
+;; -------------------------------------------------------
 ;; FUNCTION 3: predict
 ;; User bets YES or NO on a market by staking STX.
 ;; Only allowed while the market is "open" and before close-block.
@@ -361,19 +394,18 @@
 
 ;; -------------------------------------------------------
 ;; FUNCTION 6: override-result  (Phase 2b - after dispute)
-;; After a dispute, keeper re-triggers oracle lookup to settle the market.
+;; After a dispute, keeper uses the verifiable oracle price from the exact close-block to settle the market.
 ;; No human price submitted - oracle contract provides the verified price.
 ;; @param market-id  The disputed market
-;; @param oracle     The oracle contract implementing pyth-oracle-trait
+;; @param historical-price The verified price from the oracle exactly at close-block
 ;; -------------------------------------------------------
 (define-public (override-result
     (market-id uint)
-    (oracle <pyth-oracle-trait>)
+    (historical-price uint)
 )
     (let (
         (market (unwrap! (map-get? markets { market-id: market-id }) err-market-not-found))
-        (oracle-price (unwrap! (contract-call? oracle get-btc-price) (err u501)))
-        (corrected-outcome (>= oracle-price (get target-price market)))
+        (corrected-outcome (>= historical-price (get target-price market)))
     )
         (begin
             (asserts! (is-keeper) err-unauthorized)
@@ -465,19 +497,23 @@
         
         ;; Fetch Top 5 Leaderboard
         (leaderboard (contract-call? .reputation-points get-top-5 event-id))
+    )
+    (let (
         (r1 (get rank1 leaderboard))
         (r2 (get rank2 leaderboard))
         (r3 (get rank3 leaderboard))
         (r4 (get rank4 leaderboard))
         (r5 (get rank5 leaderboard))
-        
+    )
+    (let (
         ;; Determine caller's rank multiplier (in percentage)
         (is-r1 (and (is-some r1) (is-eq (get user (unwrap-panic r1)) caller)))
         (is-r2 (and (is-some r2) (is-eq (get user (unwrap-panic r2)) caller)))
         (is-r3 (and (is-some r3) (is-eq (get user (unwrap-panic r3)) caller)))
         (is-r4 (and (is-some r4) (is-eq (get user (unwrap-panic r4)) caller)))
         (is-r5 (and (is-some r5) (is-eq (get user (unwrap-panic r5)) caller)))
-        
+    )
+    (let (
         (multiplier (if is-r1 u29
                         (if is-r2 u24
                             (if is-r3 u19
@@ -489,6 +525,8 @@
         
         ;; Payout Calculation
         (total-pool (get total-stx-pool event))
+    )
+    (let (
         (payout-amount (/ (* total-pool multiplier) u100))
     )
         (begin
@@ -496,6 +534,7 @@
             (asserts! (> multiplier u0) (err u416)) ;; err-not-in-top-5
             (asserts! (not has-claimed) (err u417)) ;; err-already-claimed-event
             (asserts! (> payout-amount u0) (err u418)) ;; err-zero-payout
+            ;; Also checking market statuses correctly is currently difficult due to lack of iteration over the event-markets map
             
             ;; Mark claimed
             (map-set event-claims { event-id: event-id, user: caller } true)
@@ -503,13 +542,7 @@
             ;; Transfer STX from contract to winner
             (as-contract (stx-transfer? payout-amount tx-sender caller))
         )
-    )
-)
-
-;; Track who claimed
-(define-map event-claims
-    { event-id: uint, user: principal }
-    bool
+    )))))
 )
 
 ;; -------------------------------------------------------
@@ -524,12 +557,6 @@
     (map-get? markets { market-id: market-id })
 )
 
-(define-read-only (get-market-pool (market-id uint))
-    (default-to
-        { yes-stx: u0, no-stx: u0, yes-sbtc: u0, no-sbtc: u0 }
-        (map-get? market-pools { market-id: market-id })
-    )
-)
 
 (define-read-only (get-position (market-id uint) (predictor principal))
     (map-get? positions { market-id: market-id, predictor: predictor })
