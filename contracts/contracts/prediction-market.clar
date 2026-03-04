@@ -269,24 +269,14 @@
             (asserts! (is-eq (get status market) status-open) err-market-already-resolved)
             (asserts! (< burn-block-height (get close-block market)) err-event-closed)
             
-            ;; Enforce same prediction side if position already exists
-            (match existing-position
-                pos (asserts! (is-eq prediction (get prediction pos)) (err u209)) ;; err-prediction-mismatch
-                true
-            )
+            (asserts! (is-none existing-position) err-already-predicted)
             
             (try! (stx-transfer? stx-amount caller contract-addr))
             
             ;; 1. Update positions
-            (match existing-position
-                pos (map-set positions
-                        { market-id: market-id, predictor: caller }
-                        (merge pos { stx-amount: (+ (get stx-amount pos) stx-amount) })
-                    )
-                (map-set positions
-                    { market-id: market-id, predictor: caller }
-                    { prediction: prediction, stx-amount: stx-amount, sbtc-amount: u0, claimed: false }
-                )
+            (map-set positions
+                { market-id: market-id, predictor: caller }
+                { prediction: prediction, stx-amount: stx-amount, sbtc-amount: u0, claimed: false }
             )
             
             ;; 2. Update market pools
