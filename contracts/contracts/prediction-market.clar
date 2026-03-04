@@ -3,18 +3,25 @@
 ;;
 ;; Structure:
 ;;   EVENT: top-level container with a close-block and up to 10 child markets.
-;;   MARKET: a single binary YES/NO question that resolves via price oracle.
+;;   MARKET: a single binary YES/NO question resolved via Polymarket-style
+;;           optimistic oracle. Admin proposes, 2-hour window to dispute.
 ;;
-;; Access Model:
-;;   Admin creates events (may mark dao-approved=true for DAO-voted questions).
-;;   Resolution triggered by admin after close-block is reached.
-
-;; traits
-(use-trait sip-010-trait .sip-010-trait.sip-010-trait)
+;; Resolution State Machine per market:
+;;   "open" -> betting is live
+;;   "pending" -> admin proposed a result, 2-hr dispute window running
+;;   "disputed" -> a user filed a dispute, admin must override
+;;   "final" -> market is settled, winners can claim
 
 ;; constants
 (define-constant contract-owner tx-sender)
 (define-constant max-markets-per-event u10)
+(define-constant dispute-window u12)          ;; ~2 hours (12 burn blocks at 10min each)
+
+;; status strings
+(define-constant status-open     "open")
+(define-constant status-pending  "pending")
+(define-constant status-disputed "disputed")
+(define-constant status-final    "final")
 
 ;; error codes
 (define-constant err-unauthorized              (err u200))
@@ -26,13 +33,19 @@
 (define-constant err-too-many-markets          (err u206))
 (define-constant err-zero-stake                (err u207))
 (define-constant err-already-predicted         (err u208))
-(define-constant err-invalid-outcome           (err u209))
+(define-constant err-not-pending               (err u210))
+(define-constant err-dispute-window-passed     (err u211))
+(define-constant err-dispute-window-open       (err u212))
+(define-constant err-no-position-to-dispute    (err u213))
+(define-constant err-not-disputed              (err u214))
 
 ;; data vars
 (define-data-var event-nonce uint u0)
 (define-data-var market-nonce uint u0)
 
-;; --- DATA MAPS ---
+;; -------------------------------------------------------
+;; DATA MAPS
+;; -------------------------------------------------------
 
 ;; Parent event container
 (define-map events
@@ -47,16 +60,18 @@
     }
 )
 
-;; Child market (belongs to an event)
+;; Child market with full resolution state
 (define-map markets
     { market-id: uint }
     {
         event-id: uint,
         question: (string-ascii 128),
-        target-price: uint,
-        close-block: uint,
-        resolved: bool,
-        outcome: (optional bool)
+        target-price: uint,            ;; BTC price threshold in USD cents
+        close-block: uint,             ;; burn block height at which betting closes
+        status: (string-ascii 12),     ;; open | pending | disputed | final
+        pending-outcome: (optional bool), ;; what the admin proposed
+        proposal-block: uint,          ;; burn block when admin proposed (for dispute window)
+        final-outcome: (optional bool) ;; settled result
     }
 )
 
@@ -66,17 +81,18 @@
     { market-id: uint }
 )
 
-;; Positions: who bet what on which market
+;; Positions: user predictions and stakes
 (define-map positions
     { market-id: uint, predictor: principal }
     {
         prediction: bool,
         stx-amount: uint,
-        sbtc-amount: uint
+        sbtc-amount: uint,
+        claimed: bool
     }
 )
 
-;; Pool totals per market
+;; Pool totals per market side
 (define-map market-pools
     { market-id: uint }
     {
@@ -87,17 +103,28 @@
     }
 )
 
-;; --- PRIVATE HELPERS ---
+;; -------------------------------------------------------
+;; PRIVATE HELPERS
+;; -------------------------------------------------------
 
 (define-private (is-admin)
     (is-eq tx-sender contract-owner)
 )
 
-;; --- FUNCTION 1: create-event ---
-;; Admin (or DAO-approved flow) creates a prediction event.
-;; @param title       Name of the event (max 64 chars)
-;; @param dao-approved  Was this question greenlit by DAO vote?
-;; @param blocks-open   How many blocks until betting closes
+(define-private (status-is (market-id uint) (expected (string-ascii 12)))
+    (match (map-get? markets { market-id: market-id })
+        m (is-eq (get status m) expected)
+        false
+    )
+)
+
+;; -------------------------------------------------------
+;; FUNCTION 1: create-event
+;; Admin creates a top-level prediction event.
+;; @param title        Human-readable name
+;; @param dao-approved Was this DAO-voted?
+;; @param blocks-open  How many burn blocks until betting closes
+;; -------------------------------------------------------
 (define-public (create-event
     (title (string-ascii 64))
     (dao-approved bool)
@@ -126,7 +153,215 @@
     )
 )
 
-;; --- READ ONLY ---
+;; -------------------------------------------------------
+;; FUNCTION 2: add-market
+;; Admin adds a binary YES/NO market to an open event.
+;; Inherits the event's close-block.
+;; @param event-id      Parent event
+;; @param question      The prediction question
+;; @param target-price  BTC price threshold in USD cents
+;; -------------------------------------------------------
+(define-public (add-market
+    (event-id uint)
+    (question (string-ascii 128))
+    (target-price uint)
+)
+    (let (
+        (event (unwrap! (map-get? events { event-id: event-id }) err-event-not-found))
+        (market-id (+ (var-get market-nonce) u1))
+        (current-count (get market-count event))
+    )
+        (begin
+            (asserts! (is-admin) err-unauthorized)
+            (asserts! (get is-active event) err-event-closed)
+            (asserts! (< current-count max-markets-per-event) err-too-many-markets)
+            (var-set market-nonce market-id)
+            (map-set markets { market-id: market-id }
+                {
+                    event-id: event-id,
+                    question: question,
+                    target-price: target-price,
+                    close-block: (get close-block event),
+                    status: status-open,
+                    pending-outcome: none,
+                    proposal-block: u0,
+                    final-outcome: none
+                }
+            )
+            (map-set event-markets
+                { event-id: event-id, index: current-count }
+                { market-id: market-id }
+            )
+            (map-set events { event-id: event-id }
+                (merge event { market-count: (+ current-count u1) })
+            )
+            (ok market-id)
+        )
+    )
+)
+
+;; -------------------------------------------------------
+;; FUNCTION 3: predict
+;; User bets YES or NO on a market by staking STX.
+;; Only allowed while the market is "open" and before close-block.
+;; @param market-id   Which market
+;; @param prediction  true = YES, false = NO
+;; @param stx-amount  Amount of STX to stake
+;; -------------------------------------------------------
+(define-public (predict
+    (market-id uint)
+    (prediction bool)
+    (stx-amount uint)
+)
+    (let (
+        (caller tx-sender)
+        (contract-addr (as-contract tx-sender))
+        (market (unwrap! (map-get? markets { market-id: market-id }) err-market-not-found))
+        (pool (get-market-pool market-id))
+        (existing-position (map-get? positions { market-id: market-id, predictor: caller }))
+    )
+        (begin
+            (asserts! (> stx-amount u0) err-zero-stake)
+            (asserts! (is-eq (get status market) status-open) err-market-already-resolved)
+            (asserts! (< burn-block-height (get close-block market)) err-event-closed)
+            (asserts! (is-none existing-position) err-already-predicted)
+            (try! (stx-transfer? stx-amount caller contract-addr))
+            (map-set positions
+                { market-id: market-id, predictor: caller }
+                { prediction: prediction, stx-amount: stx-amount, sbtc-amount: u0, claimed: false }
+            )
+            (if prediction
+                (map-set market-pools { market-id: market-id }
+                    (merge pool { yes-stx: (+ (get yes-stx pool) stx-amount) })
+                )
+                (map-set market-pools { market-id: market-id }
+                    (merge pool { no-stx: (+ (get no-stx pool) stx-amount) })
+                )
+            )
+            (ok true)
+        )
+    )
+)
+
+;; -------------------------------------------------------
+;; FUNCTION 4: propose-result  (Phase 1 of resolution)
+;; After close-block, admin submits the Pyth-sourced BTC price.
+;; Contract calculates tentative outcome and opens 2-hr dispute window.
+;; @param market-id    The market to resolve
+;; @param final-price  Oracle BTC price in USD cents at close-block
+;; -------------------------------------------------------
+(define-public (propose-result
+    (market-id uint)
+    (final-price uint)
+)
+    (let (
+        (market (unwrap! (map-get? markets { market-id: market-id }) err-market-not-found))
+        (proposed-outcome (>= final-price (get target-price market)))
+    )
+        (begin
+            (asserts! (is-admin) err-unauthorized)
+            (asserts! (is-eq (get status market) status-open) err-not-pending)
+            (asserts! (>= burn-block-height (get close-block market)) err-event-not-closed)
+            (map-set markets { market-id: market-id }
+                (merge market {
+                    status: status-pending,
+                    pending-outcome: (some proposed-outcome),
+                    proposal-block: burn-block-height
+                })
+            )
+            (ok proposed-outcome)
+        )
+    )
+)
+
+;; -------------------------------------------------------
+;; FUNCTION 5: dispute-result  (Phase 2 of resolution)
+;; Within the 2-hour window (12 burn blocks), any user who has
+;; a position on this market can dispute the proposed outcome.
+;; @param market-id  The market being disputed
+;; -------------------------------------------------------
+(define-public (dispute-result (market-id uint))
+    (let (
+        (caller tx-sender)
+        (market (unwrap! (map-get? markets { market-id: market-id }) err-market-not-found))
+        (position (map-get? positions { market-id: market-id, predictor: caller }))
+    )
+        (begin
+            (asserts! (is-eq (get status market) status-pending) err-not-pending)
+            (asserts! (is-some position) err-no-position-to-dispute)
+            (asserts!
+                (< burn-block-height (+ (get proposal-block market) dispute-window))
+                err-dispute-window-passed
+            )
+            (map-set markets { market-id: market-id }
+                (merge market { status: status-disputed })
+            )
+            (ok true)
+        )
+    )
+)
+
+;; -------------------------------------------------------
+;; FUNCTION 6: override-result  (Phase 2b - after dispute)
+;; Admin provides a corrected price after a dispute is filed.
+;; This immediately finalizes the market.
+;; @param market-id    The disputed market
+;; @param final-price  Corrected oracle BTC price in USD cents
+;; -------------------------------------------------------
+(define-public (override-result
+    (market-id uint)
+    (final-price uint)
+)
+    (let (
+        (market (unwrap! (map-get? markets { market-id: market-id }) err-market-not-found))
+        (corrected-outcome (>= final-price (get target-price market)))
+    )
+        (begin
+            (asserts! (is-admin) err-unauthorized)
+            (asserts! (is-eq (get status market) status-disputed) err-not-disputed)
+            (map-set markets { market-id: market-id }
+                (merge market {
+                    status: status-final,
+                    final-outcome: (some corrected-outcome),
+                    pending-outcome: none
+                })
+            )
+            (ok corrected-outcome)
+        )
+    )
+)
+
+;; -------------------------------------------------------
+;; FUNCTION 7: finalize-market  (Phase 3 - no dispute)
+;; Anyone can call this after the 2-hour dispute window passes
+;; with no dispute. Locks in the proposed result permanently.
+;; @param market-id  The pending market to finalize
+;; -------------------------------------------------------
+(define-public (finalize-market (market-id uint))
+    (let (
+        (market (unwrap! (map-get? markets { market-id: market-id }) err-market-not-found))
+    )
+        (begin
+            (asserts! (is-eq (get status market) status-pending) err-not-pending)
+            (asserts!
+                (>= burn-block-height (+ (get proposal-block market) dispute-window))
+                err-dispute-window-open
+            )
+            (map-set markets { market-id: market-id }
+                (merge market {
+                    status: status-final,
+                    final-outcome: (get pending-outcome market),
+                    pending-outcome: none
+                })
+            )
+            (ok true)
+        )
+    )
+)
+
+;; -------------------------------------------------------
+;; READ ONLY FUNCTIONS
+;; -------------------------------------------------------
 
 (define-read-only (get-event (event-id uint))
     (map-get? events { event-id: event-id })
@@ -154,116 +389,9 @@
     )
 )
 
-;; --- FUNCTION 2: add-market ---
-;; Admin adds a binary market (YES/NO question) to an existing event.
-;; A market inherits the event's close-block.
-;; @param event-id       Parent event
-;; @param question       The question text (max 128 chars)
-;; @param target-price   The BTC price threshold in USD cents (e.g. 10000000 = $100,000)
-(define-public (add-market
-    (event-id uint)
-    (question (string-ascii 128))
-    (target-price uint)
-)
-    (let (
-        (event (unwrap! (map-get? events { event-id: event-id }) err-event-not-found))
-        (market-id (+ (var-get market-nonce) u1))
-        (current-count (get market-count event))
-    )
-        (begin
-            (asserts! (is-admin) err-unauthorized)
-            (asserts! (get is-active event) err-event-closed)
-            (asserts! (< current-count max-markets-per-event) err-too-many-markets)
-            (var-set market-nonce market-id)
-            ;; Store the market
-            (map-set markets { market-id: market-id }
-                {
-                    event-id: event-id,
-                    question: question,
-                    target-price: target-price,
-                    close-block: (get close-block event),
-                    resolved: false,
-                    outcome: none
-                }
-            )
-            ;; Index: event -> market slot
-            (map-set event-markets
-                { event-id: event-id, index: current-count }
-                { market-id: market-id }
-            )
-            ;; Increment market count on event
-            (map-set events { event-id: event-id }
-                (merge event { market-count: (+ current-count u1) })
-            )
-            (ok market-id)
-        )
-    )
-)
-
-;; --- FUNCTION 3: predict ---
-;; User submits a YES or NO prediction on a market and stakes STX.
-;; @param market-id   Which market to predict on
-;; @param prediction  true = YES, false = NO
-;; @param stx-amount  Amount of STX to stake (must be > 0)
-(define-public (predict
-    (market-id uint)
-    (prediction bool)
-    (stx-amount uint)
-)
-    (let (
-        (caller tx-sender)
-        (contract-addr (as-contract tx-sender))
-        (market (unwrap! (map-get? markets { market-id: market-id }) err-market-not-found))
-        (pool (get-market-pool market-id))
-        (existing-position (map-get? positions { market-id: market-id, predictor: caller }))
-    )
-        (begin
-            (asserts! (> stx-amount u0) err-zero-stake)
-            (asserts! (not (get resolved market)) err-market-already-resolved)
-            (asserts! (< burn-block-height (get close-block market)) err-event-closed)
-            (asserts! (is-none existing-position) err-already-predicted)
-            ;; Transfer STX from user to contract
-            (try! (stx-transfer? stx-amount caller contract-addr))
-            ;; Record the user's position
-            (map-set positions
-                { market-id: market-id, predictor: caller }
-                { prediction: prediction, stx-amount: stx-amount, sbtc-amount: u0 }
-            )
-            ;; Update pool totals
-            (if prediction
-                (map-set market-pools { market-id: market-id }
-                    (merge pool { yes-stx: (+ (get yes-stx pool) stx-amount) })
-                )
-                (map-set market-pools { market-id: market-id }
-                    (merge pool { no-stx: (+ (get no-stx pool) stx-amount) })
-                )
-            )
-            (ok true)
-        )
-    )
-)
-
-;; --- FUNCTION 4: resolve-market ---
-;; Admin resolves a market by providing the final BTC price from Pyth oracle.
-;; Contract compares final-price vs target-price to determine the outcome.
-;; @param market-id    The market to resolve
-;; @param final-price  The oracle-provided BTC price (in USD cents) at close-block
-(define-public (resolve-market
-    (market-id uint)
-    (final-price uint)
-)
-    (let (
-        (market (unwrap! (map-get? markets { market-id: market-id }) err-market-not-found))
-        (outcome (>= final-price (get target-price market)))
-    )
-        (begin
-            (asserts! (is-admin) err-unauthorized)
-            (asserts! (not (get resolved market)) err-market-already-resolved)
-            (asserts! (>= burn-block-height (get close-block market)) err-event-not-closed)
-            (map-set markets { market-id: market-id }
-                (merge market { resolved: true, outcome: (some outcome) })
-            )
-            (ok outcome)
-        )
+(define-read-only (get-dispute-deadline (market-id uint))
+    (match (map-get? markets { market-id: market-id })
+        market (+ (get proposal-block market) dispute-window)
+        u0
     )
 )
