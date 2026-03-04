@@ -45,6 +45,9 @@
 (define-data-var event-nonce uint u0)
 (define-data-var market-nonce uint u0)
 
+;; Store the authorized oracle address (defaulting to the mock oracle for testing)
+(define-data-var approved-oracle principal 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.mock-pyth)
+
 ;; Keeper whitelist: admin can approve trusted oracle addresses to propose results
 ;; This allows Pyth automation bots or DAO-trusted addresses to post prices
 (define-map approved-keepers { keeper: principal } { active: bool })
@@ -162,6 +165,15 @@
     (begin
         (asserts! (is-admin) err-unauthorized)
         (map-set approved-keepers { keeper: keeper } { active: false })
+        (ok true)
+    )
+)
+
+;; Admin updates the authorized oracle contract
+(define-public (set-approved-oracle (new-oracle principal))
+    (begin
+        (asserts! (is-admin) err-unauthorized)
+        (var-set approved-oracle new-oracle)
         (ok true)
     )
 )
@@ -351,6 +363,7 @@
     )
         (begin
             (asserts! (is-keeper) err-unauthorized)
+            (asserts! (is-eq (contract-of oracle) (var-get approved-oracle)) (err u502)) ;; err-invalid-oracle
             (asserts! (is-eq (get status market) status-open) err-not-pending)
             (asserts! (>= burn-block-height (get close-block market)) err-event-not-closed)
             (map-set markets { market-id: market-id }
