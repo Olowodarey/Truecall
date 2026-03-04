@@ -39,4 +39,36 @@ describe("staking tests", () => {
     );
     expect(result).toBeErr(Cl.uint(100)); // err-zero-amount
   });
+
+  it("allows a user to deposit 1 sBTC successfully", () => {
+    const deployer = accounts.get("deployer")!;
+    const oneSbtc = 100_000_000; // 1 sBTC (assuming 8 decimals)
+
+    // Mint 1 sBTC to address1 first
+    simnet.callPublicFn(
+      "mock-sbtc",
+      "mint",
+      [Cl.uint(oneSbtc), Cl.principal(address1)],
+      deployer,
+    );
+
+    // Deposit 1 sBTC
+    const { result } = simnet.callPublicFn(
+      "staking",
+      "deposit-sbtc",
+      [Cl.uint(oneSbtc), Cl.contractPrincipal(deployer, "mock-sbtc")],
+      address1,
+    );
+
+    expect(result).toBeOk(Cl.bool(true));
+
+    // Check sBTC balance in staking contract
+    const { result: balanceResult } = simnet.callReadOnlyFn(
+      "staking",
+      "get-sbtc-balance",
+      [Cl.principal(address1)],
+      address1,
+    );
+    expect(balanceResult).toBeUint(oneSbtc);
+  });
 });
