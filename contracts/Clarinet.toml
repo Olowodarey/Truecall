@@ -10,6 +10,16 @@ path = 'contracts/mock-sbtc.clar'
 clarity_version = 2
 epoch = 'latest'
 
+[contracts.pyth-oracle-trait]
+path = 'contracts/pyth-oracle-trait.clar'
+clarity_version = 2
+epoch = 'latest'
+
+[contracts.mock-pyth]
+path = 'contracts/mock-pyth.clar'
+clarity_version = 2
+epoch = 'latest'
+
 [contracts.prediction-market]
 path = 'contracts/prediction-market.clar'
 clarity_version = 2

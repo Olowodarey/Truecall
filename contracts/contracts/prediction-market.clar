@@ -4,15 +4,17 @@
 ;; Structure:
 ;;   EVENT: top-level container with a close-block and up to 10 child markets.
 ;;   MARKET: a single binary YES/NO question resolved via Polymarket-style
-;;           optimistic oracle. Admin proposes, 2-hour window to dispute.
+;;           optimistic oracle. Keeper triggers resolution, oracle price is
+;;           read DIRECTLY from the Pyth contract - no human submits a price.
 ;;
 ;; Resolution State Machine per market:
 ;;   "open" -> betting is live
-;;   "pending" -> admin proposed a result, 2-hr dispute window running
-;;   "disputed" -> a user filed a dispute, admin must override
+;;   "pending" -> oracle price fetched, 2-hr dispute window running
+;;   "disputed" -> a user filed a dispute, keeper re-triggers oracle lookup
 ;;   "final" -> market is settled, winners can claim
 
-;; constants
+;; traits
+(use-trait pyth-oracle-trait .pyth-oracle-trait.pyth-oracle-trait)
 (define-constant contract-owner tx-sender)
 (define-constant max-markets-per-event u10)
 (define-constant dispute-window u12)          ;; ~2 hours (12 burn blocks at 10min each)
@@ -281,18 +283,20 @@
 
 ;; -------------------------------------------------------
 ;; FUNCTION 4: propose-result  (Phase 1 of resolution)
-;; After close-block, admin submits the Pyth-sourced BTC price.
-;; Contract calculates tentative outcome and opens 2-hr dispute window.
+;; After close-block, keeper triggers resolution.
+;; CONTRACT fetches BTC price directly from the oracle -- keeper submits NO price.
+;; No human can lie about the price. Only oracle output determines outcome.
 ;; @param market-id    The market to resolve
-;; @param final-price  Oracle BTC price in USD cents at close-block
+;; @param oracle       The oracle contract implementing pyth-oracle-trait
 ;; -------------------------------------------------------
 (define-public (propose-result
     (market-id uint)
-    (final-price uint)
+    (oracle <pyth-oracle-trait>)
 )
     (let (
         (market (unwrap! (map-get? markets { market-id: market-id }) err-market-not-found))
-        (proposed-outcome (>= final-price (get target-price market)))
+        (oracle-price (unwrap! (contract-call? oracle get-btc-price) (err u501)))
+        (proposed-outcome (>= oracle-price (get target-price market)))
     )
         (begin
             (asserts! (is-keeper) err-unauthorized)
@@ -339,18 +343,19 @@
 
 ;; -------------------------------------------------------
 ;; FUNCTION 6: override-result  (Phase 2b - after dispute)
-;; Admin provides a corrected price after a dispute is filed.
-;; This immediately finalizes the market.
-;; @param market-id    The disputed market
-;; @param final-price  Corrected oracle BTC price in USD cents
+;; After a dispute, keeper re-triggers oracle lookup to settle the market.
+;; No human price submitted - oracle contract provides the verified price.
+;; @param market-id  The disputed market
+;; @param oracle     The oracle contract implementing pyth-oracle-trait
 ;; -------------------------------------------------------
 (define-public (override-result
     (market-id uint)
-    (final-price uint)
+    (oracle <pyth-oracle-trait>)
 )
     (let (
         (market (unwrap! (map-get? markets { market-id: market-id }) err-market-not-found))
-        (corrected-outcome (>= final-price (get target-price market)))
+        (oracle-price (unwrap! (contract-call? oracle get-btc-price) (err u501)))
+        (corrected-outcome (>= oracle-price (get target-price market)))
     )
         (begin
             (asserts! (is-keeper) err-unauthorized)
