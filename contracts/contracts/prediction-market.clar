@@ -40,6 +40,8 @@
 (define-constant err-dispute-window-open       (err u212))
 (define-constant err-no-position-to-dispute    (err u213))
 (define-constant err-not-disputed              (err u214))
+(define-constant err-no-position               (err u217)) ;; missing position in non-dispute contexts
+(define-constant err-not-all-finalized         (err u220)) ;; claim-winnings before all markets finalized
 
 ;; data vars
 (define-data-var event-nonce uint u0)
@@ -68,6 +70,7 @@
         dao-approved: bool,
         close-block: uint,
         market-count: uint,
+        finalized-market-count: uint, ;; tracks how many markets are fully resolved
         is-active: bool,
         total-stx-pool: uint,
         total-sbtc-pool: uint
@@ -83,6 +86,7 @@
         target-price: uint,            ;; BTC price threshold in USD cents
         close-block: uint,             ;; burn block height at which betting closes
         status: (string-ascii 12),     ;; open | pending | disputed | final
+        oracle-price: uint,            ;; price fetched at propose-result time (stored for dispute reference)
         pending-outcome: (optional bool), ;; what the admin proposed
         proposal-block: uint,          ;; burn block when admin proposed (for dispute window)
         final-outcome: (optional bool) ;; settled result
@@ -234,6 +238,7 @@
                     dao-approved: dao-approved,
                     close-block: close-block,
                     market-count: u0,
+                    finalized-market-count: u0,
                     is-active: true,
                     total-stx-pool: u0,
                     total-sbtc-pool: u0
@@ -274,6 +279,7 @@
                     target-price: target-price,
                     close-block: (get close-block event),
                     status: status-open,
+                    oracle-price: u0,
                     pending-outcome: none,
                     proposal-block: u0,
                     final-outcome: none
@@ -303,6 +309,8 @@
         (begin
             (asserts! (is-keeper) err-unauthorized)
             (asserts! (get is-active event) (err u218)) ;; err-already-closed
+            ;; Don't let anyone close an event before its time -- that would cut off betting early
+            (asserts! (>= burn-block-height (get close-block event)) err-event-not-closed)
             (map-set events { event-id: event-id }
                 (merge event { is-active: false })
             )
@@ -372,7 +380,7 @@
 ;; FUNCTION 4: propose-result  (Phase 1 of resolution)
 ;; After close-block, keeper triggers resolution.
 ;; CONTRACT fetches BTC price directly from the oracle -- keeper submits NO price.
-;; No human can lie about the price. Only oracle output determines outcome.
+;; Oracle price is stored in the market map for later use by override-result.
 ;; @param market-id    The market to resolve
 ;; @param oracle       The oracle contract implementing pyth-oracle-trait
 ;; -------------------------------------------------------
@@ -390,9 +398,11 @@
             (asserts! (is-eq (contract-of oracle) (var-get approved-oracle)) (err u502)) ;; err-invalid-oracle
             (asserts! (is-eq (get status market) status-open) err-not-pending)
             (asserts! (>= burn-block-height (get close-block market)) err-event-not-closed)
+            ;; Store oracle-price in market for safe later use by override-result
             (map-set markets { market-id: market-id }
                 (merge market {
                     status: status-pending,
+                    oracle-price: oracle-price,
                     pending-outcome: (some proposed-outcome),
                     proposal-block: burn-block-height
                 })
@@ -431,18 +441,17 @@
 
 ;; -------------------------------------------------------
 ;; FUNCTION 6: override-result  (Phase 2b - after dispute)
-;; After a dispute, keeper uses the verifiable oracle price from the exact close-block to settle the market.
-;; No human price submitted - oracle contract provides the verified price.
+;; After a dispute, the keeper resolves using the oracle-price already stored
+;; by propose-result. This prevents any human from submitting an arbitrary price.
 ;; @param market-id  The disputed market
-;; @param historical-price The verified price from the oracle exactly at close-block
 ;; -------------------------------------------------------
-(define-public (override-result
-    (market-id uint)
-    (historical-price uint)
-)
+(define-public (override-result (market-id uint))
     (let (
         (market (unwrap! (map-get? markets { market-id: market-id }) err-market-not-found))
-        (corrected-outcome (>= historical-price (get target-price market)))
+        (event (unwrap! (map-get? events { event-id: (get event-id market) }) err-event-not-found))
+        ;; Use stored oracle price -- the same one fetched at propose-result time
+        (stored-price (get oracle-price market))
+        (corrected-outcome (>= stored-price (get target-price market)))
     )
         (begin
             (asserts! (is-keeper) err-unauthorized)
@@ -453,6 +462,10 @@
                     final-outcome: (some corrected-outcome),
                     pending-outcome: none
                 })
+            )
+            ;; Increment event's finalized-market-count
+            (map-set events { event-id: (get event-id market) }
+                (merge event { finalized-market-count: (+ (get finalized-market-count event) u1) })
             )
             (ok corrected-outcome)
         )
@@ -468,6 +481,7 @@
 (define-public (finalize-market (market-id uint))
     (let (
         (market (unwrap! (map-get? markets { market-id: market-id }) err-market-not-found))
+        (event (unwrap! (map-get? events { event-id: (get event-id market) }) err-event-not-found))
     )
         (begin
             (asserts! (is-eq (get status market) status-pending) err-not-pending)
@@ -481,6 +495,10 @@
                     final-outcome: (get pending-outcome market),
                     pending-outcome: none
                 })
+            )
+            ;; Increment event's finalized-market-count
+            (map-set events { event-id: (get event-id market) }
+                (merge event { finalized-market-count: (+ (get finalized-market-count event) u1) })
             )
             (ok true)
         )
@@ -497,7 +515,7 @@
     (let (
         (caller tx-sender)
         (market (unwrap! (map-get? markets { market-id: market-id }) err-market-not-found))
-        (position (unwrap! (map-get? positions { market-id: market-id, predictor: caller }) err-no-position-to-dispute))
+        (position (unwrap! (map-get? positions { market-id: market-id, predictor: caller }) err-no-position))
         (final-outcome (unwrap! (get final-outcome market) err-not-pending))
     )
         (begin
@@ -543,12 +561,12 @@
         (r5 (get rank5 leaderboard))
     )
     (let (
-        ;; Determine caller's rank multiplier (in percentage)
-        (is-r1 (and (is-some r1) (is-eq (get user (unwrap-panic r1)) caller)))
-        (is-r2 (and (is-some r2) (is-eq (get user (unwrap-panic r2)) caller)))
-        (is-r3 (and (is-some r3) (is-eq (get user (unwrap-panic r3)) caller)))
-        (is-r4 (and (is-some r4) (is-eq (get user (unwrap-panic r4)) caller)))
-        (is-r5 (and (is-some r5) (is-eq (get user (unwrap-panic r5)) caller)))
+        ;; Determine caller's rank -- use safe match instead of unwrap-panic
+        (is-r1 (match r1 e1 (is-eq (get user e1) caller) false))
+        (is-r2 (match r2 e2 (is-eq (get user e2) caller) false))
+        (is-r3 (match r3 e3 (is-eq (get user e3) caller) false))
+        (is-r4 (match r4 e4 (is-eq (get user e4) caller) false))
+        (is-r5 (match r5 e5 (is-eq (get user e5) caller) false))
     )
     (let (
         (multiplier (if is-r1 u29
@@ -570,10 +588,11 @@
     )
         (begin
             (asserts! is-closed (err u415)) ;; err-event-still-active
+            ;; Ensure every child market is fully finalized before any payout
+            (asserts! (is-eq (get finalized-market-count event) (get market-count event)) err-not-all-finalized)
             (asserts! (> multiplier u0) (err u416)) ;; err-not-in-top-5
             (asserts! (not has-claimed) (err u417)) ;; err-already-claimed-event
             (asserts! (> payout-amount u0) (err u418)) ;; err-zero-payout
-            ;; Also checking market statuses correctly is currently difficult due to lack of iteration over the event-markets map
             
             ;; 1. Mark user payout claimed
             (map-set event-claims { event-id: event-id, user: caller } true)
