@@ -153,3 +153,49 @@
         false
     )
 )
+
+;; --- FUNCTION 2: add-market ---
+;; Admin adds a binary market (YES/NO question) to an existing event.
+;; A market inherits the event's close-block.
+;; @param event-id       Parent event
+;; @param question       The question text (max 128 chars)
+;; @param target-price   The BTC price threshold in USD cents (e.g. 10000000 = $100,000)
+(define-public (add-market
+    (event-id uint)
+    (question (string-ascii 128))
+    (target-price uint)
+)
+    (let (
+        (event (unwrap! (map-get? events { event-id: event-id }) err-event-not-found))
+        (market-id (+ (var-get market-nonce) u1))
+        (current-count (get market-count event))
+    )
+        (begin
+            (asserts! (is-admin) err-unauthorized)
+            (asserts! (get is-active event) err-event-closed)
+            (asserts! (< current-count max-markets-per-event) err-too-many-markets)
+            (var-set market-nonce market-id)
+            ;; Store the market
+            (map-set markets { market-id: market-id }
+                {
+                    event-id: event-id,
+                    question: question,
+                    target-price: target-price,
+                    close-block: (get close-block event),
+                    resolved: false,
+                    outcome: none
+                }
+            )
+            ;; Index: event -> market slot
+            (map-set event-markets
+                { event-id: event-id, index: current-count }
+                { market-id: market-id }
+            )
+            ;; Increment market count on event
+            (map-set events { event-id: event-id }
+                (merge event { market-count: (+ current-count u1) })
+            )
+            (ok market-id)
+        )
+    )
+)
