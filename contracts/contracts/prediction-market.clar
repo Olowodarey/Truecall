@@ -48,6 +48,9 @@
 ;; Store the authorized oracle address (defaulting to the mock oracle for testing)
 (define-data-var approved-oracle principal 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.mock-pyth)
 
+;; Protocol fee treasury balance
+(define-data-var accumulated-fees uint u0)
+
 ;; Keeper whitelist: admin can approve trusted oracle addresses to propose results
 ;; This allows Pyth automation bots or DAO-trusted addresses to post prices
 (define-map approved-keepers { keeper: principal } { active: bool })
@@ -120,6 +123,12 @@
     bool
 )
 
+;; Track if the 5% protocol fee has been extracted for the event
+(define-map event-fee-paid
+    { event-id: uint }
+    bool
+)
+
 ;; -------------------------------------------------------
 ;; PRIVATE HELPERS & INTERNAL READS
 ;; -------------------------------------------------------
@@ -175,6 +184,21 @@
         (asserts! (is-admin) err-unauthorized)
         (var-set approved-oracle new-oracle)
         (ok true)
+    )
+)
+
+;; Admin withdraws accumulated protocol fees
+(define-public (withdraw-fees (amount uint))
+    (let (
+        (caller tx-sender)
+        (current-fees (var-get accumulated-fees))
+    )
+        (begin
+            (asserts! (is-admin) err-unauthorized)
+            (asserts! (<= amount current-fees) (err u419)) ;; err-insufficient-fees
+            (var-set accumulated-fees (- current-fees amount))
+            (as-contract (stx-transfer? amount tx-sender caller))
+        )
     )
 )
 
@@ -541,6 +565,8 @@
     )
     (let (
         (payout-amount (/ (* total-pool multiplier) u100))
+        (fee-paid (default-to false (map-get? event-fee-paid { event-id: event-id })))
+        (protocol-fee (/ (* total-pool u5) u100))
     )
         (begin
             (asserts! is-closed (err u415)) ;; err-event-still-active
@@ -549,10 +575,19 @@
             (asserts! (> payout-amount u0) (err u418)) ;; err-zero-payout
             ;; Also checking market statuses correctly is currently difficult due to lack of iteration over the event-markets map
             
-            ;; Mark claimed
+            ;; 1. Mark user payout claimed
             (map-set event-claims { event-id: event-id, user: caller } true)
             
-            ;; Transfer STX from contract to winner
+            ;; 2. Exact Protocol Fee on First Claim 
+            (if (not fee-paid)
+                (begin
+                    (map-set event-fee-paid { event-id: event-id } true)
+                    (var-set accumulated-fees (+ (var-get accumulated-fees) protocol-fee))
+                )
+                false
+            )
+            
+            ;; 3. Transfer User STX Winnings
             (as-contract (stx-transfer? payout-amount tx-sender caller))
         )
     )))))
@@ -587,4 +622,8 @@
         market (+ (get proposal-block market) dispute-window)
         u0
     )
+)
+
+(define-read-only (get-event-leaderboard (event-id uint))
+    (contract-call? .reputation-points get-top-5 event-id)
 )
