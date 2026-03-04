@@ -43,6 +43,10 @@
 (define-data-var event-nonce uint u0)
 (define-data-var market-nonce uint u0)
 
+;; Keeper whitelist: admin can approve trusted oracle addresses to propose results
+;; This allows Pyth automation bots or DAO-trusted addresses to post prices
+(define-map approved-keepers { keeper: principal } { active: bool })
+
 ;; -------------------------------------------------------
 ;; DATA MAPS
 ;; -------------------------------------------------------
@@ -111,11 +115,43 @@
     (is-eq tx-sender contract-owner)
 )
 
+(define-private (is-keeper)
+    (or
+        (is-admin)
+        (default-to false (get active (map-get? approved-keepers { keeper: tx-sender })))
+    )
+)
+
 (define-private (status-is (market-id uint) (expected (string-ascii 12)))
     (match (map-get? markets { market-id: market-id })
         m (is-eq (get status m) expected)
         false
     )
+)
+
+;; --- KEEPER MANAGEMENT ---
+
+;; Admin adds a trusted keeper who can propose/override results
+(define-public (add-keeper (keeper principal))
+    (begin
+        (asserts! (is-admin) err-unauthorized)
+        (map-set approved-keepers { keeper: keeper } { active: true })
+        (ok true)
+    )
+)
+
+;; Admin removes a keeper
+(define-public (remove-keeper (keeper principal))
+    (begin
+        (asserts! (is-admin) err-unauthorized)
+        (map-set approved-keepers { keeper: keeper } { active: false })
+        (ok true)
+    )
+)
+
+;; Read: check if an address is an active keeper
+(define-read-only (is-approved-keeper (addr principal))
+    (default-to false (get active (map-get? approved-keepers { keeper: addr })))
 )
 
 ;; -------------------------------------------------------
@@ -259,7 +295,7 @@
         (proposed-outcome (>= final-price (get target-price market)))
     )
         (begin
-            (asserts! (is-admin) err-unauthorized)
+            (asserts! (is-keeper) err-unauthorized)
             (asserts! (is-eq (get status market) status-open) err-not-pending)
             (asserts! (>= burn-block-height (get close-block market)) err-event-not-closed)
             (map-set markets { market-id: market-id }
@@ -317,7 +353,7 @@
         (corrected-outcome (>= final-price (get target-price market)))
     )
         (begin
-            (asserts! (is-admin) err-unauthorized)
+            (asserts! (is-keeper) err-unauthorized)
             (asserts! (is-eq (get status market) status-disputed) err-not-disputed)
             (map-set markets { market-id: market-id }
                 (merge market {
