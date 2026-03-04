@@ -242,3 +242,28 @@
         )
     )
 )
+
+;; --- FUNCTION 4: resolve-market ---
+;; Admin resolves a market by providing the final BTC price from Pyth oracle.
+;; Contract compares final-price vs target-price to determine the outcome.
+;; @param market-id    The market to resolve
+;; @param final-price  The oracle-provided BTC price (in USD cents) at close-block
+(define-public (resolve-market
+    (market-id uint)
+    (final-price uint)
+)
+    (let (
+        (market (unwrap! (map-get? markets { market-id: market-id }) err-market-not-found))
+        (outcome (>= final-price (get target-price market)))
+    )
+        (begin
+            (asserts! (is-admin) err-unauthorized)
+            (asserts! (not (get resolved market)) err-market-already-resolved)
+            (asserts! (>= burn-block-height (get close-block market)) err-event-not-closed)
+            (map-set markets { market-id: market-id }
+                (merge market { resolved: true, outcome: (some outcome) })
+            )
+            (ok outcome)
+        )
+    )
+)
