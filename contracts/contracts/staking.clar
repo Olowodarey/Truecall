@@ -6,6 +6,7 @@
 
 ;; constants
 (define-constant err-zero-amount (err u100))
+(define-constant err-insufficient-balance (err u101))
 
 ;; data maps
 (define-map stx-balances { user: principal } { balance: uint })
@@ -24,6 +25,23 @@
             (asserts! (> amount u0) err-zero-amount)
             (try! (stx-transfer? amount caller (as-contract tx-sender)))
             (map-set stx-balances { user: caller } { balance: (+ current-balance amount) })
+            (ok true)
+        )
+    )
+)
+
+;; @desc Withdraw STX from the staking contract
+;; @param amount The amount of STX to withdraw
+(define-public (withdraw-stx (amount uint))
+    (let (
+        (caller tx-sender)
+        (current-balance (get balance (default-to { balance: u0 } (map-get? stx-balances { user: caller }))))
+    )
+        (begin
+            (asserts! (> amount u0) err-zero-amount)
+            (asserts! (>= current-balance amount) err-insufficient-balance)
+            (try! (as-contract (stx-transfer? amount tx-sender caller)))
+            (map-set stx-balances { user: caller } { balance: (- current-balance amount) })
             (ok true)
         )
     )
