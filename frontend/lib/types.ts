@@ -22,6 +22,7 @@ export interface ChainMarket {
   closeBlock: number;
   status: "open" | "pending" | "disputed" | "final";
   oraclePrice: number;
+  proposalBlock: number; // burn block when propose-result was called
   finalOutcome: boolean | null;
 }
 

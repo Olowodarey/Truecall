@@ -1,23 +1,33 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getAllEvents } from "@/lib/stacks";
-import type { ChainEvent, EventFilter } from "@/lib/types";
+import { getAllEvents, getMarketsForEvent } from "@/lib/stacks";
+import type { ChainEvent, EventFilter, ChainMarket } from "@/lib/types";
 import EventCard from "@/components/EventCard";
 import PredictionModal from "@/components/PredictionModal";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { useWallet } from "@/contexts/WalletContext";
+import { HIRO_API } from "@/lib/contracts";
 
 export default function EventsPage() {
+  const { userAddress } = useWallet();
   const [events, setEvents] = useState<ChainEvent[]>([]);
+  const [markets, setMarkets] = useState<Record<number, ChainMarket[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<ChainEvent | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [filter, setFilter] = useState<EventFilter>("all");
+  const [currentBlock, setCurrentBlock] = useState<number>(0);
 
   useEffect(() => {
     loadEvents();
+    // Fetch current block height for dispute window calculations
+    fetch(`${HIRO_API}/v2/info`)
+      .then((r) => r.json())
+      .then((info) => setCurrentBlock(info.stacks_tip_height ?? 0))
+      .catch(console.error);
   }, []);
 
   const loadEvents = async () => {
@@ -26,6 +36,16 @@ export default function EventsPage() {
       setError(null);
       const data = await getAllEvents();
       setEvents(data);
+
+      // Fetch markets for all events
+      const marketsData: Record<number, ChainMarket[]> = {};
+      await Promise.all(
+        data.map(async (event) => {
+          const eventMarkets = await getMarketsForEvent(event.id);
+          marketsData[event.id] = eventMarkets;
+        }),
+      );
+      setMarkets(marketsData);
     } catch (err) {
       console.error("Failed to load events:", err);
       setError("Failed to load on-chain events. Please try again.");
@@ -164,7 +184,11 @@ export default function EventsPage() {
                   <EventCard
                     key={event.id}
                     event={event}
+                    markets={markets[event.id] || []}
+                    currentBlock={currentBlock}
+                    userAddress={userAddress}
                     onJoinEvent={handleJoinEvent}
+                    onRefresh={loadEvents}
                   />
                 ))}
               </div>
