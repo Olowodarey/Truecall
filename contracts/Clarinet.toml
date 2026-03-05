@@ -39,6 +39,11 @@ epoch = 'latest'
 path = 'contracts/staking.clar'
 clarity_version = 2
 epoch = 'latest'
+
+[contracts.governance]
+path = 'contracts/governance.clar'
+clarity_version = 2
+epoch = 'latest'
 [repl.analysis]
 passes = [
     'call_checker',
