@@ -332,31 +332,46 @@
         (begin
             (asserts! (is-admin) err-unauthorized)
             (asserts! (is-eq (get status proposal) STATUS-APPROVED) err-not-approved)
+            ;; Reject if execution window has passed (caller should call expire-proposal instead)
+            (asserts! (<= burn-block-height expiry-block) err-expired)
 
-            ;; Check execution expiry - if past the window, expire the proposal
-            (if (> burn-block-height expiry-block)
-                (begin
-                    (map-set proposals { proposal-id: proposal-id }
-                        (merge proposal { status: STATUS-EXPIRED })
-                    )
-                    err-expired
-                )
-                ;; Within the window - execute
-                (let (
-                    (event-id (try! (contract-call? .prediction-market create-event
-                        (get title proposal)
-                        true                       ;; dao-approved = true
-                        (get blocks-open proposal)
-                        (get entry-fee proposal)
-                        (get use-sbtc proposal)
-                    )))
-                )
-                    (map-set proposals { proposal-id: proposal-id }
-                        (merge proposal { status: STATUS-EXECUTED, event-id: event-id })
-                    )
-                    (ok event-id)
-                )
+            ;; Within the window - create the prediction-market event
+            (let (
+                (event-id (try! (contract-call? .prediction-market create-event
+                    (get title proposal)
+                    true                       ;; dao-approved = true
+                    (get blocks-open proposal)
+                    (get entry-fee proposal)
+                    (get use-sbtc proposal)
+                )))
             )
+                (map-set proposals { proposal-id: proposal-id }
+                    (merge proposal { status: STATUS-EXECUTED, event-id: event-id })
+                )
+                (ok event-id)
+            )
+        )
+    )
+)
+
+;; -------------------------------------------------------
+;; FUNCTION 6: expire-proposal
+;; Anyone may call this after the execution window to explicitly mark an
+;; approved proposal as expired. Separate from execute-proposal so that
+;; Clarity's atomicity (state + ok/err) is respected cleanly.
+;; -------------------------------------------------------
+(define-public (expire-proposal (proposal-id uint))
+    (let (
+        (proposal     (unwrap! (map-get? proposals { proposal-id: proposal-id }) err-not-found))
+        (expiry-block (+ (get vote-end-block proposal) (var-get execution-window)))
+    )
+        (begin
+            (asserts! (is-eq (get status proposal) STATUS-APPROVED) err-not-approved)
+            (asserts! (> burn-block-height expiry-block) err-voting-open) ;; not yet expired
+            (map-set proposals { proposal-id: proposal-id }
+                (merge proposal { status: STATUS-EXPIRED })
+            )
+            (ok true)
         )
     )
 )
