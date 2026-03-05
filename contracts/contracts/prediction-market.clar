@@ -565,8 +565,9 @@
                 (merge position { claimed: true })
             )
             
-            ;; Award 10 points on the leaderboard
-            (contract-call? .reputation-points add-points (get event-id market) caller u10)
+            ;; Award 10 points. use as-contract so tx-sender becomes
+            ;; the prediction-market contract (which is the admin in reputation-points)
+            (as-contract (contract-call? .reputation-points add-points (get event-id market) caller u10))
         )
     )
 )

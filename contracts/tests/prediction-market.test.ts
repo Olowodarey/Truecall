@@ -89,19 +89,16 @@ function predictStx(marketId: number, prediction: boolean, user: string) {
   ).result;
 }
 
-/** Mine past close-block, propose, wait for dispute window, finalize */
-function resolveMarket(marketId: number, btcPrice: number) {
-  // Set oracle price
+/** Mine past close-block, propose, wait for dispute window, finalize — used internally */
+function _resolveMarket(marketId: number, btcPrice: number) {
   simnet.callPublicFn(
     "mock-pyth",
     "set-btc-price",
     [Cl.uint(btcPrice)],
     deployer,
   );
-  // Mine extra blocks to ensure we are past close-block
   simnet.mineEmptyBlocks(5);
-  // Propose
-  const { result: propRes } = simnet.callPublicFn(
+  simnet.callPublicFn(
     "prediction-market",
     "propose-result",
     [
@@ -110,17 +107,13 @@ function resolveMarket(marketId: number, btcPrice: number) {
     ],
     deployer,
   );
-  expect(propRes.type).toBe(ClarityType.ResponseOk);
-  // Mine past dispute window
   simnet.mineEmptyBlocks(DISPUTE_WINDOW + 1);
-  // Finalize
-  const { result: finRes } = simnet.callPublicFn(
+  simnet.callPublicFn(
     "prediction-market",
     "finalize-market",
     [Cl.uint(marketId)],
     deployer,
   );
-  expect(finRes).toBeOk(Cl.bool(true));
 }
 
 function awardPoints(eventId: number, users: string[], points = 10) {
@@ -132,6 +125,11 @@ function awardPoints(eventId: number, users: string[], points = 10) {
       deployer,
     );
   }
+}
+
+/** Read STX balance of a principal via simnet asset map */
+function stxBalanceOf(addr: string): bigint {
+  return BigInt(simnet.getAssetsMap().get("STX")?.get(addr) ?? 0n);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -288,10 +286,11 @@ describe("prediction-market — full end-to-end flow", () => {
       [Cl.uint(eventId)],
       deployer,
     );
-    // evRaw is (some { ... }) — evRaw.value is the TupleCV, its fields are in .data
+    // evRaw is (some (tuple ...)).
+    // OptionalSome.value = TupleCV, TupleCV.value = { fieldName: ClarityValue }
     expect(evRaw.type).toBe(ClarityType.OptionalSome);
-    const evTupleData = (evRaw as any).value.data; // TupleCV.data = { fieldName: ClarityValue }
-    const poolVal = Number((evTupleData as any)["total-pool"].value);
+    const evFields = (evRaw as any).value.value as Record<string, any>;
+    const poolVal = Number(evFields["total-pool"].value);
     expect(poolVal).toBe(expectedTotalPool);
 
     // ── 4. Mine past the close block (500 blocks) ─────────────────────────
@@ -338,15 +337,28 @@ describe("prediction-market — full end-to-end flow", () => {
         [Cl.uint(mktId)],
         deployer,
       );
-      // mktRaw is (some (tuple ...)) — status is a StringAscii with .data = string
-      const statusVal = (mktRaw as any).value.data["status"].data as string;
+      // OptionalSome.value = TupleCV, TupleCV.value = { fieldName: ClarityValue }
+      // status is a StringAscii — its value is the raw string
+      const statusVal = (mktRaw as any).value.value["status"].value as string;
       expect(statusVal).toBe("final");
     }
 
-    // ── 8. Award leaderboard points to top-5 users ────────────────────────
-    //    (normally earned via claim-points per market; we seed directly for determinism)
+    // ── 8. Earn leaderboard points via claim-points ──────────────────────
+    //    Wallets 0-4 predicted YES which is the winning outcome → they claim points.
+    //    Each of 5 markets awards 10 pts → rank 1-5 each accumulate 50 pts.
+    //    claim-points calls .reputation-points.add-points internally as the contract admin.
     const top5 = wallets.slice(0, 5);
-    awardPoints(eventId, top5, 10 * 5); // 5 correct markets × 10 pts = 50 pts each
+    for (const mktId of marketIds) {
+      for (const user of top5) {
+        const { result: cpRes } = simnet.callPublicFn(
+          "prediction-market",
+          "claim-points",
+          [Cl.uint(mktId)],
+          user,
+        );
+        expect(cpRes.type).toBe(ClarityType.ResponseOk);
+      }
+    }
 
     // ── 9. Close the event (books 2% fee to treasury) ────────────────────
     const { result: closeRes } = simnet.callPublicFn(
@@ -369,7 +381,7 @@ describe("prediction-market — full end-to-end flow", () => {
 
     for (let rank = 0; rank < 5; rank++) {
       const user = top5[rank];
-      const balBefore = BigInt(simnet.getSTXAccount(user).balance);
+      const balBefore = stxBalanceOf(user);
 
       const { result: claimRes } = simnet.callPublicFn(
         "prediction-market",
@@ -379,7 +391,7 @@ describe("prediction-market — full end-to-end flow", () => {
       );
       expect(claimRes.type).toBe(ClarityType.ResponseOk);
 
-      const balAfter = BigInt(simnet.getSTXAccount(user).balance);
+      const balAfter = stxBalanceOf(user);
       const received = Number(balAfter - balBefore);
       const expected = Object.values(payouts)[rank];
       expect(received).toBe(expected);
@@ -404,8 +416,8 @@ describe("prediction-market — full end-to-end flow", () => {
     expect(doubleClaim).toBeErr(Cl.uint(417));
 
     // ── 13. Admin can withdraw 2% treasury fees ───────────────────────────
-    const expectedFees = Math.floor((expectedTotalPool * 2) / 100); // 10_000_000
-    const adminBalBefore = BigInt(simnet.getSTXAccount(deployer).balance);
+    const expectedFees = Math.floor((expectedTotalPool * 2) / 100);
+    const adminBalBefore = stxBalanceOf(deployer);
     const { result: withdrawRes } = simnet.callPublicFn(
       "prediction-market",
       "withdraw-fees",
@@ -413,7 +425,7 @@ describe("prediction-market — full end-to-end flow", () => {
       deployer,
     );
     expect(withdrawRes.type).toBe(ClarityType.ResponseOk);
-    const adminBalAfter = BigInt(simnet.getSTXAccount(deployer).balance);
+    const adminBalAfter = stxBalanceOf(deployer);
     expect(Number(adminBalAfter - adminBalBefore)).toBe(expectedFees);
   });
 
@@ -473,8 +485,8 @@ describe("prediction-market — full end-to-end flow", () => {
       [Cl.uint(mktId)],
       deployer,
     );
-    // mktRaw is (some (tuple ...)) — status should be "final"
-    const mktStatus = (mktRaw as any).value.data["status"].data as string;
+    // OptionalSome.value.value = tuple fields; status is StringAscii with .value = string
+    const mktStatus = (mktRaw as any).value.value["status"].value as string;
     expect(mktStatus).toBe("final");
   });
 
@@ -499,9 +511,7 @@ describe("prediction-market — full end-to-end flow", () => {
 
   it("close-event before close-block fails (err u204 = event-not-closed)", () => {
     const eventId = createStxEvent("E: Early close", 1000); // far-future close
-    const mktId = addMarket(eventId, "BTC?", 9_000_000);
-    // finalized-market-count must equal market-count; resolve the single market first
-    // But we can't even get past block-height check, so just try:
+    addMarket(eventId, "BTC?", 9_000_000);
     const { result } = simnet.callPublicFn(
       "prediction-market",
       "close-event",
