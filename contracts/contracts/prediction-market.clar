@@ -43,7 +43,7 @@
 (define-constant err-not-disputed              (err u214))
 (define-constant err-no-position               (err u217)) ;; missing position in non-dispute contexts
 (define-constant err-not-all-finalized         (err u220)) ;; claim-winnings before all markets finalized
-(define-constant err-wrong-entry-fee           (err u221))
+(define-constant err-invalid-token             (err u223)) ;; wrong sBTC token passed
 
 ;; data vars
 (define-data-var event-nonce uint u0)
@@ -55,6 +55,9 @@
 ;; Protocol fee treasury balances (separate per token)
 (define-data-var accumulated-fees uint u0)         ;; STX fees
 (define-data-var accumulated-sbtc-fees uint u0)    ;; sBTC fees
+
+;; Approved sBTC token contract (only this can be used in sBTC events)
+(define-data-var approved-sbtc principal 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.mock-sbtc)
 
 ;; Keeper whitelist: admin can approve trusted oracle addresses to propose results
 ;; This allows Pyth automation bots or DAO-trusted addresses to post prices
@@ -113,15 +116,6 @@
     }
 )
 
-;; Pool totals per market side (single token per event)
-(define-map market-pools
-    { market-id: uint }
-    {
-        yes-pool: uint,
-        no-pool: uint
-    }
-)
-
 ;; Track who claimed winnings for each event
 (define-map event-claims
     { event-id: uint, user: principal }
@@ -132,13 +126,6 @@
 ;; PRIVATE HELPERS & INTERNAL READS
 ;; -------------------------------------------------------
 
-(define-read-only (get-market-pool (market-id uint))
-    (default-to
-        { yes-pool: u0, no-pool: u0 }
-        (map-get? market-pools { market-id: market-id })
-    )
-)
-
 (define-private (is-admin)
     (is-eq tx-sender contract-owner)
 )
@@ -147,13 +134,6 @@
     (or
         (is-admin)
         (default-to false (get active (map-get? approved-keepers { keeper: tx-sender })))
-    )
-)
-
-(define-private (status-is (market-id uint) (expected (string-ascii 12)))
-    (match (map-get? markets { market-id: market-id })
-        m (is-eq (get status m) expected)
-        false
     )
 )
 
@@ -186,7 +166,16 @@
     )
 )
 
-;; Admin withdraws accumulated protocol fees
+;; Admin updates the authorized sBTC token contract
+(define-public (set-approved-sbtc (new-sbtc principal))
+    (begin
+        (asserts! (is-admin) err-unauthorized)
+        (var-set approved-sbtc new-sbtc)
+        (ok true)
+    )
+)
+
+;; Admin withdraws accumulated STX protocol fees
 (define-public (withdraw-fees (amount uint))
     (let (
         (caller tx-sender)
@@ -194,9 +183,25 @@
     )
         (begin
             (asserts! (is-admin) err-unauthorized)
-            (asserts! (<= amount current-fees) (err u419)) ;; err-insufficient-fees
+            (asserts! (<= amount current-fees) (err u419))
             (var-set accumulated-fees (- current-fees amount))
             (as-contract (stx-transfer? amount tx-sender caller))
+        )
+    )
+)
+
+;; Admin withdraws accumulated sBTC protocol fees
+(define-public (withdraw-sbtc-fees (amount uint) (sbtc-token <sip-010-trait>))
+    (let (
+        (caller tx-sender)
+        (current-fees (var-get accumulated-sbtc-fees))
+    )
+        (begin
+            (asserts! (is-admin) err-unauthorized)
+            (asserts! (is-eq (contract-of sbtc-token) (var-get approved-sbtc)) err-invalid-token)
+            (asserts! (<= amount current-fees) (err u419))
+            (var-set accumulated-sbtc-fees (- current-fees amount))
+            (as-contract (contract-call? sbtc-token transfer amount tx-sender caller none))
         )
     )
 )
@@ -229,6 +234,8 @@
     )
         (begin
             (asserts! (is-admin) err-unauthorized)
+            ;; Validate entry-fee at creation time, not on every predict
+            (asserts! (> entry-fee u0) err-zero-stake)
             (var-set event-nonce event-id)
             (map-set events { event-id: event-id }
                 {
@@ -311,8 +318,10 @@
         (begin
             (asserts! (is-keeper) err-unauthorized)
             (asserts! (get is-active event) (err u218)) ;; err-already-closed
-            ;; Don't let anyone close an event before its time -- that would cut off betting early
+            ;; Betting window must have ended
             (asserts! (>= burn-block-height (get close-block event)) err-event-not-closed)
+            ;; All child markets must be finalized before the event can be closed
+            (asserts! (is-eq (get finalized-market-count event) (get market-count event)) err-not-all-finalized)
             (map-set events { event-id: event-id }
                 (merge event { is-active: false })
             )
@@ -327,13 +336,50 @@
 )
 
 ;; -------------------------------------------------------
-;; FUNCTION 3: predict
-;; User enters a market by paying the fixed entry fee in the event's token.
+;; FUNCTION 3a: predict-stx
+;; User enters a STX-denominated market. Fails if event uses sBTC.
 ;; @param market-id   Which market
 ;; @param prediction  true = YES, false = NO
-;; @param sbtc-token  Required only when event.use-sbtc is true
 ;; -------------------------------------------------------
-(define-public (predict
+(define-public (predict-stx
+    (market-id uint)
+    (prediction bool)
+)
+    (let (
+        (caller tx-sender)
+        (contract-addr (as-contract tx-sender))
+        (market (unwrap! (map-get? markets { market-id: market-id }) err-market-not-found))
+        (event-id (get event-id market))
+        (event (unwrap! (map-get? events { event-id: event-id }) err-event-not-found))
+        (entry-fee (get entry-fee event))
+        (existing-position (map-get? positions { market-id: market-id, predictor: caller }))
+    )
+        (begin
+            (asserts! (not (get use-sbtc event)) err-market-already-resolved) ;; STX-only event
+            (asserts! (is-eq (get status market) status-open) err-market-already-resolved)
+            (asserts! (< burn-block-height (get close-block market)) err-event-closed)
+            (asserts! (is-none existing-position) err-already-predicted)
+            (try! (stx-transfer? entry-fee caller contract-addr))
+            (map-set positions
+                { market-id: market-id, predictor: caller }
+                { prediction: prediction, amount: entry-fee, claimed: false }
+            )
+            (map-set events { event-id: event-id }
+                (merge event { total-pool: (+ (get total-pool event) entry-fee) })
+            )
+            (ok true)
+        )
+    )
+)
+
+;; -------------------------------------------------------
+;; FUNCTION 3b: predict-sbtc
+;; User enters an sBTC-denominated market. Validates approved-sbtc. Fails if event uses STX.
+;; @param market-id   Which market
+;; @param prediction  true = YES, false = NO
+;; @param sbtc-token  Must match approved-sbtc
+;; -------------------------------------------------------
+(define-public (predict-sbtc
     (market-id uint)
     (prediction bool)
     (sbtc-token <sip-010-trait>)
@@ -345,45 +391,22 @@
         (event-id (get event-id market))
         (event (unwrap! (map-get? events { event-id: event-id }) err-event-not-found))
         (entry-fee (get entry-fee event))
-        (pool (get-market-pool market-id))
         (existing-position (map-get? positions { market-id: market-id, predictor: caller }))
     )
         (begin
-            (asserts! (> entry-fee u0) err-zero-stake)
+            (asserts! (get use-sbtc event) err-market-already-resolved) ;; sBTC-only event
+            (asserts! (is-eq (contract-of sbtc-token) (var-get approved-sbtc)) err-invalid-token)
             (asserts! (is-eq (get status market) status-open) err-market-already-resolved)
             (asserts! (< burn-block-height (get close-block market)) err-event-closed)
             (asserts! (is-none existing-position) err-already-predicted)
-            
-            ;; Transfer the entry fee in the correct token
-            (if (get use-sbtc event)
-                (try! (contract-call?
-                    sbtc-token
-                    transfer entry-fee caller contract-addr none
-                ))
-                (try! (stx-transfer? entry-fee caller contract-addr))
-            )
-            
-            ;; Record position with unified amount field
+            (try! (contract-call? sbtc-token transfer entry-fee caller contract-addr none))
             (map-set positions
                 { market-id: market-id, predictor: caller }
                 { prediction: prediction, amount: entry-fee, claimed: false }
             )
-            
-            ;; Update market pool
-            (if prediction
-                (map-set market-pools { market-id: market-id }
-                    (merge pool { yes-pool: (+ (get yes-pool pool) entry-fee) })
-                )
-                (map-set market-pools { market-id: market-id }
-                    (merge pool { no-pool: (+ (get no-pool pool) entry-fee) })
-                )
-            )
-            
-            ;; Update event total pool
             (map-set events { event-id: event-id }
                 (merge event { total-pool: (+ (get total-pool event) entry-fee) })
             )
-            
             (ok true)
         )
     )
@@ -548,25 +571,18 @@
     )
 )
 
+
+
 ;; -------------------------------------------------------
-;; FUNCTION 9: claim-winnings  (Gamification Payout)
-;; Top 5 users call this to claim their share of the event's Net Prize Pool.
-;; Net Prize Pool is 98% of total (2% extracted to treasury on close-event).
-;; Rank 1: 30%, Rank 2: 25%, Rank 3: 20%, Rank 4: 15%, Rank 5: 10%
-;; @param event-id    The finalized event
-;; @param sbtc-token  Pass the sBTC contract when event.use-sbtc is true
+;; FUNCTION 9a: claim-winnings-stx
+;; Top 5 users claim their STX share. Fails if event is sBTC-denominated.
+;; @param event-id  The finalized STX event
 ;; -------------------------------------------------------
-(define-public (claim-winnings
-    (event-id uint)
-    (sbtc-token <sip-010-trait>)
-)
+(define-public (claim-winnings-stx (event-id uint))
     (let (
         (caller tx-sender)
         (event (unwrap! (map-get? events { event-id: event-id }) err-event-not-found))
-        (is-closed (not (get is-active event)))
         (leaderboard (contract-call? .reputation-points get-top-5 event-id))
-    )
-    (let (
         (r1 (get rank1 leaderboard))
         (r2 (get rank2 leaderboard))
         (r3 (get rank3 leaderboard))
@@ -579,40 +595,74 @@
         (is-r3 (match r3 e3 (is-eq (get user e3) caller) false))
         (is-r4 (match r4 e4 (is-eq (get user e4) caller) false))
         (is-r5 (match r5 e5 (is-eq (get user e5) caller) false))
-    )
-    (let (
         (multiplier (if is-r1 u30
                         (if is-r2 u25
                             (if is-r3 u20
                                 (if is-r4 u15
                                     (if is-r5 u10 u0))))))
         (has-claimed (default-to false (map-get? event-claims { event-id: event-id, user: caller })))
-        (total-pool (get total-pool event))
-        (prize-pool (/ (* total-pool u98) u100))
-    )
-    (let (
+        (prize-pool (/ (* (get total-pool event) u98) u100))
         (payout-amount (/ (* prize-pool multiplier) u100))
     )
         (begin
-            (asserts! is-closed (err u415))
+            (asserts! (not (get use-sbtc event)) err-invalid-token)     ;; STX-only
+            (asserts! (not (get is-active event)) (err u415))           ;; event closed
             (asserts! (is-eq (get finalized-market-count event) (get market-count event)) err-not-all-finalized)
             (asserts! (> multiplier u0) (err u416))
             (asserts! (not has-claimed) (err u417))
             (asserts! (> payout-amount u0) (err u418))
-            
             (map-set event-claims { event-id: event-id, user: caller } true)
-            
-            ;; Pay out in the event's token
-            (if (get use-sbtc event)
-                (as-contract (contract-call?
-                    sbtc-token
-                    transfer payout-amount tx-sender caller none
-                ))
-                (as-contract (stx-transfer? payout-amount tx-sender caller))
-            )
+            (as-contract (stx-transfer? payout-amount tx-sender caller))
         )
-    )))))
+    ))
 )
+
+;; -------------------------------------------------------
+;; FUNCTION 9b: claim-winnings-sbtc
+;; Top 5 users claim their sBTC share. Validates approved-sbtc. Fails if event is STX-denominated.
+;; @param event-id    The finalized sBTC event
+;; @param sbtc-token  Must match approved-sbtc
+;; -------------------------------------------------------
+(define-public (claim-winnings-sbtc (event-id uint) (sbtc-token <sip-010-trait>))
+    (let (
+        (caller tx-sender)
+        (event (unwrap! (map-get? events { event-id: event-id }) err-event-not-found))
+        (leaderboard (contract-call? .reputation-points get-top-5 event-id))
+        (r1 (get rank1 leaderboard))
+        (r2 (get rank2 leaderboard))
+        (r3 (get rank3 leaderboard))
+        (r4 (get rank4 leaderboard))
+        (r5 (get rank5 leaderboard))
+    )
+    (let (
+        (is-r1 (match r1 e1 (is-eq (get user e1) caller) false))
+        (is-r2 (match r2 e2 (is-eq (get user e2) caller) false))
+        (is-r3 (match r3 e3 (is-eq (get user e3) caller) false))
+        (is-r4 (match r4 e4 (is-eq (get user e4) caller) false))
+        (is-r5 (match r5 e5 (is-eq (get user e5) caller) false))
+        (multiplier (if is-r1 u30
+                        (if is-r2 u25
+                            (if is-r3 u20
+                                (if is-r4 u15
+                                    (if is-r5 u10 u0))))))
+        (has-claimed (default-to false (map-get? event-claims { event-id: event-id, user: caller })))
+        (prize-pool (/ (* (get total-pool event) u98) u100))
+        (payout-amount (/ (* prize-pool multiplier) u100))
+    )
+        (begin
+            (asserts! (get use-sbtc event) err-invalid-token)                               ;; sBTC-only
+            (asserts! (is-eq (contract-of sbtc-token) (var-get approved-sbtc)) err-invalid-token) ;; validated token
+            (asserts! (not (get is-active event)) (err u415))
+            (asserts! (is-eq (get finalized-market-count event) (get market-count event)) err-not-all-finalized)
+            (asserts! (> multiplier u0) (err u416))
+            (asserts! (not has-claimed) (err u417))
+            (asserts! (> payout-amount u0) (err u418))
+            (map-set event-claims { event-id: event-id, user: caller } true)
+            (as-contract (contract-call? sbtc-token transfer payout-amount tx-sender caller none))
+        )
+    ))
+)
+
 
 ;; -------------------------------------------------------
 ;; READ ONLY FUNCTIONS
