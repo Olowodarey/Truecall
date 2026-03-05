@@ -42,6 +42,7 @@
 (define-constant err-not-disputed              (err u214))
 (define-constant err-no-position               (err u217)) ;; missing position in non-dispute contexts
 (define-constant err-not-all-finalized         (err u220)) ;; claim-winnings before all markets finalized
+(define-constant err-wrong-entry-fee           (err u221))
 
 ;; data vars
 (define-data-var event-nonce uint u0)
@@ -69,6 +70,7 @@
         creator: principal,
         dao-approved: bool,
         close-block: uint,
+        entry-fee: uint,
         market-count: uint,
         finalized-market-count: uint, ;; tracks how many markets are fully resolved
         is-active: bool,
@@ -124,12 +126,6 @@
 ;; Track who claimed winnings for each event
 (define-map event-claims
     { event-id: uint, user: principal }
-    bool
-)
-
-;; Track if the 5% protocol fee has been extracted for the event
-(define-map event-fee-paid
-    { event-id: uint }
     bool
 )
 
@@ -222,6 +218,7 @@
     (title (string-ascii 64))
     (dao-approved bool)
     (blocks-open uint)
+    (entry-fee uint)
 )
     (let (
         (caller tx-sender)
@@ -237,6 +234,7 @@
                     creator: caller,
                     dao-approved: dao-approved,
                     close-block: close-block,
+                    entry-fee: entry-fee,
                     market-count: u0,
                     finalized-market-count: u0,
                     is-active: true,
@@ -305,6 +303,8 @@
 (define-public (close-event (event-id uint))
     (let (
         (event (unwrap! (map-get? events { event-id: event-id }) err-event-not-found))
+        (total-pool (get total-stx-pool event))
+        (protocol-fee (/ (* total-pool u2) u100))
     )
         (begin
             (asserts! (is-keeper) err-unauthorized)
@@ -314,6 +314,8 @@
             (map-set events { event-id: event-id }
                 (merge event { is-active: false })
             )
+            ;; Book the 2% protocol fee to the treasury
+            (var-set accumulated-fees (+ (var-get accumulated-fees) protocol-fee))
             (ok true)
         )
     )
@@ -321,16 +323,15 @@
 
 ;; -------------------------------------------------------
 ;; FUNCTION 3: predict
-;; User bets YES or NO on a market by staking STX.
+;; User bets YES or NO on a market. 
+;; The exact entry fee is deducted based on the event's configured fee.
 ;; Only allowed while the market is "open" and before close-block.
 ;; @param market-id   Which market
 ;; @param prediction  true = YES, false = NO
-;; @param stx-amount  Amount of STX to stake
 ;; -------------------------------------------------------
 (define-public (predict
     (market-id uint)
     (prediction bool)
-    (stx-amount uint)
 )
     (let (
         (caller tx-sender)
@@ -338,37 +339,38 @@
         (market (unwrap! (map-get? markets { market-id: market-id }) err-market-not-found))
         (event-id (get event-id market))
         (event (unwrap! (map-get? events { event-id: event-id }) err-event-not-found))
+        (entry-fee (get entry-fee event))
         (pool (get-market-pool market-id))
         (existing-position (map-get? positions { market-id: market-id, predictor: caller }))
     )
         (begin
-            (asserts! (> stx-amount u0) err-zero-stake)
+            (asserts! (> entry-fee u0) err-zero-stake)
             (asserts! (is-eq (get status market) status-open) err-market-already-resolved)
             (asserts! (< burn-block-height (get close-block market)) err-event-closed)
             
             (asserts! (is-none existing-position) err-already-predicted)
             
-            (try! (stx-transfer? stx-amount caller contract-addr))
+            (try! (stx-transfer? entry-fee caller contract-addr))
             
             ;; 1. Update positions
             (map-set positions
                 { market-id: market-id, predictor: caller }
-                { prediction: prediction, stx-amount: stx-amount, sbtc-amount: u0, claimed: false }
+                { prediction: prediction, stx-amount: entry-fee, sbtc-amount: u0, claimed: false }
             )
             
             ;; 2. Update market pools
             (if prediction
                 (map-set market-pools { market-id: market-id }
-                    (merge pool { yes-stx: (+ (get yes-stx pool) stx-amount) })
+                    (merge pool { yes-stx: (+ (get yes-stx pool) entry-fee) })
                 )
                 (map-set market-pools { market-id: market-id }
-                    (merge pool { no-stx: (+ (get no-stx pool) stx-amount) })
+                    (merge pool { no-stx: (+ (get no-stx pool) entry-fee) })
                 )
             )
             
             ;; 3. Update global event pools
             (map-set events { event-id: event-id }
-                (merge event { total-stx-pool: (+ (get total-stx-pool event) stx-amount) })
+                (merge event { total-stx-pool: (+ (get total-stx-pool event) entry-fee) })
             )
             
             (ok true)
@@ -537,9 +539,9 @@
 
 ;; -------------------------------------------------------
 ;; FUNCTION 9: claim-winnings  (Gamification Payout)
-;; Top 5 users call this to claim their share of the event's STX pool.
-;; Rank 1: 29%, Rank 2: 24%, Rank 3: 19%, Rank 4: 14%, Rank 5: 9%
-;; Protocol Fee: 5% (sent automatically on first claim or kept in contract)
+;; Top 5 users call this to claim their share of the event's Net Prize Pool.
+;; Net Prize Pool is 98% of total (2% extracted to treasury on close-event).
+;; Rank 1: 30%, Rank 2: 25%, Rank 3: 20%, Rank 4: 15%, Rank 5: 10%
 ;; @param event-id  The finalized event
 ;; -------------------------------------------------------
 (define-public (claim-winnings (event-id uint))
@@ -569,22 +571,21 @@
         (is-r5 (match r5 e5 (is-eq (get user e5) caller) false))
     )
     (let (
-        (multiplier (if is-r1 u29
-                        (if is-r2 u24
-                            (if is-r3 u19
-                                (if is-r4 u14
-                                    (if is-r5 u9 u0))))))
+        (multiplier (if is-r1 u30
+                        (if is-r2 u25
+                            (if is-r3 u20
+                                (if is-r4 u15
+                                    (if is-r5 u10 u0))))))
                                     
         ;; Map tracking who has claimed winnings for which event (to prevent double claiming)
         (has-claimed (default-to false (map-get? event-claims { event-id: event-id, user: caller })))
         
-        ;; Payout Calculation
+        ;; Payout Calculation against 98% prize pool
         (total-pool (get total-stx-pool event))
+        (prize-pool (/ (* total-pool u98) u100))
     )
     (let (
-        (payout-amount (/ (* total-pool multiplier) u100))
-        (fee-paid (default-to false (map-get? event-fee-paid { event-id: event-id })))
-        (protocol-fee (/ (* total-pool u5) u100))
+        (payout-amount (/ (* prize-pool multiplier) u100))
     )
         (begin
             (asserts! is-closed (err u415)) ;; err-event-still-active
@@ -597,16 +598,7 @@
             ;; 1. Mark user payout claimed
             (map-set event-claims { event-id: event-id, user: caller } true)
             
-            ;; 2. Exact Protocol Fee on First Claim 
-            (if (not fee-paid)
-                (begin
-                    (map-set event-fee-paid { event-id: event-id } true)
-                    (var-set accumulated-fees (+ (var-get accumulated-fees) protocol-fee))
-                )
-                false
-            )
-            
-            ;; 3. Transfer User STX Winnings
+            ;; 2. Transfer User STX Winnings
             (as-contract (stx-transfer? payout-amount tx-sender caller))
         )
     )))))
