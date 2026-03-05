@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useWallet } from "@/contexts/WalletContext";
 import { fetchEvents } from "@/lib/api";
-import { Event } from "@/lib/types";
+import { ChainEvent } from "@/lib/types";
 import EventCard from "@/components/EventCard";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -11,7 +11,7 @@ import UnifiedBackground from "@/components/UnifiedBackground";
 
 export default function PredictionsPage() {
   const { isConnected, userAddress } = useWallet();
-  const [predictions, setPredictions] = useState<Event[]>([]);
+  const [predictions, setPredictions] = useState<ChainEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

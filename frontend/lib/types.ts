@@ -1,57 +1,65 @@
-// Event and Match types matching backend entities
+// On-chain types — fields map 1:1 to Clarity contract tuple keys
 
-export enum EventStatus {
-  OPEN = "open",
-  CLOSED = "closed",
-  SETTLED = "settled",
-}
-
-export enum MatchStatus {
-  SCHEDULED = "scheduled",
-  LIVE = "live",
-  COMPLETED = "completed",
-  CANCELLED = "cancelled",
-}
-
-export enum MatchResult {
-  HOME_WIN = 1,
-  DRAW = 2,
-  AWAY_WIN = 3,
-}
-
-export interface Match {
+export interface ChainEvent {
   id: number;
-  externalId: string;
-  homeTeam: string;
-  awayTeam: string;
-  matchTime: number;
-  status: MatchStatus;
-  result: MatchResult | null;
-  homeScore: number | null;
-  awayScore: number | null;
-  eventId: number | null;
-  submittedToContract: boolean;
-  transactionId: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface Event {
-  id: number;
-  eventName: string;
-  contractEventId: number | null;
-  matchId: number;
-  match?: Match;
-  accessCode: string;
+  title: string;
   creator: string;
-  oracle: string;
-  status: EventStatus;
-  transactionId: string | null;
-  createdAt: string;
+  daoApproved: boolean;
+  closeBlock: number;
+  entryFee: number; // microSTX or sBTC sats
+  useSbtc: boolean;
+  marketCount: number;
+  finalizedMarketCount: number;
+  isActive: boolean;
+  totalPool: number;
 }
 
-export interface PredictionPayload {
+export interface ChainMarket {
+  id: number;
   eventId: number;
-  prediction: MatchResult;
-  accessCode: string;
+  question: string;
+  targetPrice: number; // BTC price in USD cents
+  closeBlock: number;
+  status: "open" | "pending" | "disputed" | "final";
+  oraclePrice: number;
+  finalOutcome: boolean | null;
 }
+
+export interface ChainPosition {
+  prediction: boolean; // true = YES, false = NO
+  amount: number;
+  claimed: boolean;
+}
+
+export interface ChainStakeInfo {
+  stxBalance: number;
+  stxStakedAt: number;
+  lockedUntil: number;
+}
+
+export interface ChainProposal {
+  id: number;
+  proposer: string;
+  title: string;
+  question: string;
+  targetPrice: number;
+  entryFee: number;
+  blocksOpen: number;
+  useSbtc: boolean;
+  createdAt: number;
+  voteEndBlock: number;
+  status:
+    | "active"
+    | "approved"
+    | "rejected"
+    | "executed"
+    | "cancelled"
+    | "expired";
+  yesVotes: number;
+  noVotes: number;
+  eventId: number;
+}
+
+// UI helpers
+export type EventFilter = "all" | "open" | "closed" | "settled";
+export type MarketStatus = ChainMarket["status"];
