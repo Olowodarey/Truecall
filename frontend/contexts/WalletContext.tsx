@@ -21,16 +21,24 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [userAddress, setUserAddress] = useState<string | null>(null);
 
   useEffect(() => {
-    // Check if user is returning from authentication
-    if (userSession.isSignInPending()) {
-      userSession.handlePendingSignIn().then((userData) => {
+    try {
+      if (userSession.isSignInPending()) {
+        userSession.handlePendingSignIn().then((userData) => {
+          setIsConnected(true);
+          setUserAddress(userData.profile.stxAddress.testnet);
+        });
+      } else if (userSession.isUserSignedIn()) {
+        const userData = userSession.loadUserData();
         setIsConnected(true);
         setUserAddress(userData.profile.stxAddress.testnet);
-      });
-    } else if (userSession.isUserSignedIn()) {
-      const userData = userSession.loadUserData();
-      setIsConnected(true);
-      setUserAddress(userData.profile.stxAddress.testnet);
+      }
+    } catch (e) {
+      console.warn("Cleared corrupt wallet session data", e);
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem("blockstack-session");
+      }
+      setIsConnected(false);
+      setUserAddress(null);
     }
   }, [userSession]);
 
@@ -45,10 +53,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       },
       userSession,
       onFinish: () => {
-        if (userSession.isUserSignedIn()) {
-          const userData = userSession.loadUserData();
-          setIsConnected(true);
-          setUserAddress(userData.profile.stxAddress.testnet);
+        try {
+          if (userSession.isUserSignedIn()) {
+            const userData = userSession.loadUserData();
+            setIsConnected(true);
+            setUserAddress(userData.profile.stxAddress.testnet);
+          }
+        } catch (e) {
+          console.error("Failed to load user data after connect", e);
         }
       },
       onCancel: () => {

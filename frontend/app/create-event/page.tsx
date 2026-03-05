@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { openContractCall } from "@stacks/connect";
+import { STACKS_TESTNET } from "@stacks/network";
 import { uintCV, stringAsciiCV, boolCV } from "@stacks/transactions";
-import { CONTRACTS, HIRO_API } from "@/lib/contracts";
+import { CONTRACTS, HIRO_API, DEPLOYER } from "@/lib/contracts";
 import { useWallet } from "@/contexts/WalletContext";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -13,7 +14,7 @@ const [pmAddr, pmName] = CONTRACTS.PREDICTION_MARKET.split(".");
 
 export default function CreateEventPage() {
   const router = useRouter();
-  const { isConnected, connectWallet } = useWallet();
+  const { isConnected, connectWallet, userAddress } = useWallet();
 
   // Form state
   const [title, setTitle] = useState("");
@@ -50,12 +51,12 @@ export default function CreateEventPage() {
         functionName: "create-event",
         functionArgs: [
           stringAsciiCV(title.trim().slice(0, 64)),
+          boolCV(daoApproved),
           uintCV(closeBlock),
           uintCV(entryFeeMicro),
           boolCV(useSbtc),
-          boolCV(daoApproved),
         ],
-        network: { url: HIRO_API } as any,
+        network: STACKS_TESTNET,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         anchorMode: 3, // AnchorMode.Any
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -129,6 +130,32 @@ export default function CreateEventPage() {
                 className="bg-gradient-to-r from-orange-500 to-yellow-500 text-white font-bold py-3 px-8 rounded-lg"
               >
                 Connect Wallet
+              </button>
+            </div>
+          ) : userAddress !== DEPLOYER ? (
+            <div className="text-center py-16 bg-red-900/20 rounded-xl border border-red-900/50">
+              <h2 className="text-red-400 font-bold text-xl mb-4">
+                Unauthorized Address
+              </h2>
+              <p className="text-gray-300 mb-6">
+                You are connected as{" "}
+                <code className="bg-black/30 px-2 py-1 rounded text-sm text-gray-400">
+                  {userAddress}
+                </code>
+                .
+                <br />
+                <br />
+                Only the contract deployer can create events on-chain:
+                <br />
+                <code className="bg-black/30 px-2 py-1 rounded text-orange-400 text-sm mt-2 inline-block">
+                  {DEPLOYER}
+                </code>
+              </p>
+              <button
+                onClick={connectWallet}
+                className="bg-gray-800 hover:bg-gray-700 text-white font-medium py-3 px-8 rounded-lg border border-gray-600 transistion-colors"
+              >
+                Switch Account in Wallet
               </button>
             </div>
           ) : (

@@ -22,6 +22,7 @@ import {
   type ClarityValue,
 } from "@stacks/transactions";
 import { openContractCall } from "@stacks/connect";
+import { STACKS_TESTNET } from "@stacks/network";
 import { CONTRACTS, DEPLOYER, HIRO_API } from "./contracts";
 import type {
   ChainEvent,
@@ -75,8 +76,7 @@ async function readOnly(
     functionName,
     functionArgs: args,
     senderAddress: contractAddress,
-    // @ts-ignore — network type compat
-    network: { url: HIRO_API },
+    network: STACKS_TESTNET,
   });
 }
 
@@ -240,7 +240,7 @@ export async function predictStx(
     contractName: pmName,
     functionName: "predict-stx",
     functionArgs: [uintCV(marketId), prediction ? trueCV() : falseCV()],
-    network: { url: HIRO_API } as any,
+    network: STACKS_TESTNET,
     postConditionMode: PostConditionMode.Allow,
     anchorMode: AnchorMode.Any,
     appDetails: { name: "TrueCall", icon: "/favicon.ico" },
@@ -258,7 +258,7 @@ export async function depositStx(amount: number) {
     contractName: stakeName,
     functionName: "deposit-stx",
     functionArgs: [uintCV(amount)],
-    network: { url: HIRO_API } as any,
+    network: STACKS_TESTNET,
     postConditionMode: PostConditionMode.Allow,
     anchorMode: AnchorMode.Any,
     appDetails: { name: "TrueCall", icon: "/favicon.ico" },
@@ -274,7 +274,7 @@ export async function claimWinningsStx(eventId: number) {
     contractName: pmName,
     functionName: "claim-winnings-stx",
     functionArgs: [uintCV(eventId)],
-    network: { url: HIRO_API } as any,
+    network: STACKS_TESTNET,
     postConditionMode: PostConditionMode.Allow,
     anchorMode: AnchorMode.Any,
     appDetails: { name: "TrueCall", icon: "/favicon.ico" },
@@ -290,7 +290,7 @@ export async function castGovernanceVote(proposalId: number, vote: boolean) {
     contractName: govName,
     functionName: "cast-vote",
     functionArgs: [uintCV(proposalId), vote ? trueCV() : falseCV()],
-    network: { url: HIRO_API } as any,
+    network: STACKS_TESTNET,
     postConditionMode: PostConditionMode.Allow,
     anchorMode: AnchorMode.Any,
     appDetails: { name: "TrueCall", icon: "/favicon.ico" },
