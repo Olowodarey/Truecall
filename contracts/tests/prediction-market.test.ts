@@ -237,12 +237,12 @@ describe("prediction-market — full end-to-end flow", () => {
     expect(result).toBeErr(Cl.uint(203));
   });
 
-  it("predict-stx is rejected on an sBTC event (err u205)", () => {
+  it("predict-stx is rejected on an sBTC event (err u223 = invalid-token)", () => {
     const eventId = createSbtcEvent("E: sBTC reject STX");
     const mktId = addMarket(eventId, "Steady?", 9_000_000);
-    // predict-stx asserts (!use-sbtc) which fails → err-market-already-resolved (u205)
+    // predict-stx asserts (!use-sbtc) which now fails → err-invalid-token (u223)
     const result = predictStx(mktId, true, wallets[0]);
-    expect(result).toBeErr(Cl.uint(205));
+    expect(result).toBeErr(Cl.uint(223));
   });
 
   // ── Full end-to-end: 5 markets, 10 users, resolve, split ─────────────────

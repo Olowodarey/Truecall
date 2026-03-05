@@ -18,7 +18,6 @@
 (define-constant err-voting-open           (err u404))
 (define-constant err-below-min-stake       (err u405))
 (define-constant err-stake-too-young       (err u406))
-(define-constant err-already-executed      (err u407))
 (define-constant err-not-approved          (err u408))
 (define-constant err-quorum-not-met        (err u409))
 (define-constant err-spam-limit            (err u410))

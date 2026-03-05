@@ -100,6 +100,12 @@
     }
 )
 
+;; Reverse-lookup map: event title -> event-id (for frontend/get-event-by-title)
+(define-map events-by-title
+    { title: (string-ascii 64) }
+    { event-id: uint }
+)
+
 ;; Index: which markets belong to each event
 (define-map event-markets
     { event-id: uint, index: uint }
@@ -251,6 +257,8 @@
                     total-pool: u0
                 }
             )
+            ;; Reverse-lookup so frontend can find event by title
+            (map-set events-by-title { title: title } { event-id: event-id })
             (ok event-id)
         )
     )
@@ -355,7 +363,7 @@
         (existing-position (map-get? positions { market-id: market-id, predictor: caller }))
     )
         (begin
-            (asserts! (not (get use-sbtc event)) err-market-already-resolved) ;; STX-only event
+            (asserts! (not (get use-sbtc event)) err-invalid-token) ;; STX-only event
             (asserts! (is-eq (get status market) status-open) err-market-already-resolved)
             (asserts! (< burn-block-height (get close-block market)) err-event-closed)
             (asserts! (is-none existing-position) err-already-predicted)
@@ -394,7 +402,7 @@
         (existing-position (map-get? positions { market-id: market-id, predictor: caller }))
     )
         (begin
-            (asserts! (get use-sbtc event) err-market-already-resolved) ;; sBTC-only event
+            (asserts! (get use-sbtc event) err-invalid-token) ;; sBTC-only event
             (asserts! (is-eq (contract-of sbtc-token) (var-get approved-sbtc)) err-invalid-token)
             (asserts! (is-eq (get status market) status-open) err-market-already-resolved)
             (asserts! (< burn-block-height (get close-block market)) err-event-closed)
@@ -698,4 +706,30 @@
 
 (define-read-only (get-event-leaderboard (event-id uint))
     (contract-call? .reputation-points get-top-5 event-id)
+)
+
+;; Look up an event by its human-readable title.
+;; Returns the same tuple as get-event, or none if title was never used.
+(define-read-only (get-event-by-title (title (string-ascii 64)))
+    (match (map-get? events-by-title { title: title })
+        entry (map-get? events { event-id: (get event-id entry) })
+        none
+    )
+)
+
+;; Returns the market-id for each of the up to 10 markets in an event.
+;; Slots with no market return none; frontend should filter those out.
+(define-read-only (get-market-ids-for-event (event-id uint))
+    (list
+        (map-get? event-markets { event-id: event-id, index: u0 })
+        (map-get? event-markets { event-id: event-id, index: u1 })
+        (map-get? event-markets { event-id: event-id, index: u2 })
+        (map-get? event-markets { event-id: event-id, index: u3 })
+        (map-get? event-markets { event-id: event-id, index: u4 })
+        (map-get? event-markets { event-id: event-id, index: u5 })
+        (map-get? event-markets { event-id: event-id, index: u6 })
+        (map-get? event-markets { event-id: event-id, index: u7 })
+        (map-get? event-markets { event-id: event-id, index: u8 })
+        (map-get? event-markets { event-id: event-id, index: u9 })
+    )
 )
