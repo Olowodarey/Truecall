@@ -15,5 +15,5 @@ export {
   predictStx,
   depositStx,
   claimWinningsStx,
-  castGovernanceVote,
+  castVote as castGovernanceVote,
 } from "./stacks";

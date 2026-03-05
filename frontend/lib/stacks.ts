@@ -267,22 +267,6 @@ export async function predictStx(
   });
 }
 
-/** User deposits STX to staking contract */
-export async function depositStx(amount: number) {
-  await openContractCall({
-    contractAddress: stakeAddr,
-    contractName: stakeName,
-    functionName: "deposit-stx",
-    functionArgs: [uintCV(amount)],
-    network: STACKS_TESTNET,
-    postConditionMode: PostConditionMode.Allow,
-    anchorMode: AnchorMode.Any,
-    appDetails: { name: "TrueCall", icon: "/favicon.ico" },
-    onFinish: (data: any) => console.log("deposit-stx tx:", data.txId),
-    onCancel: () => console.log("deposit-stx cancelled"),
-  });
-}
-
 /** User claims STX winnings after event is closed + all markets finalized */
 export async function claimWinningsStx(
   eventId: number,
@@ -305,22 +289,6 @@ export async function claimWinningsStx(
       console.log("claim cancelled");
       callbacks?.onCancel?.();
     },
-  });
-}
-
-/** Cast a governance vote */
-export async function castGovernanceVote(proposalId: number, vote: boolean) {
-  await openContractCall({
-    contractAddress: govAddr,
-    contractName: govName,
-    functionName: "cast-vote",
-    functionArgs: [uintCV(proposalId), vote ? trueCV() : falseCV()],
-    network: STACKS_TESTNET,
-    postConditionMode: PostConditionMode.Allow,
-    anchorMode: AnchorMode.Any,
-    appDetails: { name: "TrueCall", icon: "/favicon.ico" },
-    onFinish: (data: any) => console.log("cast-vote tx:", data.txId),
-    onCancel: () => console.log("vote cancelled"),
   });
 }
 
@@ -922,6 +890,106 @@ export async function expireProposal(
     },
     onCancel: () => {
       console.log("expire-proposal cancelled");
+      callbacks?.onCancel?.();
+    },
+  });
+}
+
+// ─── STAKING transaction builders ────────────────────────────────────────────
+
+export async function depositStx(
+  amountMicro: number,
+  callbacks?: { onFinish?: (txId: string) => void; onCancel?: () => void },
+) {
+  await openContractCall({
+    contractAddress: stakeAddr,
+    contractName: stakeName,
+    functionName: "deposit-stx",
+    functionArgs: [uintCV(amountMicro)],
+    network: STACKS_TESTNET,
+    postConditionMode: PostConditionMode.Allow,
+    anchorMode: AnchorMode.Any,
+    appDetails: { name: "TrueCall", icon: "/favicon.ico" },
+    onFinish: (data: any) => {
+      console.log("deposit-stx tx:", data.txId);
+      callbacks?.onFinish?.(data.txId);
+    },
+    onCancel: () => {
+      console.log("deposit-stx cancelled");
+      callbacks?.onCancel?.();
+    },
+  });
+}
+
+export async function withdrawStx(
+  amountMicro: number,
+  callbacks?: { onFinish?: (txId: string) => void; onCancel?: () => void },
+) {
+  await openContractCall({
+    contractAddress: stakeAddr,
+    contractName: stakeName,
+    functionName: "withdraw-stx",
+    functionArgs: [uintCV(amountMicro)],
+    network: STACKS_TESTNET,
+    postConditionMode: PostConditionMode.Allow,
+    anchorMode: AnchorMode.Any,
+    appDetails: { name: "TrueCall", icon: "/favicon.ico" },
+    onFinish: (data: any) => {
+      console.log("withdraw-stx tx:", data.txId);
+      callbacks?.onFinish?.(data.txId);
+    },
+    onCancel: () => {
+      console.log("withdraw-stx cancelled");
+      callbacks?.onCancel?.();
+    },
+  });
+}
+
+export async function depositSbtc(
+  amountSats: number,
+  sbtcTokenContract: string,
+  callbacks?: { onFinish?: (txId: string) => void; onCancel?: () => void },
+) {
+  await openContractCall({
+    contractAddress: stakeAddr,
+    contractName: stakeName,
+    functionName: "deposit-sbtc",
+    functionArgs: [uintCV(amountSats), principalCV(sbtcTokenContract)],
+    network: STACKS_TESTNET,
+    postConditionMode: PostConditionMode.Allow,
+    anchorMode: AnchorMode.Any,
+    appDetails: { name: "TrueCall", icon: "/favicon.ico" },
+    onFinish: (data: any) => {
+      console.log("deposit-sbtc tx:", data.txId);
+      callbacks?.onFinish?.(data.txId);
+    },
+    onCancel: () => {
+      console.log("deposit-sbtc cancelled");
+      callbacks?.onCancel?.();
+    },
+  });
+}
+
+export async function withdrawSbtc(
+  amountSats: number,
+  sbtcTokenContract: string,
+  callbacks?: { onFinish?: (txId: string) => void; onCancel?: () => void },
+) {
+  await openContractCall({
+    contractAddress: stakeAddr,
+    contractName: stakeName,
+    functionName: "withdraw-sbtc",
+    functionArgs: [uintCV(amountSats), principalCV(sbtcTokenContract)],
+    network: STACKS_TESTNET,
+    postConditionMode: PostConditionMode.Allow,
+    anchorMode: AnchorMode.Any,
+    appDetails: { name: "TrueCall", icon: "/favicon.ico" },
+    onFinish: (data: any) => {
+      console.log("withdraw-sbtc tx:", data.txId);
+      callbacks?.onFinish?.(data.txId);
+    },
+    onCancel: () => {
+      console.log("withdraw-sbtc cancelled");
       callbacks?.onCancel?.();
     },
   });
