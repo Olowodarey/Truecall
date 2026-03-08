@@ -42,29 +42,27 @@ function parsePrincipal(cv: ClarityValue): string {
   return (cv as any).value ?? "";
 }
 
-function parseUint(cv: ClarityValue): number {
-  return Number((cv as any).value ?? 0);
+function parseUint(cv: ClarityValue | any): number {
+  const val = cv.value !== undefined ? cv.value : cv;
+  return Number(val);
 }
 
-function parseBool(cv: ClarityValue): boolean {
-  return cv.type === ClarityType.BoolTrue;
+function parseBool(cv: ClarityValue | any): boolean {
+  return cv.type === ClarityType.BoolTrue || cv === true;
 }
 
-function parseString(cv: ClarityValue): string {
-  return (cv as any).value ?? "";
+function parseString(cv: ClarityValue | any): string {
+  return String(cv.data ?? cv.value ?? cv);
 }
 
-function parseTuple(cv: ClarityValue): Record<string, ClarityValue> {
-  return (cv as any).value ?? {};
+function parseTuple(cv: ClarityValue | any): Record<string, any> {
+  return cv.data ?? cv.value ?? {};
 }
 
 function parseOptionalTuple(
-  cv: ClarityValue,
-): Record<string, ClarityValue> | null {
-  // @stacks/transactions v6 uses string type name 'none'. Older uses ClarityType.OptionalNone enum.
-  if ((cv as any).type === "none" || cv.type === ClarityType.OptionalNone)
-    return null;
-  const inner = (cv as any).value ?? cv;
+  cv: ClarityValue | any,
+): Record<string, any> | null {
+  const inner = cv.value ?? cv;
   return parseTuple(inner);
 }
 
@@ -229,16 +227,59 @@ export async function getPosition(
 
 // ─── STAKING reads ────────────────────────────────────────────────────────────
 
+/** Direct Hiro REST call to get stake info — avoids SDK fetchCallReadOnlyFunction timeouts */
+async function callReadOnlyRest(
+  contractAddr: string,
+  contractName: string,
+  fnName: string,
+  hex_args: string[],
+): Promise<any> {
+  const url = `https://api.testnet.hiro.so/v2/contracts/call-read/${contractAddr}/${contractName}/${fnName}`;
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sender: contractAddr, arguments: hex_args }),
+  });
+  const json: any = await resp.json();
+  if (!json.okay) throw new Error(`Contract call failed: ${json.cause}`);
+  return hexToCV(json.result);
+}
+
+/** Encode a Stacks principal (STX addr) as a Clarity hex argument */
+function encodePrincipalHex(addr: string): string {
+  const cv = principalCV(addr);
+  const { serializeCV } = require("@stacks/transactions");
+  return "0x" + Buffer.from(serializeCV(cv)).toString("hex");
+}
+
 export async function getStakeInfo(address: string): Promise<ChainStakeInfo> {
-  const res = await readOnly(stakeAddr, stakeName, "get-stake-info", [
-    principalCV(address),
-  ]);
-  const t = parseTuple(res);
-  return {
-    stxBalance: parseUint(t["stx-balance"]),
-    stxStakedAt: parseUint(t["stx-staked-at"]),
-    lockedUntil: parseUint(t["locked-until"]),
-  };
+  try {
+    const cv = principalCV(address);
+    const res = await readOnly(stakeAddr, stakeName, "get-stake-info", [cv]);
+    const t = parseTuple(res);
+    return {
+      stxBalance: parseUint(t["stx-balance"]),
+      stxStakedAt: parseUint(t["stx-staked-at"]),
+      lockedUntil: parseUint(t["locked-until"]),
+    };
+  } catch {
+    // Fallback: use simpler per-field reads if tuple parsing fails
+    try {
+      const [balRes, infoRes] = await Promise.all([
+        readOnly(stakeAddr, stakeName, "get-stx-balance", [principalCV(address)]),
+        readOnly(stakeAddr, stakeName, "get-stake-info", [principalCV(address)]),
+      ]);
+      const bal = parseUint(balRes);
+      const t = parseTuple(infoRes);
+      return {
+        stxBalance: bal,
+        stxStakedAt: parseUint(t["stx-staked-at"]),
+        lockedUntil: parseUint(t["locked-until"]),
+      };
+    } catch {
+      return { stxBalance: 0, stxStakedAt: 0, lockedUntil: 0 };
+    }
+  }
 }
 
 // ─── TRANSACTION builders (via @stacks/connect) ───────────────────────────────

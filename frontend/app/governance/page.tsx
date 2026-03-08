@@ -18,6 +18,7 @@ import {
   expireProposal,
   type GovernanceConfig,
 } from "@/lib/stacks";
+import type { ChainStakeInfo } from "@/lib/types";
 
 type Proposal = Awaited<ReturnType<typeof getAllProposals>>[number];
 
@@ -40,7 +41,7 @@ export default function GovernancePage() {
     Record<number, { vote: boolean; power: number }>
   >({});
   const [currentBlock, setCurrentBlock] = useState(0);
-  const [stakeBalance, setStakeBalance] = useState(0);
+  const [stakeInfo, setStakeInfo] = useState<ChainStakeInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"proposals" | "create">(
@@ -62,26 +63,27 @@ export default function GovernancePage() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const [propsData, cfgData, blockInfo] = await Promise.all([
-        getAllProposals(30),
-        getGovernanceConfig(),
-        fetch(`${HIRO_API}/v2/info`).then((r) => r.json()),
-      ]);
-      setProposals(propsData);
+      const cfgData = await getGovernanceConfig();
       setConfig(cfgData);
+      
+      const blockInfo = await fetch(`${HIRO_API}/v2/info`).then((r) => r.json());
       setCurrentBlock(blockInfo.stacks_tip_height ?? 0);
 
+      const propsData = await getAllProposals(30);
+      setProposals(propsData);
+
       if (isConnected && userAddress) {
-        const stakeInfo = await getStakeInfo(userAddress);
-        setStakeBalance(stakeInfo.stxBalance);
+        const info = await getStakeInfo(userAddress);
+        setStakeInfo(info);
 
         const votes: Record<number, { vote: boolean; power: number }> = {};
-        await Promise.all(
-          propsData.map(async (p) => {
+        for (let i = 0; i < propsData.length; i += 2) {
+          const batch = propsData.slice(i, i + 2);
+          await Promise.all(batch.map(async (p) => {
             const v = await getUserVote(p.id, userAddress);
             if (v) votes[p.id] = v;
-          }),
-        );
+          }));
+        }
         setUserVotes(votes);
       }
     } catch (err) {
@@ -128,8 +130,14 @@ export default function GovernancePage() {
       ? proposals
       : proposals.filter((p) => p.status === statusFilter);
 
+  const stakeBalance = stakeInfo?.stxBalance ?? 0;
+  const stakeAge = stakeInfo && stakeInfo.stxStakedAt > 0
+    ? Math.max(0, currentBlock - stakeInfo.stxStakedAt)
+    : 0;
   const canCreateProposal =
-    isConnected && stakeBalance >= (config?.minStake ?? Infinity);
+    isConnected &&
+    stakeBalance >= (config?.minStake ?? Infinity) &&
+    stakeAge >= (config?.minStakeAge ?? Infinity);
 
   const voteBarPercent = (p: Proposal) => {
     const total = p.yesVotes + p.noVotes;
@@ -199,24 +207,35 @@ export default function GovernancePage() {
           )}
 
           {isConnected && stakeBalance > 0 && (
-            <div className="mb-6 bg-gray-800/60 border border-gray-700 rounded-xl p-4 flex items-center gap-4">
-              <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-              <p className="text-gray-300 text-sm">
-                Your stake:{" "}
-                <span className="text-white font-semibold">
-                  {(stakeBalance / 1e6).toFixed(2)} STX
-                </span>
-                {stakeBalance < (config?.minStake ?? 0) ? (
-                  <span className="text-red-400 ml-2">
-                    (below {(config!.minStake / 1e6).toFixed(0)} STX min — stake
-                    more to participate)
+            <div className="mb-6 bg-gray-800/60 border border-gray-700 rounded-xl p-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0" />
+              <div className="flex-1">
+                <p className="text-gray-300 text-sm">
+                  Your stake:{" "}
+                  <span className="text-white font-semibold">
+                    {(stakeBalance / 1e6).toFixed(2)} STX
                   </span>
-                ) : (
-                  <span className="text-green-400 ml-2">
-                    ✓ Eligible to vote & propose
-                  </span>
+                  {stakeBalance < (config?.minStake ?? 0) ? (
+                    <span className="text-red-400 ml-2">
+                      (below {(config!.minStake / 1e6).toFixed(0)} STX min)
+                    </span>
+                  ) : canCreateProposal ? (
+                    <span className="text-green-400 ml-2">✓ Eligible to vote &amp; propose</span>
+                  ) : (
+                    <span className="text-yellow-400 ml-2">
+                      Stake maturing: {stakeAge}/{config?.minStakeAge ?? 144} blocks
+                    </span>
+                  )}
+                </p>
+                {!canCreateProposal && stakeBalance >= (config?.minStake ?? 0) && (
+                  <div className="mt-1.5 w-full bg-gray-700 rounded-full h-1">
+                    <div
+                      className="h-1 rounded-full bg-gradient-to-r from-orange-500 to-green-500 transition-all"
+                      style={{ width: `${Math.min(100, (stakeAge / (config?.minStakeAge ?? 144)) * 100)}%` }}
+                    />
+                  </div>
                 )}
-              </p>
+              </div>
             </div>
           )}
 
@@ -553,13 +572,22 @@ export default function GovernancePage() {
                     </span>{" "}
                     staked for at least{" "}
                     <span className="text-white font-semibold">
-                      {config?.minStakeAge} blocks
+                      {config?.minStakeAge ?? 144} blocks
                     </span>{" "}
                     to create a proposal.
                   </p>
-                  <p className="text-gray-500 text-sm mt-2">
-                    Your current stake: {(stakeBalance / 1e6).toFixed(2)} STX
-                  </p>
+                  <div className="text-gray-500 text-sm mt-3 space-y-1">
+                    <p>Balance: <span className="text-white">{(stakeBalance / 1e6).toFixed(4)} STX</span>
+                      {stakeBalance < (config?.minStake ?? 0) && <span className="text-red-400"> (need {(config!.minStake / 1e6).toFixed(0)} STX)</span>}
+                    </p>
+                    <p>Stake age: <span className="text-white">{stakeAge}</span> / {config?.minStakeAge ?? 144} blocks
+                      {stakeAge < (config?.minStakeAge ?? 0) && <span className="text-yellow-400"> (maturing…)</span>}
+                    </p>
+                    <div className="w-full bg-gray-800 rounded-full h-1.5 mt-1">
+                      <div className="h-1.5 rounded-full bg-orange-500 transition-all"
+                        style={{ width: `${Math.min(100, (stakeAge / (config?.minStakeAge ?? 144)) * 100)}%` }} />
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <form

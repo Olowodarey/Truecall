@@ -4,14 +4,11 @@ description = ''
 authors = []
 telemetry = false
 cache_dir = './.cache'
-requirements = []
-[contracts.mock-sbtc]
-path = 'contracts/mock-sbtc.clar'
-clarity_version = 2
-epoch = 'latest'
 
-[contracts.pyth-oracle-trait]
-path = 'contracts/pyth-oracle-trait.clar'
+[[project.requirements]]
+contract_id = 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.sip-010-trait-ft-standard'
+[contracts.governance]
+path = 'contracts/governance.clar'
 clarity_version = 2
 epoch = 'latest'
 
@@ -20,8 +17,18 @@ path = 'contracts/mock-pyth.clar'
 clarity_version = 2
 epoch = 'latest'
 
+[contracts.mock-sbtc]
+path = 'contracts/mock-sbtc.clar'
+clarity_version = 2
+epoch = 'latest'
+
 [contracts.prediction-market]
 path = 'contracts/prediction-market.clar'
+clarity_version = 2
+epoch = 'latest'
+
+[contracts.pyth-oracle-trait]
+path = 'contracts/pyth-oracle-trait.clar'
 clarity_version = 2
 epoch = 'latest'
 
@@ -39,15 +46,10 @@ epoch = 'latest'
 path = 'contracts/staking.clar'
 clarity_version = 2
 epoch = 'latest'
-
-[contracts.governance]
-path = 'contracts/governance.clar'
-clarity_version = 2
-epoch = 'latest'
 [repl.analysis]
 passes = [
-    'call_checker',
     'check_checker',
+    'call_checker',
 ]
 
 [repl.analysis.lint_groups]
