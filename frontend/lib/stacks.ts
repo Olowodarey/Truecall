@@ -266,8 +266,12 @@ export async function getStakeInfo(address: string): Promise<ChainStakeInfo> {
     // Fallback: use simpler per-field reads if tuple parsing fails
     try {
       const [balRes, infoRes] = await Promise.all([
-        readOnly(stakeAddr, stakeName, "get-stx-balance", [principalCV(address)]),
-        readOnly(stakeAddr, stakeName, "get-stake-info", [principalCV(address)]),
+        readOnly(stakeAddr, stakeName, "get-stx-balance", [
+          principalCV(address),
+        ]),
+        readOnly(stakeAddr, stakeName, "get-stake-info", [
+          principalCV(address),
+        ]),
       ]);
       const bal = parseUint(balRes);
       const t = parseTuple(infoRes);
@@ -729,14 +733,25 @@ export async function getProposal(proposalId: number) {
   return parseProposalTuple(proposalId, t);
 }
 
-export async function getAllProposals(count = 20) {
+export async function getAllProposals() {
+  const resp = await fetch(
+    `${HIRO_API}/v2/data_var/${govAddr}/${govName}/proposal-nonce`,
+  );
+  if (!resp.ok) return [];
+  const { data } = await resp.json();
+  const nonce = Number(cvToValue(hexToCV(data))); // safely decode uintCV
+  if (!nonce) return [];
+
   const results = await Promise.allSettled(
-    Array.from({ length: count }, (_, i) => getProposal(i + 1)),
+    Array.from({ length: nonce }, (_, i) => getProposal(i + 1)),
   );
   return results
     .filter(
-      (r): r is PromiseFulfilledResult<NonNullable<Awaited<ReturnType<typeof getProposal>>>> =>
-        r.status === "fulfilled" && r.value !== null,
+      (
+        r,
+      ): r is PromiseFulfilledResult<
+        NonNullable<Awaited<ReturnType<typeof getProposal>>>
+      > => r.status === "fulfilled" && r.value !== null,
     )
     .map((r) => r.value!);
 }
