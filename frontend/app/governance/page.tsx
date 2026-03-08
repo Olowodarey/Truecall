@@ -69,7 +69,8 @@ export default function GovernancePage() {
       const blockInfo = await fetch(`${HIRO_API}/v2/info`).then((r) =>
         r.json(),
       );
-      setCurrentBlock(blockInfo.stacks_tip_height ?? 0);
+      // The contract uses burn block height (e.g. 153xxx on testnet) for expiration
+      setCurrentBlock(blockInfo.burn_block_height ?? 0);
 
       const propsData = await getAllProposals();
       setProposals(propsData);
@@ -422,45 +423,57 @@ export default function GovernancePage() {
                         {/* Actions */}
                         <div className="flex flex-wrap gap-2 mt-3">
                           {/* VOTE */}
-                          {p.status === "active" &&
-                            votingOpen &&
-                            isConnected &&
-                            !myVote && (
-                              <>
+                          {p.status === "active" && votingOpen && !myVote && (
+                            <>
+                              {!isConnected ? (
                                 <button
-                                  disabled={!!pendingAction}
-                                  onClick={() =>
-                                    doAction(`vote-yes-${p.id}`, () =>
-                                      castVote(p.id, true, {
-                                        onFinish: () => setPendingAction(null),
-                                        onCancel: () => setPendingAction(null),
-                                      }),
-                                    )
-                                  }
-                                  className="px-4 py-2 rounded-lg text-sm font-semibold bg-green-500/15 border border-green-500/40 text-green-400 hover:bg-green-500/25 disabled:opacity-50 transition"
+                                  onClick={connectWallet}
+                                  className="px-4 py-2 rounded-lg text-sm font-semibold bg-orange-500/15 border border-orange-500/40 text-orange-400 hover:bg-orange-500/25 transition"
                                 >
-                                  {pendingAction === `vote-yes-${p.id}`
-                                    ? "Waiting…"
-                                    : "👍 Vote YES"}
+                                  Connect to Vote
                                 </button>
-                                <button
-                                  disabled={!!pendingAction}
-                                  onClick={() =>
-                                    doAction(`vote-no-${p.id}`, () =>
-                                      castVote(p.id, false, {
-                                        onFinish: () => setPendingAction(null),
-                                        onCancel: () => setPendingAction(null),
-                                      }),
-                                    )
-                                  }
-                                  className="px-4 py-2 rounded-lg text-sm font-semibold bg-red-500/15 border border-red-500/40 text-red-400 hover:bg-red-500/25 disabled:opacity-50 transition"
-                                >
-                                  {pendingAction === `vote-no-${p.id}`
-                                    ? "Waiting…"
-                                    : "👎 Vote NO"}
-                                </button>
-                              </>
-                            )}
+                              ) : (
+                                <>
+                                  <button
+                                    disabled={!!pendingAction}
+                                    onClick={() =>
+                                      doAction(`vote-yes-${p.id}`, () =>
+                                        castVote(p.id, true, {
+                                          onFinish: () =>
+                                            setPendingAction(null),
+                                          onCancel: () =>
+                                            setPendingAction(null),
+                                        }),
+                                      )
+                                    }
+                                    className="px-4 py-2 rounded-lg text-sm font-semibold bg-green-500/15 border border-green-500/40 text-green-400 hover:bg-green-500/25 disabled:opacity-50 transition"
+                                  >
+                                    {pendingAction === `vote-yes-${p.id}`
+                                      ? "Waiting…"
+                                      : "👍 Vote YES"}
+                                  </button>
+                                  <button
+                                    disabled={!!pendingAction}
+                                    onClick={() =>
+                                      doAction(`vote-no-${p.id}`, () =>
+                                        castVote(p.id, false, {
+                                          onFinish: () =>
+                                            setPendingAction(null),
+                                          onCancel: () =>
+                                            setPendingAction(null),
+                                        }),
+                                      )
+                                    }
+                                    className="px-4 py-2 rounded-lg text-sm font-semibold bg-red-500/15 border border-red-500/40 text-red-400 hover:bg-red-500/25 disabled:opacity-50 transition"
+                                  >
+                                    {pendingAction === `vote-no-${p.id}`
+                                      ? "Waiting…"
+                                      : "👎 Vote NO"}
+                                  </button>
+                                </>
+                              )}
+                            </>
+                          )}
 
                           {/* CANCEL (proposer only, voting open) */}
                           {p.status === "active" &&
