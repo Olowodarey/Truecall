@@ -378,7 +378,7 @@ export default function GovernancePage() {
                         <div className="mb-4">
                           <div className="flex justify-between text-xs text-gray-400 mb-1">
                             <span className="text-green-400">
-                              YES {(p.yesVotes / 1e6).toFixed(1)} STX
+                              YES {p.yesVotes} Votes
                             </span>
                             <span
                               className={
@@ -390,7 +390,7 @@ export default function GovernancePage() {
                                 : `Quorum: ${((totalVotes / (config?.quorumThreshold ?? 1)) * 100).toFixed(0)}%`}
                             </span>
                             <span className="text-red-400">
-                              NO {(p.noVotes / 1e6).toFixed(1)} STX
+                              NO {p.noVotes} Votes
                             </span>
                           </div>
                           <div className="w-full h-2 rounded-full bg-red-500/30 overflow-hidden">
@@ -414,7 +414,7 @@ export default function GovernancePage() {
                               ? "✅ You voted YES"
                               : "❌ You voted NO"}
                             <span className="text-gray-500">
-                              ({(myVote.power / 1e6).toFixed(2)} STX)
+                              ({myVote.power} Votes)
                             </span>
                           </div>
                         )}
@@ -758,9 +758,9 @@ export default function GovernancePage() {
                     <p>
                       🗳 Quorum:{" "}
                       <strong className="text-gray-200">
-                        {(config?.quorumThreshold ?? 0) / 1e6} STX
+                        {config?.quorumThreshold ?? 0} Votes
                       </strong>{" "}
-                      total votes required
+                      total required
                     </p>
                     <p>
                       ⚡ Your stake:{" "}

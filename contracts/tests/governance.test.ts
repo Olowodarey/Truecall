@@ -53,7 +53,7 @@ function relaxGovernance() {
   simnet.callPublicFn(
     "governance",
     "set-quorum-threshold",
-    [Cl.uint(1_000_000)],
+    [Cl.uint(2)], // 2 users for quorum in tests
     deployer,
   );
   simnet.callPublicFn(
@@ -517,12 +517,19 @@ describe("governance — full DAO lifecycle", () => {
     );
     stake(deployer);
     stake(alice);
+    stake(bob);
     const pid = createProposal(deployer);
     simnet.callPublicFn(
       "governance",
       "cast-vote",
       [Cl.uint(pid), Cl.bool(true)],
       alice,
+    );
+    simnet.callPublicFn(
+      "governance",
+      "cast-vote",
+      [Cl.uint(pid), Cl.bool(true)],
+      bob,
     );
     simnet.mineEmptyBlocks(10); // vote ends
     simnet.callPublicFn(
@@ -602,7 +609,7 @@ describe("governance — full DAO lifecycle", () => {
       deployer,
     );
     const t = (totals as any).value;
-    expect(Number(t["total-votes"].value)).toBeGreaterThanOrEqual(1_000_000);
+    expect(Number(t["total-votes"].value)).toBeGreaterThanOrEqual(2);
     expect(t["quorum-met"].type).toBe(ClarityType.BoolTrue);
 
     // 4. Mine past voting window then finalize

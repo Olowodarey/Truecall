@@ -33,7 +33,9 @@ export default function CreateEventPage() {
     Record<number, ChainMarket[]>
   >({});
   const [currentBlock, setCurrentBlock] = useState(0);
-  const [oracleContract, setOracleContract] = useState(CONTRACTS.MOCK_PYTH);
+  const [oracleContract, setOracleContract] = useState<string>(
+    CONTRACTS.MOCK_PYTH,
+  );
   const [pendingAction, setPendingAction] = useState<string | null>(null);
 
   // Form state - Create Event

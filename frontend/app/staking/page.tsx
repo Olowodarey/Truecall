@@ -346,7 +346,7 @@ export default function StakingPage() {
                     {/* Amount */}
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Amount ({token === "stx" ? "STX" : "sats"})
+                        Amounts ({token === "stx" ? "STX" : "sats"})
                       </label>
                       <div className="relative">
                         <input
@@ -419,7 +419,7 @@ export default function StakingPage() {
                     {tab === "stake" && (
                       <p className="text-xs text-gray-500 text-center">
                         After staking, wait {ageRequired} blocks for your stake
-                        to mature before proposing or voting.
+                        to mature before proposing or votings start.
                       </p>
                     )}
                   </div>
