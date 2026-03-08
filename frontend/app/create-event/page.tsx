@@ -33,9 +33,7 @@ export default function CreateEventPage() {
     Record<number, ChainMarket[]>
   >({});
   const [currentBlock, setCurrentBlock] = useState(0);
-  const [oracleContract, setOracleContract] = useState(
-    "STWJM45K4YAEZJ6H6HFT1GABBD6EVDV5MGEV7ECA.mock-pyth",
-  );
+  const [oracleContract, setOracleContract] = useState(CONTRACTS.MOCK_PYTH);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
 
   // Form state - Create Event
@@ -523,13 +521,22 @@ export default function CreateEventPage() {
                               <div>
                                 <p className="font-semibold text-white">
                                   {event.title}
-                                  <span className="text-gray-500 text-xs ml-2">#{event.id}</span>
+                                  <span className="text-gray-500 text-xs ml-2">
+                                    #{event.id}
+                                  </span>
                                 </p>
                                 <p className="text-xs text-gray-400">
-                                  {event.finalizedMarketCount}/{event.marketCount} finalized
+                                  {event.finalizedMarketCount}/
+                                  {event.marketCount} finalized
                                   {" · "}closes #{event.closeBlock}
                                   {" · "}
-                                  <span className={event.isActive ? "text-green-400" : "text-gray-500"}>
+                                  <span
+                                    className={
+                                      event.isActive
+                                        ? "text-green-400"
+                                        : "text-gray-500"
+                                    }
+                                  >
                                     {event.isActive ? "OPEN" : "CLOSED"}
                                   </span>
                                 </p>
@@ -537,26 +544,34 @@ export default function CreateEventPage() {
                               {/* Close Event button */}
                               {event.isActive && allFinal && (
                                 <button
-                                  disabled={pendingAction === `close-${event.id}`}
+                                  disabled={
+                                    pendingAction === `close-${event.id}`
+                                  }
                                   onClick={async () => {
                                     setPendingAction(`close-${event.id}`);
                                     await closeEvent(event.id, {
                                       onFinish: () => {
                                         setPendingAction(null);
-                                        getAllEvents().then((evs) => setEvents(evs)).catch(console.error);
+                                        getAllEvents()
+                                          .then((evs) => setEvents(evs))
+                                          .catch(console.error);
                                       },
                                       onCancel: () => setPendingAction(null),
                                     });
                                   }}
                                   className="ml-3 text-xs px-3 py-1.5 rounded-md bg-red-500/10 border border-red-500/40 text-red-400 hover:bg-red-500/20 transition disabled:opacity-50 shrink-0"
                                 >
-                                  {pendingAction === `close-${event.id}` ? "Wait…" : "🔒 Close Event"}
+                                  {pendingAction === `close-${event.id}`
+                                    ? "Wait…"
+                                    : "🔒 Close Event"}
                                 </button>
                               )}
                             </div>
 
                             {mks.length === 0 ? (
-                              <p className="text-xs text-gray-500 pl-1">No markets yet.</p>
+                              <p className="text-xs text-gray-500 pl-1">
+                                No markets yet.
+                              </p>
                             ) : (
                               <ul className="space-y-2">
                                 {mks.map((market) => (
@@ -565,14 +580,19 @@ export default function CreateEventPage() {
                                     className="flex items-center justify-between bg-gray-900/50 rounded-lg px-3 py-2 text-sm gap-3"
                                   >
                                     <div className="flex-1 min-w-0">
-                                      <p className="text-white truncate">{market.question}</p>
+                                      <p className="text-white truncate">
+                                        {market.question}
+                                      </p>
                                       <p className="text-xs text-gray-400 mt-0.5">
                                         <span
                                           className={
-                                            market.status === "open" ? "text-green-400"
-                                            : market.status === "pending" ? "text-yellow-400"
-                                            : market.status === "disputed" ? "text-red-400"
-                                            : "text-blue-400"
+                                            market.status === "open"
+                                              ? "text-green-400"
+                                              : market.status === "pending"
+                                                ? "text-yellow-400"
+                                                : market.status === "disputed"
+                                                  ? "text-red-400"
+                                                  : "text-blue-400"
                                           }
                                         >
                                           {market.status}
@@ -581,34 +601,59 @@ export default function CreateEventPage() {
                                       </p>
                                     </div>
                                     <div className="flex gap-2 shrink-0">
-                                      {market.status === "open" && currentBlock >= market.closeBlock && (
-                                        <button
-                                          disabled={pendingAction === `propose-${market.id}`}
-                                          onClick={async () => {
-                                            setPendingAction(`propose-${market.id}`);
-                                            await proposeResult(market.id, oracleContract, {
-                                              onFinish: () => setPendingAction(null),
-                                              onCancel: () => setPendingAction(null),
-                                            });
-                                          }}
-                                          className="text-xs px-2 py-1 rounded bg-orange-500/10 border border-orange-500/40 text-orange-400 hover:bg-orange-500/20 disabled:opacity-50 transition whitespace-nowrap"
-                                        >
-                                          {pendingAction === `propose-${market.id}` ? "Wait…" : "Propose Result"}
-                                        </button>
-                                      )}
+                                      {market.status === "open" &&
+                                        currentBlock >= market.closeBlock && (
+                                          <button
+                                            disabled={
+                                              pendingAction ===
+                                              `propose-${market.id}`
+                                            }
+                                            onClick={async () => {
+                                              setPendingAction(
+                                                `propose-${market.id}`,
+                                              );
+                                              await proposeResult(
+                                                market.id,
+                                                oracleContract,
+                                                {
+                                                  onFinish: () =>
+                                                    setPendingAction(null),
+                                                  onCancel: () =>
+                                                    setPendingAction(null),
+                                                },
+                                              );
+                                            }}
+                                            className="text-xs px-2 py-1 rounded bg-orange-500/10 border border-orange-500/40 text-orange-400 hover:bg-orange-500/20 disabled:opacity-50 transition whitespace-nowrap"
+                                          >
+                                            {pendingAction ===
+                                            `propose-${market.id}`
+                                              ? "Wait…"
+                                              : "Propose Result"}
+                                          </button>
+                                        )}
                                       {market.status === "disputed" && (
                                         <button
-                                          disabled={pendingAction === `override-${market.id}`}
+                                          disabled={
+                                            pendingAction ===
+                                            `override-${market.id}`
+                                          }
                                           onClick={async () => {
-                                            setPendingAction(`override-${market.id}`);
+                                            setPendingAction(
+                                              `override-${market.id}`,
+                                            );
                                             await overrideResult(market.id, {
-                                              onFinish: () => setPendingAction(null),
-                                              onCancel: () => setPendingAction(null),
+                                              onFinish: () =>
+                                                setPendingAction(null),
+                                              onCancel: () =>
+                                                setPendingAction(null),
                                             });
                                           }}
                                           className="text-xs px-2 py-1 rounded bg-red-500/10 border border-red-500/40 text-red-400 hover:bg-red-500/20 disabled:opacity-50 transition whitespace-nowrap"
                                         >
-                                          {pendingAction === `override-${market.id}` ? "Wait…" : "Override Result"}
+                                          {pendingAction ===
+                                          `override-${market.id}`
+                                            ? "Wait…"
+                                            : "Override Result"}
                                         </button>
                                       )}
                                     </div>
