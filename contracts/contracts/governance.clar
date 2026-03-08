@@ -50,8 +50,8 @@
 (define-data-var min-stake          uint u1000000)
 ;; Minimum blocks the stake must be held before it's eligible (1 day)
 (define-data-var min-stake-age      uint u144)
-;; Minimum total microSTX cast (quorum) for a vote to count
-(define-data-var quorum-threshold   uint u1000000)
+;; Minimum total votes (quorum) for a vote to count (e.g. 5 users)
+(define-data-var quorum-threshold   uint u5)
 ;; Blocks after approval within which keeper must execute before it expires (~5 days)
 (define-data-var execution-window   uint u720)
 
@@ -234,18 +234,18 @@
             ;; Stake must be old enough
             (asserts! (>= stake-age (var-get min-stake-age)) err-stake-too-young)
 
-            ;; Record vote
+            ;; Record vote (Power is now 1 vote per wallet instead of staked STX)
             (map-set votes { proposal-id: proposal-id, voter: caller }
-                { vote: vote, power: staked-bal }
+                { vote: vote, power: u1 }
             )
 
-            ;; Update tally
+            ;; Update tally (Add 1 vote)
             (if vote
                 (map-set proposals { proposal-id: proposal-id }
-                    (merge proposal { yes-votes: (+ (get yes-votes proposal) staked-bal) })
+                    (merge proposal { yes-votes: (+ (get yes-votes proposal) u1) })
                 )
                 (map-set proposals { proposal-id: proposal-id }
-                    (merge proposal { no-votes: (+ (get no-votes proposal) staked-bal) })
+                    (merge proposal { no-votes: (+ (get no-votes proposal) u1) })
                 )
             )
 

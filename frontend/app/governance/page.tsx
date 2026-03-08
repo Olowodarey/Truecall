@@ -425,8 +425,7 @@ export default function GovernancePage() {
                           {p.status === "active" &&
                             votingOpen &&
                             isConnected &&
-                            !myVote &&
-                            canCreateProposal && (
+                            !myVote && (
                               <>
                                 <button
                                   disabled={!!pendingAction}
