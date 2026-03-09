@@ -309,3 +309,4 @@ export default function TournamentsPage() {
     </div>
   );
 }// Update 1 for Tournaments Page
+// Update 2 for Tournaments Page
