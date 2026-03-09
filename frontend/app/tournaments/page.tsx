@@ -313,3 +313,4 @@ export default function TournamentsPage() {
 // Update 3 for Tournaments Page
 // Update 4 for Tournaments Page
 // Update 5 for Tournaments Page
+// Update 6 for Tournaments Page
