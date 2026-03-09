@@ -308,4 +308,4 @@ export default function TournamentsPage() {
       <Footer />
     </div>
   );
-}
+}// Update 1 for Tournaments Page
