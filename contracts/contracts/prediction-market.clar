@@ -70,8 +70,8 @@
 (define-data-var admin             principal tx-sender)
 (define-data-var event-nonce       uint      u0)
 (define-data-var question-nonce    uint      u0)
-(define-data-var approved-oracle   principal 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.mock-pyth)
 (define-data-var accumulated-fees  uint      u0)
+(define-constant btc-feed-id 0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43)
 
 ;; trusted keepers that can propose/finalize results
 (define-map approved-keepers { keeper: principal } { active: bool })
@@ -335,13 +335,13 @@
   )
 )
 
-(define-public (set-approved-oracle (new-oracle principal))
-  (begin
-    (asserts! (is-admin) err-unauthorized)
-    (var-set approved-oracle new-oracle)
-    (ok true)
-  )
-)
+;; (define-public (set-approved-oracle (new-oracle principal))
+;;   (begin
+;;     (asserts! (is-admin) err-unauthorized)
+;;     (var-set approved-oracle new-oracle)
+;;     (ok true)
+;;   )
+;; )
 
 (define-public (withdraw-fees (amount uint))
   (let (
@@ -510,26 +510,68 @@
 
 ;; Keeper fetches oracle price and immediately finalizes the question.
 ;; No pending/dispute stage -- result is final on-chain immediately.
+
+
 (define-public (finalize-question
   (question-id uint)
-  (oracle <pyth-oracle-trait>)
+  (price-feed-bytes (buff 8192))
+  (pyth-oracle-contract principal)
+  (pyth-storage-contract principal)
+  (pyth-decoder-contract principal)
+  (wormhole-core-contract principal)
 )
   (let (
     (q (unwrap! (map-get? questions { question-id: question-id }) err-question-not-found))
     (event (unwrap! (map-get? events { event-id: (get event-id q) }) err-event-not-found))
-    (oracle-price (unwrap! (contract-call? oracle get-btc-price) (err u501)))
-    (outcome (>= oracle-price (get target-price q)))
+
+    ;; Verify and update the latest BTC feed from Hermes/Wormhole payload
+    (update-status
+      (try!
+        (contract-call?
+          pyth-oracle-contract
+          verify-and-update-price-feeds
+          price-feed-bytes
+          {
+            pyth-storage-contract: pyth-storage-contract,
+            pyth-decoder-contract: pyth-decoder-contract,
+            wormhole-core-contract: wormhole-core-contract
+          }
+        )
+      )
+    )
+
+    ;; Read the fresh BTC price
+    (price-data
+      (try!
+        (contract-call?
+          pyth-oracle-contract
+          get-price
+          btc-feed-id
+          pyth-storage-contract
+        )
+      )
+    )
+
+    ;; Pyth returns fixed-point price with expo, usually -8 for BTC/USD
+    ;; Example: price=10603557773590 expo=-8 => 106035.57773590
+    ;; Here we normalize down to whole-dollar style integer comparison.
+    (expo (get expo price-data))
+    (denom (pow u10 (to-uint (* expo -1))))
+    (normalized-price (/ (to-uint (get price price-data)) denom))
+
+    ;; Your target-price should use the same unit as normalized-price
+    (outcome (>= normalized-price (get target-price q)))
   )
     (begin
       (asserts! (is-keeper) err-unauthorized)
-      (asserts! (is-eq (contract-of oracle) (var-get approved-oracle)) err-invalid-oracle)
+      (asserts! (is-eq pyth-oracle-contract (var-get approved-oracle)) err-invalid-oracle)
       (asserts! (is-eq (get status q) question-status-open) err-question-closed)
       (asserts! (>= burn-block-height (get close-block q)) err-question-closed)
 
       (map-set questions { question-id: question-id }
         (merge q {
-          status:        question-status-final,
-          oracle-price:  oracle-price,
+          status: question-status-final,
+          oracle-price: normalized-price,
           final-outcome: (some outcome)
         })
       )
@@ -539,6 +581,7 @@
           finalized-question-count: (+ (get finalized-question-count event) u1)
         })
       )
+
       (ok outcome)
     )
   )

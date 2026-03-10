@@ -1,118 +1,72 @@
 # Deploy Your Contract to Testnet - Step by Step
 
-## 🎯 You're Ready! Follow These Steps:
+## ⚠️ CRITICAL: Deployment Order Matters!
+Because `prediction-market` depends on other contracts, you MUST deploy them in this exact order. Do not skip steps!
 
 ### Step 1: Open the Deployment Page
-
 **Go to**: https://explorer.hiro.so/sandbox/deploy?chain=testnet
 
-### Step 2: Connect Your Wallet
+1. Click **"Connect Stacks Wallet"**
+2. Select **Hiro Wallet** and approve the connection
+3. Make sure your wallet is set to **Testnet** mode
 
-1. Click the **"Connect Stacks Wallet"** button
-2. Select **Hiro Wallet** from the options
-3. **Approve** the connection in your wallet popup
-4. Make sure your wallet is set to **Testnet** mode
+---
 
-### Step 3: Enter Contract Details
-
-Once connected, you'll see two fields:
+### Step 2: Deploy the Oracle Trait (Required First)
+The prediction market uses a trait to define what an oracle looks like.
 
 **Contract Name:**
-
 ```
-football-prediction
+pyth-oracle-trait
 ```
 
 **Contract Code:**
-Copy and paste the ENTIRE content from this file:
+Copy everything from `/home/olowo/Desktop/truecall1/contracts/contracts/pyth-oracle-trait.clar`
 
+1. Click **Deploy Contract**
+2. Confirm in wallet
+3. **WAIT for it to confirm** (1-2 minutes) before moving to Step 3!
+
+---
+
+### Step 3: Deploy the Mock Oracle
+This is the mock Pyth oracle used for testnet resolution.
+
+**Contract Name:**
 ```
-/home/olowo/Desktop/truecall1/contracts/contracts/football-prediction.clar
-```
-
-To copy the file:
-
-```bash
-cat /home/olowo/Desktop/truecall1/contracts/contracts/football-prediction.clar
-```
-
-Then select all (Ctrl+A) and copy (Ctrl+C)
-
-### Step 4: Deploy!
-
-1. Click **"Deploy Contract"** button
-2. Review the transaction in your wallet popup
-3. **Confirm** the transaction
-4. Wait 1-2 minutes for confirmation
-
-### Step 5: Save Your Contract Info
-
-After deployment succeeds, you'll see:
-
-- ✅ Transaction ID (txid)
-- ✅ Your contract address
-
-**Write these down!**
-
-Your contract will be at:
-
-```
-<YOUR_WALLET_ADDRESS>.football-prediction
+mock-pyth
 ```
 
-### Step 6: Update Backend .env
+**Contract Code:**
+Copy everything from `/home/olowo/Desktop/truecall1/contracts/contracts/mock-pyth.clar`
 
-Open `/home/olowo/Desktop/truecall1/backend/.env` and update:
+1. Click **Deploy Contract**
+2. Confirm in wallet
+3. **WAIT for it to confirm** (1-2 minutes) before moving to Step 4!
 
-```bash
-CONTRACT_ADDRESS=<YOUR_WALLET_ADDRESS>
-CONTRACT_NAME=football-prediction
-ORACLE_PRIVATE_KEY=<YOUR_PRIVATE_KEY>
-ORACLE_ADDRESS=<YOUR_WALLET_ADDRESS>
+---
+
+### Step 4: Deploy the Prediction Market
+Now you can deploy the main contract. I have already updated the code so it defaults to pointing at your own testnet `mock-pyth` contract!
+
+**Contract Name:**
+```
+prediction-market
 ```
 
-**To get your private key:**
+**Contract Code:**
+Copy everything from `/home/olowo/Desktop/truecall1/contracts/contracts/prediction-market.clar`
 
-1. Open Hiro Wallet
-2. Settings → View Secret Key
-3. Copy the **hex private key** (64 characters)
-
-### Step 7: Restart Backend
-
-```bash
-cd /home/olowo/Desktop/truecall1/backend
-# Kill current server (Ctrl+C) then:
-pnpm run start:dev
-```
+1. Click **Deploy Contract**
+2. Confirm in wallet
+3. Wait for confirmation.
 
 ---
 
 ## ✅ Success!
+Your TrueCall prediction market is now fully deployed to testnet!
 
-Your contract is now deployed and your backend can interact with it!
+Your main contract is live at:
+`<YOUR_WALLET_ADDRESS>.prediction-market`
 
-**Test it:**
-
-```bash
-curl http://localhost:3001/api/oracle/events
-```
-
----
-
-## 🆘 Troubleshooting
-
-**"Insufficient funds"**
-
-- Make sure you have testnet STX in your wallet
-- Get more from: https://explorer.hiro.so/sandbox/faucet?chain=testnet
-
-**"Contract already exists"**
-
-- Someone already deployed a contract with this name from your address
-- Change the contract name to `football-prediction-v2` or similar
-
-**Can't connect wallet**
-
-- Refresh the page
-- Make sure Hiro Wallet extension is installed
-- Check wallet is set to Testnet mode
+The frontend is already configured to read this address in `frontend/lib/contracts.ts`, assuming you deployed with the standard testnet wallet `ST3TWY4THYR9PMMD72N7SA8SE1FJPSF219RNZQY5F`. If you used a different wallet, you will need to update `DEPLOYER` in that file.
