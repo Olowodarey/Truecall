@@ -223,6 +223,10 @@
 
 ;; Insert-or-update the top5 snapshot for an event after a user earns points.
 ;; We read the current top5, compare new score, and rebuild if needed.
+;; Insert-or-update the top5 snapshot for an event after a user earns points.
+;; When the user is already ranked, we remove them from their current slot,
+;; compact the remaining 4 entries, then re-insert at the correct position so
+;; a score increase causes proper promotion (fixes in-place-update bug).
 (define-private (update-top5 (event-id uint) (user principal) (new-points uint))
   (let (
     (current (default-to
@@ -231,13 +235,6 @@
     ))
     (entry (some { user: user, points: new-points }))
 
-    ;; Pull out current point totals (0 if slot empty or different user)
-    (p1 (match (get rank1 current) e (get points e) u0))
-    (p2 (match (get rank2 current) e (get points e) u0))
-    (p3 (match (get rank3 current) e (get points e) u0))
-    (p4 (match (get rank4 current) e (get points e) u0))
-    (p5 (match (get rank5 current) e (get points e) u0))
-
     ;; Is this user already in one of the slots?
     (in-r1 (match (get rank1 current) e (is-eq (get user e) user) false))
     (in-r2 (match (get rank2 current) e (is-eq (get user e) user) false))
@@ -245,39 +242,61 @@
     (in-r4 (match (get rank4 current) e (is-eq (get user e) user) false))
     (in-r5 (match (get rank5 current) e (is-eq (get user e) user) false))
     (already-in (or in-r1 (or in-r2 (or in-r3 (or in-r4 in-r5)))))
+
+    ;; Compact the remaining 4 slots (user's old slot is dropped)
+    ;; slot-a is highest-ranked entry that isn't the updating user
+    (slot-a (if in-r1 (get rank2 current) (get rank1 current)))
+    (slot-b (if (or in-r1 in-r2) (get rank3 current) (get rank2 current)))
+    (slot-c (if (or in-r1 in-r2 in-r3) (get rank4 current) (get rank3 current)))
+    (slot-d (if in-r5 (get rank4 current) (get rank5 current)))
+    (sa (match slot-a e (get points e) u0))
+    (sb (match slot-b e (get points e) u0))
+    (sc (match slot-c e (get points e) u0))
+    (sd (match slot-d e (get points e) u0))
+
+    ;; Scores of existing top5 (for new-user insertion path)
+    (p1 (match (get rank1 current) e (get points e) u0))
+    (p2 (match (get rank2 current) e (get points e) u0))
+    (p3 (match (get rank3 current) e (get points e) u0))
+    (p4 (match (get rank4 current) e (get points e) u0))
+    (p5 (match (get rank5 current) e (get points e) u0))
   )
     (if already-in
-      ;; User already ranked — just update their slot in place
-      (map-set top5-map { event-id: event-id }
-        {
-          rank1: (if in-r1 entry (get rank1 current)),
-          rank2: (if in-r2 entry (get rank2 current)),
-          rank3: (if in-r3 entry (get rank3 current)),
-          rank4: (if in-r4 entry (get rank4 current)),
-          rank5: (if in-r5 entry (get rank5 current))
-        }
+      ;; Re-insert at correct rank after removing from old slot
+      (if (>= new-points sa)
+        (map-set top5-map { event-id: event-id }
+          { rank1: entry, rank2: slot-a, rank3: slot-b, rank4: slot-c, rank5: slot-d })
+        (if (>= new-points sb)
+          (map-set top5-map { event-id: event-id }
+            { rank1: slot-a, rank2: entry, rank3: slot-b, rank4: slot-c, rank5: slot-d })
+          (if (>= new-points sc)
+            (map-set top5-map { event-id: event-id }
+              { rank1: slot-a, rank2: slot-b, rank3: entry, rank4: slot-c, rank5: slot-d })
+            (if (>= new-points sd)
+              (map-set top5-map { event-id: event-id }
+                { rank1: slot-a, rank2: slot-b, rank3: slot-c, rank4: entry, rank5: slot-d })
+              (map-set top5-map { event-id: event-id }
+                { rank1: slot-a, rank2: slot-b, rank3: slot-c, rank4: slot-d, rank5: entry })
+            )
+          )
+        )
       )
-      ;; User not yet ranked — try to insert into lowest open or displaced slot
+      ;; New user -- insert at correct position
       (if (>= new-points p1)
         (map-set top5-map { event-id: event-id }
-          { rank1: entry, rank2: (get rank1 current), rank3: (get rank2 current), rank4: (get rank3 current), rank5: (get rank4 current) }
-        )
+          { rank1: entry, rank2: (get rank1 current), rank3: (get rank2 current), rank4: (get rank3 current), rank5: (get rank4 current) })
         (if (>= new-points p2)
           (map-set top5-map { event-id: event-id }
-            { rank1: (get rank1 current), rank2: entry, rank3: (get rank2 current), rank4: (get rank3 current), rank5: (get rank4 current) }
-          )
+            { rank1: (get rank1 current), rank2: entry, rank3: (get rank2 current), rank4: (get rank3 current), rank5: (get rank4 current) })
           (if (>= new-points p3)
             (map-set top5-map { event-id: event-id }
-              { rank1: (get rank1 current), rank2: (get rank2 current), rank3: entry, rank4: (get rank3 current), rank5: (get rank4 current) }
-            )
+              { rank1: (get rank1 current), rank2: (get rank2 current), rank3: entry, rank4: (get rank3 current), rank5: (get rank4 current) })
             (if (>= new-points p4)
               (map-set top5-map { event-id: event-id }
-                { rank1: (get rank1 current), rank2: (get rank2 current), rank3: (get rank3 current), rank4: entry, rank5: (get rank4 current) }
-              )
+                { rank1: (get rank1 current), rank2: (get rank2 current), rank3: (get rank3 current), rank4: entry, rank5: (get rank4 current) })
               (if (>= new-points p5)
                 (map-set top5-map { event-id: event-id }
-                  { rank1: (get rank1 current), rank2: (get rank2 current), rank3: (get rank3 current), rank4: (get rank4 current), rank5: entry }
-                )
+                  { rank1: (get rank1 current), rank2: (get rank2 current), rank3: (get rank3 current), rank4: (get rank4 current), rank5: entry })
                 true ;; below rank 5, no change
               )
             )
@@ -333,7 +352,8 @@
       (asserts! (is-admin) err-unauthorized)
       (asserts! (<= amount current-fees) err-amount-too-large)
       (var-set accumulated-fees (- current-fees amount))
-      (as-contract (stx-transfer? amount tx-sender caller))
+      (try! (as-contract (stx-transfer? amount tx-sender caller)))
+      (ok amount)
     )
   )
 )
@@ -485,11 +505,11 @@
 )
 
 ;; -------------------------------------------------------
-;; QUESTION RESOLUTION  (no dispute — keeper result is final)
+;; QUESTION RESOLUTION  (no dispute -- keeper result is final)
 ;; -------------------------------------------------------
 
 ;; Keeper fetches oracle price and immediately finalizes the question.
-;; No pending/dispute stage — result is final on-chain immediately.
+;; No pending/dispute stage -- result is final on-chain immediately.
 (define-public (finalize-question
   (question-id uint)
   (oracle <pyth-oracle-trait>)
@@ -525,7 +545,7 @@
 )
 
 ;; -------------------------------------------------------
-;; POINTS  (inline — no external reputation contract)
+;; POINTS  (inline -- no external reputation contract)
 ;; -------------------------------------------------------
 
 ;; Correct users call this per finalized question to earn 10 points.
@@ -573,8 +593,8 @@
 ;; -------------------------------------------------------
 
 ;; Keeper closes the event after season ends and all questions finalized.
-;; If participant-count < min-participants → enters refund-mode (no fee taken).
-;; Otherwise → 2% protocol fee is booked and prize distribution is enabled.
+;; If participant-count < min-participants -> enters refund-mode (no fee taken).
+;; Otherwise -> 2% protocol fee is booked and prize distribution is enabled.
 (define-public (close-event (event-id uint))
   (let (
     (event (unwrap! (map-get? events { event-id: event-id }) err-event-not-found))
@@ -589,7 +609,7 @@
       (asserts! (not (get fee-booked event)) err-fee-already-booked)
 
       (if enough-participants
-        ;; Normal close — book fee, enable winnings claims
+        ;; Normal close -- book fee, enable winnings claims
         (begin
           (map-set events { event-id: event-id }
             (merge event {
@@ -601,7 +621,7 @@
           (var-set accumulated-fees (+ (var-get accumulated-fees) protocol-fee))
           (ok false) ;; false = not refund mode
         )
-        ;; Not enough participants — refund mode, no fee
+        ;; Not enough participants -- refund mode, no fee
         (begin
           (map-set events { event-id: event-id }
             (merge event {
@@ -638,7 +658,8 @@
         (merge record { refund-claimed: true })
       )
 
-      (as-contract (stx-transfer? (get entry-fee event) tx-sender caller))
+      (try! (as-contract (stx-transfer? (get entry-fee event) tx-sender caller)))
+      (ok true)
     )
   )
 )
@@ -667,7 +688,8 @@
       (asserts! (not has-claimed) err-already-claimed)
 
       (map-set event-claims { event-id: event-id, user: caller } true)
-      (as-contract (stx-transfer? payout-amount tx-sender caller))
+      (try! (as-contract (stx-transfer? payout-amount tx-sender caller)))
+      (ok payout-amount)
     )
   )
 )

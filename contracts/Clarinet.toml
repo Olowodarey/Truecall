@@ -7,10 +7,7 @@ cache_dir = './.cache'
 
 [[project.requirements]]
 contract_id = 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.sip-010-trait-ft-standard'
-[contracts.governance]
-path = 'contracts/governance.clar'
-clarity_version = 2
-epoch = 'latest'
+
 
 [contracts.mock-pyth]
 path = 'contracts/mock-pyth.clar'
@@ -32,20 +29,14 @@ path = 'contracts/pyth-oracle-trait.clar'
 clarity_version = 2
 epoch = 'latest'
 
-[contracts.reputation-points]
-path = 'contracts/reputation-points.clar'
-clarity_version = 2
-epoch = 'latest'
+
 
 [contracts.sip-010-trait]
 path = 'contracts/sip-010-trait.clar'
 clarity_version = 2
 epoch = 'latest'
 
-[contracts.staking]
-path = 'contracts/staking.clar'
-clarity_version = 2
-epoch = 'latest'
+
 [repl.analysis]
 passes = [
     'check_checker',
