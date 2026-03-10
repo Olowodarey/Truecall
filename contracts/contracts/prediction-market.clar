@@ -1,5 +1,5 @@
 ;; title: prediction-market
-;; description: TrueCall competition engine
+;; description: TrueCall competition engine with live Pyth resolution on Stacks
 ;;
 ;; Model:
 ;; - One event = one competition season (e.g. 3 weeks)
@@ -11,8 +11,12 @@
 ;;   1st=30% 2nd=25% 3rd=20% 4th=15% 5th=8% (total=98%)
 ;; - 2% goes to protocol fees
 ;; - If fewer than 5 participants joined, all get a full refund
-
-(use-trait pyth-oracle-trait .pyth-oracle-trait.pyth-oracle-trait)
+;;
+;; Live Pyth notes:
+;; - finalize-question now accepts `price-feed-bytes (buff 8192)`
+;; - target-price should be stored as a WHOLE-DOLLAR integer
+;;   e.g. 80000 for "$80,000"
+;; - caller of finalize-question must allow the 1 uSTX Pyth update fee
 
 ;; -------------------------------------------------------
 ;; CONSTANTS
@@ -24,12 +28,15 @@
 (define-constant max-questions-per-event u50)
 (define-constant min-participants        u5)
 
-;; Payout basis points out of 100 (must sum to 98)
+;; Official BTC/USD price feed id on Pyth for Stacks
+(define-constant btc-feed-id 0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43)
+
+;; Payout percentages out of 100 (must sum to 98)
 (define-constant payout-rank1 u30)
 (define-constant payout-rank2 u25)
 (define-constant payout-rank3 u20)
 (define-constant payout-rank4 u15)
-(define-constant payout-rank5 u8)   ;; 30+25+20+15+8 = 98 exactly
+(define-constant payout-rank5 u8)
 
 ;; -------------------------------------------------------
 ;; ERROR CODES
@@ -62,6 +69,9 @@
 (define-constant err-refund-already-claimed  (err u228))
 (define-constant err-enough-participants     (err u229))
 (define-constant err-event-still-active      (err u230))
+(define-constant err-invalid-expo            (err u231))
+(define-constant err-invalid-price           (err u232))
+(define-constant err-pyth-not-configured     (err u233))
 
 ;; -------------------------------------------------------
 ;; DATA VARS
@@ -71,16 +81,21 @@
 (define-data-var event-nonce       uint      u0)
 (define-data-var question-nonce    uint      u0)
 (define-data-var accumulated-fees  uint      u0)
-(define-constant btc-feed-id 0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43)
 
-;; trusted keepers that can propose/finalize results
+;; Live Pyth contract principals
+;; Set these after deployment to the correct TESTNET addresses.
+(define-data-var pyth-oracle-contract   (optional principal) none)
+(define-data-var pyth-storage-contract  (optional principal) none)
+(define-data-var pyth-decoder-contract  (optional principal) none)
+(define-data-var wormhole-core-contract (optional principal) none)
+
+;; trusted keepers that can finalize results
 (define-map approved-keepers { keeper: principal } { active: bool })
 
 ;; -------------------------------------------------------
 ;; MAPS
 ;; -------------------------------------------------------
 
-;; Event = competition season
 (define-map events
   { event-id: uint }
   {
@@ -91,11 +106,11 @@
     entry-fee:                uint,
     question-count:           uint,
     finalized-question-count: uint,
-    participant-count:        uint,
+    participant_count:        uint,
     total-pool:               uint,
     is-active:                bool,
     fee-booked:               bool,
-    refund-mode:              bool   ;; true when < min-participants at close
+    refund-mode:              bool
   }
 )
 
@@ -104,44 +119,33 @@
   { event-id: uint }
 )
 
-;; Questions inside an event
 (define-map questions
   { question-id: uint }
   {
     event-id:      uint,
     question:      (string-ascii 128),
-    target-price:  uint,
+    target-price:  uint, ;; whole-dollar integer, e.g. 80000
     close-block:   uint,
     status:        (string-ascii 8),
-    oracle-price:  uint,
+    oracle-price:  uint, ;; normalized whole-dollar integer
     final-outcome: (optional bool)
   }
 )
 
-;; event -> indexed question lookup
 (define-map event-questions
   { event-id: uint, index: uint }
   { question-id: uint }
 )
 
-;; user joined event
 (define-map participants
   { event-id: uint, user: principal }
   { joined: bool, refund-claimed: bool }
 )
 
-;; user answer to a question
 (define-map answers
   { question-id: uint, user: principal }
   { prediction: bool, points-claimed: bool }
 )
-
-;; -------------------------------------------------------
-;; INLINE LEADERBOARD
-;; points-map  : event-id + user  -> total points
-;; top5-map    : event-id         -> ranked top-5 snapshot
-;;   (updated lazily on every claim-points call)
-;; -------------------------------------------------------
 
 (define-map points-map
   { event-id: uint, user: principal }
@@ -159,7 +163,6 @@
   }
 )
 
-;; winnings claim at event level
 (define-map event-claims
   { event-id: uint, user: principal }
   bool
@@ -203,8 +206,6 @@
   )
 )
 
-;; Returns the payout percentage (out of 100) for caller's rank.
-;; Checks against the stored top5 snapshot for this event.
 (define-private (get-rank-multiplier (event-id uint) (caller principal))
   (match (map-get? top5-map { event-id: event-id })
     lb
@@ -221,12 +222,6 @@
   )
 )
 
-;; Insert-or-update the top5 snapshot for an event after a user earns points.
-;; We read the current top5, compare new score, and rebuild if needed.
-;; Insert-or-update the top5 snapshot for an event after a user earns points.
-;; When the user is already ranked, we remove them from their current slot,
-;; compact the remaining 4 entries, then re-insert at the correct position so
-;; a score increase causes proper promotion (fixes in-place-update bug).
 (define-private (update-top5 (event-id uint) (user principal) (new-points uint))
   (let (
     (current (default-to
@@ -235,7 +230,6 @@
     ))
     (entry (some { user: user, points: new-points }))
 
-    ;; Is this user already in one of the slots?
     (in-r1 (match (get rank1 current) e (is-eq (get user e) user) false))
     (in-r2 (match (get rank2 current) e (is-eq (get user e) user) false))
     (in-r3 (match (get rank3 current) e (is-eq (get user e) user) false))
@@ -243,8 +237,6 @@
     (in-r5 (match (get rank5 current) e (is-eq (get user e) user) false))
     (already-in (or in-r1 (or in-r2 (or in-r3 (or in-r4 in-r5)))))
 
-    ;; Compact the remaining 4 slots (user's old slot is dropped)
-    ;; slot-a is highest-ranked entry that isn't the updating user
     (slot-a (if in-r1 (get rank2 current) (get rank1 current)))
     (slot-b (if (or in-r1 in-r2) (get rank3 current) (get rank2 current)))
     (slot-c (if (or in-r1 in-r2 in-r3) (get rank4 current) (get rank3 current)))
@@ -254,7 +246,6 @@
     (sc (match slot-c e (get points e) u0))
     (sd (match slot-d e (get points e) u0))
 
-    ;; Scores of existing top5 (for new-user insertion path)
     (p1 (match (get rank1 current) e (get points e) u0))
     (p2 (match (get rank2 current) e (get points e) u0))
     (p3 (match (get rank3 current) e (get points e) u0))
@@ -262,7 +253,6 @@
     (p5 (match (get rank5 current) e (get points e) u0))
   )
     (if already-in
-      ;; Re-insert at correct rank after removing from old slot
       (if (>= new-points sa)
         (map-set top5-map { event-id: event-id }
           { rank1: entry, rank2: slot-a, rank3: slot-b, rank4: slot-c, rank5: slot-d })
@@ -281,7 +271,6 @@
           )
         )
       )
-      ;; New user -- insert at correct position
       (if (>= new-points p1)
         (map-set top5-map { event-id: event-id }
           { rank1: entry, rank2: (get rank1 current), rank3: (get rank2 current), rank4: (get rank3 current), rank5: (get rank4 current) })
@@ -297,7 +286,7 @@
               (if (>= new-points p5)
                 (map-set top5-map { event-id: event-id }
                   { rank1: (get rank1 current), rank2: (get rank2 current), rank3: (get rank3 current), rank4: (get rank4 current), rank5: entry })
-                true ;; below rank 5, no change
+                true
               )
             )
           )
@@ -335,13 +324,21 @@
   )
 )
 
-;; (define-public (set-approved-oracle (new-oracle principal))
-;;   (begin
-;;     (asserts! (is-admin) err-unauthorized)
-;;     (var-set approved-oracle new-oracle)
-;;     (ok true)
-;;   )
-;; )
+(define-public (set-pyth-contracts
+  (oracle principal)
+  (storage principal)
+  (decoder principal)
+  (wormhole principal)
+)
+  (begin
+    (asserts! (is-admin) err-unauthorized)
+    (var-set pyth-oracle-contract (some oracle))
+    (var-set pyth-storage-contract (some storage))
+    (var-set pyth-decoder-contract (some decoder))
+    (var-set wormhole-core-contract (some wormhole))
+    (ok true)
+  )
+)
 
 (define-public (withdraw-fees (amount uint))
   (let (
@@ -389,7 +386,7 @@
           entry-fee:                entry-fee,
           question-count:           u0,
           finalized-question-count: u0,
-          participant-count:        u0,
+          participant_count:        u0,
           total-pool:               u0,
           is-active:                true,
           fee-booked:               false,
@@ -425,7 +422,7 @@
 
       (map-set events { event-id: event-id }
         (merge event {
-          participant-count: (+ (get participant-count event) u1),
+          participant_count: (+ (get participant_count event) u1),
           total-pool:        (+ (get total-pool event) entry-fee)
         })
       )
@@ -505,73 +502,67 @@
 )
 
 ;; -------------------------------------------------------
-;; QUESTION RESOLUTION  (no dispute -- keeper result is final)
+;; QUESTION RESOLUTION WITH LIVE PYTH
 ;; -------------------------------------------------------
-
-;; Keeper fetches oracle price and immediately finalizes the question.
-;; No pending/dispute stage -- result is final on-chain immediately.
-
 
 (define-public (finalize-question
   (question-id uint)
   (price-feed-bytes (buff 8192))
-  (pyth-oracle-contract principal)
-  (pyth-storage-contract principal)
-  (pyth-decoder-contract principal)
-  (wormhole-core-contract principal)
 )
   (let (
     (q (unwrap! (map-get? questions { question-id: question-id }) err-question-not-found))
     (event (unwrap! (map-get? events { event-id: (get event-id q) }) err-event-not-found))
+    (oracle-principal   (unwrap! (var-get pyth-oracle-contract) err-pyth-not-configured))
+    (storage-principal  (unwrap! (var-get pyth-storage-contract) err-pyth-not-configured))
+    (decoder-principal  (unwrap! (var-get pyth-decoder-contract) err-pyth-not-configured))
+    (wormhole-principal (unwrap! (var-get wormhole-core-contract) err-pyth-not-configured))
 
-    ;; Verify and update the latest BTC feed from Hermes/Wormhole payload
     (update-status
       (try!
         (contract-call?
-          pyth-oracle-contract
+          oracle-principal
           verify-and-update-price-feeds
           price-feed-bytes
           {
-            pyth-storage-contract: pyth-storage-contract,
-            pyth-decoder-contract: pyth-decoder-contract,
-            wormhole-core-contract: wormhole-core-contract
+            pyth-storage-contract: storage-principal,
+            pyth-decoder-contract: decoder-principal,
+            wormhole-core-contract: wormhole-principal
           }
         )
       )
     )
 
-    ;; Read the fresh BTC price
     (price-data
       (try!
         (contract-call?
-          pyth-oracle-contract
+          oracle-principal
           get-price
           btc-feed-id
-          pyth-storage-contract
+          storage-principal
         )
       )
     )
 
-    ;; Pyth returns fixed-point price with expo, usually -8 for BTC/USD
-    ;; Example: price=10603557773590 expo=-8 => 106035.57773590
-    ;; Here we normalize down to whole-dollar style integer comparison.
+    (price-int (get price price-data))
     (expo (get expo price-data))
-    (denom (pow u10 (to-uint (* expo -1))))
-    (normalized-price (/ (to-uint (get price price-data)) denom))
 
-    ;; Your target-price should use the same unit as normalized-price
+    ;; Pyth BTC/USD commonly uses expo = -8 on Stacks docs.
+    ;; We normalize to whole-dollar integer for comparison with target-price.
+    (price-denomination (pow 10 (* expo -1)))
+    (normalized-price (/ (to-uint price-int) (to-uint price-denomination)))
     (outcome (>= normalized-price (get target-price q)))
   )
     (begin
       (asserts! (is-keeper) err-unauthorized)
-      (asserts! (is-eq pyth-oracle-contract (var-get approved-oracle)) err-invalid-oracle)
       (asserts! (is-eq (get status q) question-status-open) err-question-closed)
       (asserts! (>= burn-block-height (get close-block q)) err-question-closed)
+      (asserts! (> price-int 0) err-invalid-price)
+      (asserts! (< expo 0) err-invalid-expo)
 
       (map-set questions { question-id: question-id }
         (merge q {
-          status: question-status-final,
-          oracle-price: normalized-price,
+          status:        question-status-final,
+          oracle-price:  normalized-price,
           final-outcome: (some outcome)
         })
       )
@@ -581,18 +572,15 @@
           finalized-question-count: (+ (get finalized-question-count event) u1)
         })
       )
-
       (ok outcome)
     )
   )
 )
 
 ;; -------------------------------------------------------
-;; POINTS  (inline -- no external reputation contract)
+;; POINTS
 ;; -------------------------------------------------------
 
-;; Correct users call this per finalized question to earn 10 points.
-;; Also updates the top5 leaderboard snapshot for this event.
 (define-public (claim-points (question-id uint))
   (let (
     (caller tx-sender)
@@ -612,19 +600,16 @@
       (asserts! (not (get points-claimed answer-record)) err-already-claimed)
       (asserts! (is-eq (get prediction answer-record) final-outcome) err-wrong-answer)
 
-      ;; mark points as claimed for this question
       (map-set answers
         { question-id: question-id, user: caller }
         (merge answer-record { points-claimed: true })
       )
 
-      ;; update user's total points for this event
       (map-set points-map
         { event-id: event-id, user: caller }
         { points: new-points }
       )
 
-      ;; update top5 snapshot
       (update-top5 event-id caller new-points)
       (ok new-points)
     )
@@ -635,13 +620,10 @@
 ;; EVENT CLOSING / FEES / REFUND MODE
 ;; -------------------------------------------------------
 
-;; Keeper closes the event after season ends and all questions finalized.
-;; If participant-count < min-participants -> enters refund-mode (no fee taken).
-;; Otherwise -> 2% protocol fee is booked and prize distribution is enabled.
 (define-public (close-event (event-id uint))
   (let (
     (event (unwrap! (map-get? events { event-id: event-id }) err-event-not-found))
-    (enough-participants (>= (get participant-count event) min-participants))
+    (enough-participants (>= (get participant_count event) min-participants))
     (protocol-fee (/ (* (get total-pool event) u2) u100))
   )
     (begin
@@ -652,7 +634,6 @@
       (asserts! (not (get fee-booked event)) err-fee-already-booked)
 
       (if enough-participants
-        ;; Normal close -- book fee, enable winnings claims
         (begin
           (map-set events { event-id: event-id }
             (merge event {
@@ -662,18 +643,17 @@
             })
           )
           (var-set accumulated-fees (+ (var-get accumulated-fees) protocol-fee))
-          (ok false) ;; false = not refund mode
+          (ok false)
         )
-        ;; Not enough participants -- refund mode, no fee
         (begin
           (map-set events { event-id: event-id }
             (merge event {
               is-active:    false,
-              fee-booked:   true,  ;; set true to prevent re-entry
+              fee-booked:   true,
               refund-mode:  true
             })
           )
-          (ok true) ;; true = refund mode activated
+          (ok true)
         )
       )
     )
@@ -681,7 +661,7 @@
 )
 
 ;; -------------------------------------------------------
-;; REFUND  (only available when event is in refund-mode)
+;; REFUND
 ;; -------------------------------------------------------
 
 (define-public (claim-refund (event-id uint))
@@ -711,9 +691,6 @@
 ;; WINNINGS
 ;; -------------------------------------------------------
 
-;; Top 5 share 98% of prize pool based on leaderboard rank.
-;; Payout percentages (sum = 98):
-;;   1st=30%  2nd=25%  3rd=20%  4th=15%  5th=8%
 (define-public (claim-winnings (event-id uint))
   (let (
     (caller tx-sender)
@@ -791,7 +768,10 @@
 (define-read-only (get-config)
   {
     admin:                   (var-get admin),
-    approved-oracle:         (var-get approved-oracle),
+    pyth-oracle-contract:    (var-get pyth-oracle-contract),
+    pyth-storage-contract:   (var-get pyth-storage-contract),
+    pyth-decoder-contract:   (var-get pyth-decoder-contract),
+    wormhole-core-contract:  (var-get wormhole-core-contract),
     max-questions-per-event: max-questions-per-event,
     min-participants:        min-participants,
     accumulated-fees:        (var-get accumulated-fees)
