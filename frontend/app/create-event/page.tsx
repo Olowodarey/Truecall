@@ -3,22 +3,18 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { openContractCall } from "@stacks/connect";
-import { STACKS_TESTNET } from "@stacks/network";
-import { uintCV, stringAsciiCV, boolCV } from "@stacks/transactions";
-import { CONTRACTS, HIRO_API, DEPLOYER } from "@/lib/contracts";
+import { HIRO_API, DEPLOYER } from "@/lib/contracts";
 import { useWallet } from "@/contexts/WalletContext";
 import {
   getAllEvents,
-  getMarketsForEvent,
-  proposeResult,
-  overrideResult,
-  closeEvent,
+  getQuestionsForEvent,
+  createEventTxOptions,
+  addQuestionTxOptions,
+  closeEventTxOptions,
 } from "@/lib/stacks";
-import type { ChainEvent, ChainMarket } from "@/lib/types";
+import type { ChainEvent, ChainQuestion } from "@/lib/types";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-
-const [pmAddr, pmName] = CONTRACTS.PREDICTION_MARKET.split(".");
 
 export default function CreateEventPage() {
   const router = useRouter();
@@ -26,29 +22,25 @@ export default function CreateEventPage() {
 
   // Admin Tabs
   const [activeTab, setActiveTab] = useState<
-    "create-event" | "add-market" | "manage-markets"
+    "create-event" | "add-question" | "manage-questions"
   >("create-event");
   const [events, setEvents] = useState<ChainEvent[]>([]);
-  const [eventMarkets, setEventMarkets] = useState<
-    Record<number, ChainMarket[]>
+  const [eventQuestions, setEventQuestions] = useState<
+    Record<number, ChainQuestion[]>
   >({});
   const [currentBlock, setCurrentBlock] = useState(0);
-  const [oracleContract, setOracleContract] = useState<string>(
-    CONTRACTS.MOCK_PYTH,
-  );
   const [pendingAction, setPendingAction] = useState<string | null>(null);
 
   // Form state - Create Event
   const [title, setTitle] = useState("");
-  const [closeBlockOffset, setCloseBlockOffset] = useState(144); // ~24h of blocks
+  const [durationBlocks, setDurationBlocks] = useState(144); // ~24h of blocks
   const [entryFeeStx, setEntryFeeStx] = useState(1); // STX
-  const [useSbtc, setUseSbtc] = useState(false);
-  const [daoApproved, setDaoApproved] = useState(false);
 
-  // Form state - Add Market
+  // Form state - Add Question
   const [selectedEventId, setSelectedEventId] = useState<number>(0);
   const [marketQuestion, setMarketQuestion] = useState("");
-  const [marketTargetPrice, setMarketTargetPrice] = useState<number>(100000); // USD Cents
+  const [marketTargetPrice, setMarketTargetPrice] = useState<number>(100000); // USD
+  const [questionDurationBlocks, setQuestionDurationBlocks] = useState(144);
 
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,12 +53,12 @@ export default function CreateEventPage() {
         .then((evs) => {
           setEvents(evs);
           // Also load markets per event for the Manage tab
-          const allMarkets: Record<number, ChainMarket[]> = {};
+          const allQuestions: Record<number, ChainQuestion[]> = {};
           Promise.all(
             evs.map(async (ev) => {
-              allMarkets[ev.id] = await getMarketsForEvent(ev.id);
+              allQuestions[ev.id] = await getQuestionsForEvent(ev.id);
             }),
-          ).then(() => setEventMarkets({ ...allMarkets }));
+          ).then(() => setEventQuestions({ ...allQuestions }));
         })
         .catch(console.error);
 
@@ -88,29 +80,21 @@ export default function CreateEventPage() {
     setError(null);
 
     try {
-      // Fetch current block height to compute close-block
+      // Fetch current block height to compute blocks
       const resp = await fetch(`${HIRO_API}/v2/info`);
       const info = await resp.json();
       const currentBlock = info.stacks_tip_height ?? 0;
-      const closeBlock = currentBlock + closeBlockOffset;
+      const startBlock = currentBlock;
+      const endBlock = currentBlock + durationBlocks;
       const entryFeeMicro = Math.round(entryFeeStx * 1_000_000);
 
       await openContractCall({
-        contractAddress: pmAddr,
-        contractName: pmName,
-        functionName: "create-event",
-        functionArgs: [
-          stringAsciiCV(title.trim().slice(0, 64)),
-          boolCV(daoApproved),
-          uintCV(closeBlock),
-          uintCV(entryFeeMicro),
-          boolCV(useSbtc),
-        ],
-        network: STACKS_TESTNET,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        anchorMode: 3, // AnchorMode.Any
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        postConditionMode: 1, // PostConditionMode.Allow
+        ...createEventTxOptions(
+          title.trim().slice(0, 64),
+          startBlock,
+          endBlock,
+          entryFeeMicro
+        ),
         appDetails: { name: "TrueCall", icon: "/favicon.ico" },
         onFinish: (data: any) => {
           console.log("create-event tx:", data.txId);
@@ -128,7 +112,7 @@ export default function CreateEventPage() {
     }
   };
 
-  const handleAddMarket = async (e: React.FormEvent) => {
+  const handleAddQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!marketQuestion.trim() || selectedEventId === 0) {
       setError("Event and question are required");
@@ -139,23 +123,21 @@ export default function CreateEventPage() {
     setError(null);
 
     try {
+      const resp = await fetch(`${HIRO_API}/v2/info`);
+      const info = await resp.json();
+      const currentBlock = info.stacks_tip_height ?? 0;
+      const closeBlock = currentBlock + questionDurationBlocks;
+
       await openContractCall({
-        contractAddress: pmAddr,
-        contractName: pmName,
-        functionName: "add-market",
-        functionArgs: [
-          uintCV(selectedEventId),
-          stringAsciiCV(marketQuestion.trim().slice(0, 128)),
-          uintCV(marketTargetPrice),
-        ],
-        network: STACKS_TESTNET,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        anchorMode: 3, // AnchorMode.Any
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        postConditionMode: 1, // PostConditionMode.Allow
+        ...addQuestionTxOptions(
+          selectedEventId,
+          marketQuestion.trim().slice(0, 128),
+          marketTargetPrice,
+          closeBlock
+        ),
         appDetails: { name: "TrueCall", icon: "/favicon.ico" },
         onFinish: (data: any) => {
-          console.log("add-market tx:", data.txId);
+          console.log("add-question tx:", data.txId);
           setSuccess(true);
           setTimeout(() => router.push("/events"), 2500);
         },
@@ -165,7 +147,7 @@ export default function CreateEventPage() {
         },
       });
     } catch (err: any) {
-      setError(err?.message ?? "Failed to add market");
+      setError(err?.message ?? "Failed to add question");
       setCreating(false);
     }
   };
@@ -264,31 +246,30 @@ export default function CreateEventPage() {
                   Create Event
                 </button>
                 <button
-                  onClick={() => setActiveTab("add-market")}
+                  onClick={() => setActiveTab("add-question")}
                   className={`flex-1 py-4 text-center font-semibold transition-colors ${
-                    activeTab === "add-market"
+                    activeTab === "add-question"
                       ? "bg-gray-700/50 text-white border-b-2 border-orange-500"
                       : "text-gray-400 hover:text-gray-300 hover:bg-gray-700/30"
                   }`}
                 >
-                  Add Market
+                  Add Question
                 </button>
                 <button
-                  onClick={() => setActiveTab("manage-markets")}
+                  onClick={() => setActiveTab("manage-questions")}
                   className={`flex-1 py-4 text-center font-semibold transition-colors ${
-                    activeTab === "manage-markets"
+                    activeTab === "manage-questions"
                       ? "bg-gray-700/50 text-white border-b-2 border-orange-500"
                       : "text-gray-400 hover:text-gray-300 hover:bg-gray-700/30"
                   }`}
                 >
-                  Manage Markets
+                  Manage Questions
                 </button>
               </div>
 
               <div className="p-8">
                 {activeTab === "create-event" ? (
                   <form onSubmit={handleCreateEvent} className="space-y-6">
-                    {/* Title */}
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-2">
                         Event Title *
@@ -302,23 +283,19 @@ export default function CreateEventPage() {
                         className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
                         placeholder="e.g., BTC Q1 2025 Price Race"
                       />
-                      <p className="text-xs text-gray-500 mt-1">
-                        {title.length}/64 characters
-                      </p>
                     </div>
 
-                    {/* Close Block Offset */}
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-2">
                         Duration (blocks) · ~
-                        {Math.round((closeBlockOffset * 10) / 60)}min at 10
+                        {Math.round((durationBlocks * 10) / 60)}min at 10
                         blocks/min
                       </label>
                       <input
                         type="number"
-                        value={closeBlockOffset}
+                        value={durationBlocks}
                         onChange={(e) =>
-                          setCloseBlockOffset(Number(e.target.value))
+                          setDurationBlocks(Number(e.target.value))
                         }
                         disabled={creating}
                         min={10}
@@ -327,10 +304,9 @@ export default function CreateEventPage() {
                       />
                     </div>
 
-                    {/* Entry Fee */}
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Entry Fee ({useSbtc ? "sats" : "STX"})
+                        Entry Fee (STX)
                       </label>
                       <input
                         type="number"
@@ -338,33 +314,9 @@ export default function CreateEventPage() {
                         onChange={(e) => setEntryFeeStx(Number(e.target.value))}
                         disabled={creating}
                         min={0}
-                        step={useSbtc ? 1000 : 0.1}
+                        step={0.1}
                         className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
                       />
-                    </div>
-
-                    {/* Toggles */}
-                    <div className="flex gap-6">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={useSbtc}
-                          onChange={(e) => setUseSbtc(e.target.checked)}
-                          className="w-4 h-4 accent-orange-500"
-                        />
-                        <span className="text-gray-300 text-sm">Use sBTC</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={daoApproved}
-                          onChange={(e) => setDaoApproved(e.target.checked)}
-                          className="w-4 h-4 accent-purple-500"
-                        />
-                        <span className="text-gray-300 text-sm">
-                          DAO Approved
-                        </span>
-                      </label>
                     </div>
 
                     {error && (
@@ -389,9 +341,8 @@ export default function CreateEventPage() {
                         : "Create Event On-Chain"}
                     </button>
                   </form>
-                ) : activeTab === "add-market" ? (
-                  <form onSubmit={handleAddMarket} className="space-y-6">
-                    {/* Event Selection */}
+                ) : activeTab === "add-question" ? (
+                  <form onSubmit={handleAddQuestion} className="space-y-6">
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-2">
                         Select Event *
@@ -409,19 +360,13 @@ export default function CreateEventPage() {
                         </option>
                         {events.map((ev) => (
                           <option key={ev.id} value={ev.id}>
-                            #{ev.id} | {ev.title} ({ev.finalizedMarketCount}/
-                            {ev.marketCount} markets)
+                            #{ev.id} | {ev.title} ({ev.finalizedQuestionCount}/
+                            {ev.questionCount} questions)
                           </option>
                         ))}
                       </select>
-                      {events.length === 0 && (
-                        <p className="text-xs text-orange-400 mt-2">
-                          Loading events... (make sure you have created one)
-                        </p>
-                      )}
                     </div>
 
-                    {/* Market Question */}
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-2">
                         Market Question * (Binary YES/NO)
@@ -435,15 +380,11 @@ export default function CreateEventPage() {
                         className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
                         placeholder="e.g., Will BTC be above $100k by close?"
                       />
-                      <p className="text-xs text-gray-500 mt-1">
-                        {marketQuestion.length}/128 characters
-                      </p>
                     </div>
 
-                    {/* Target Price */}
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Target BTC Price (USD Cents)
+                        Target BTC Price (Whole USD)
                       </label>
                       <input
                         type="number"
@@ -457,8 +398,25 @@ export default function CreateEventPage() {
                         className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
                       />
                       <p className="text-xs text-gray-500 mt-1">
-                        Example: 10000000 = $100,000.00
+                        Example: 100000 = $100,000
                       </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Question Duration (blocks)
+                      </label>
+                      <input
+                        type="number"
+                        value={questionDurationBlocks}
+                        onChange={(e) =>
+                          setQuestionDurationBlocks(Number(e.target.value))
+                        }
+                        disabled={creating}
+                        min={1}
+                        max={52560}
+                        className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
+                      />
                     </div>
 
                     {error && (
@@ -468,12 +426,12 @@ export default function CreateEventPage() {
                     )}
                     {success && (
                       <div className="p-3 bg-green-500/20 border border-green-500/50 rounded-lg text-green-400 text-sm">
-                        Market transaction sent! Redirecting…
+                        Question transaction sent! Redirecting…
                       </div>
                     )}
 
                     <button
-                      id="add-market-submit"
+                      id="add-question-submit"
                       type="submit"
                       disabled={
                         creating ||
@@ -482,38 +440,21 @@ export default function CreateEventPage() {
                       }
                       className="w-full bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold py-3 px-6 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {creating ? "Waiting for wallet…" : "Add Market To Event"}
+                      {creating ? "Waiting for wallet…" : "Add Question To Event"}
                     </button>
                   </form>
-                ) : activeTab === "manage-markets" ? (
+                ) : activeTab === "manage-questions" ? (
                   <div className="space-y-6">
-                    {/* Oracle contract input */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-1">
-                        Oracle Contract (for Propose Result)
-                      </label>
-                      <input
-                        type="text"
-                        value={oracleContract}
-                        onChange={(e) => setOracleContract(e.target.value)}
-                        className="w-full px-4 py-2 bg-gray-700/50 border border-gray-600 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                        placeholder="ADDR.contract-name"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        Current block: #{currentBlock}
-                      </p>
-                    </div>
-
                     {events.length === 0 ? (
                       <p className="text-gray-400 text-sm text-center py-8">
                         No events on-chain yet.
                       </p>
                     ) : (
                       events.map((event) => {
-                        const mks = eventMarkets[event.id] ?? [];
+                        const mks = eventQuestions[event.id] ?? [];
                         const allFinal =
-                          event.marketCount > 0 &&
-                          event.finalizedMarketCount === event.marketCount;
+                          event.questionCount > 0 &&
+                          event.finalizedQuestionCount === event.questionCount;
                         return (
                           <div
                             key={event.id}
@@ -528,9 +469,9 @@ export default function CreateEventPage() {
                                   </span>
                                 </p>
                                 <p className="text-xs text-gray-400">
-                                  {event.finalizedMarketCount}/
-                                  {event.marketCount} finalized
-                                  {" · "}closes #{event.closeBlock}
+                                  {event.finalizedQuestionCount}/
+                                  {event.questionCount} finalized
+                                  {" · "}closes #{event.endBlock}
                                   {" · "}
                                   <span
                                     className={
@@ -543,7 +484,6 @@ export default function CreateEventPage() {
                                   </span>
                                 </p>
                               </div>
-                              {/* Close Event button */}
                               {event.isActive && allFinal && (
                                 <button
                                   disabled={
@@ -551,7 +491,8 @@ export default function CreateEventPage() {
                                   }
                                   onClick={async () => {
                                     setPendingAction(`close-${event.id}`);
-                                    await closeEvent(event.id, {
+                                    await openContractCall({
+                                      ...closeEventTxOptions(event.id),
                                       onFinish: () => {
                                         setPendingAction(null);
                                         getAllEvents()
@@ -572,92 +513,34 @@ export default function CreateEventPage() {
 
                             {mks.length === 0 ? (
                               <p className="text-xs text-gray-500 pl-1">
-                                No markets yet.
+                                No questions yet.
                               </p>
                             ) : (
                               <ul className="space-y-2">
-                                {mks.map((market) => (
+                                {mks.map((question) => (
                                   <li
-                                    key={market.id}
+                                    key={question.id}
                                     className="flex items-center justify-between bg-gray-900/50 rounded-lg px-3 py-2 text-sm gap-3"
                                   >
                                     <div className="flex-1 min-w-0">
                                       <p className="text-white truncate">
-                                        {market.question}
+                                        {question.question}
                                       </p>
                                       <p className="text-xs text-gray-400 mt-0.5">
                                         <span
                                           className={
-                                            market.status === "open"
+                                            question.status === "open"
                                               ? "text-green-400"
-                                              : market.status === "pending"
-                                                ? "text-yellow-400"
-                                                : market.status === "disputed"
-                                                  ? "text-red-400"
-                                                  : "text-blue-400"
+                                              : "text-blue-400"
                                           }
                                         >
-                                          {market.status}
+                                          {question.status}
                                         </span>
-                                        {" · "}Close #{market.closeBlock}
+                                        {" · "}Close #{question.closeBlock}
                                       </p>
                                     </div>
                                     <div className="flex gap-2 shrink-0">
-                                      {market.status === "open" &&
-                                        currentBlock >= market.closeBlock && (
-                                          <button
-                                            disabled={
-                                              pendingAction ===
-                                              `propose-${market.id}`
-                                            }
-                                            onClick={async () => {
-                                              setPendingAction(
-                                                `propose-${market.id}`,
-                                              );
-                                              await proposeResult(
-                                                market.id,
-                                                oracleContract,
-                                                {
-                                                  onFinish: () =>
-                                                    setPendingAction(null),
-                                                  onCancel: () =>
-                                                    setPendingAction(null),
-                                                },
-                                              );
-                                            }}
-                                            className="text-xs px-2 py-1 rounded bg-orange-500/10 border border-orange-500/40 text-orange-400 hover:bg-orange-500/20 disabled:opacity-50 transition whitespace-nowrap"
-                                          >
-                                            {pendingAction ===
-                                            `propose-${market.id}`
-                                              ? "Wait…"
-                                              : "Propose Result"}
-                                          </button>
-                                        )}
-                                      {market.status === "disputed" && (
-                                        <button
-                                          disabled={
-                                            pendingAction ===
-                                            `override-${market.id}`
-                                          }
-                                          onClick={async () => {
-                                            setPendingAction(
-                                              `override-${market.id}`,
-                                            );
-                                            await overrideResult(market.id, {
-                                              onFinish: () =>
-                                                setPendingAction(null),
-                                              onCancel: () =>
-                                                setPendingAction(null),
-                                            });
-                                          }}
-                                          className="text-xs px-2 py-1 rounded bg-red-500/10 border border-red-500/40 text-red-400 hover:bg-red-500/20 disabled:opacity-50 transition whitespace-nowrap"
-                                        >
-                                          {pendingAction ===
-                                          `override-${market.id}`
-                                            ? "Wait…"
-                                            : "Override Result"}
-                                        </button>
-                                      )}
+                                      <span className="text-xs text-gray-500 italic">VAA required to finalize</span>
                                     </div>
                                   </li>
                                 ))}
