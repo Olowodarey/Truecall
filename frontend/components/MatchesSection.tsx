@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getAllEvents, getMarketsForEvent } from "@/lib/stacks";
-import type { ChainEvent, ChainMarket } from "@/lib/types";
+import { getAllEvents, getQuestionsForEvent } from "@/lib/stacks";
+import type { ChainEvent, ChainQuestion } from "@/lib/types";
 
-interface MarketWithEvent {
-  market: ChainMarket;
+interface QuestionWithEvent {
+  question: ChainQuestion;
   event: ChainEvent;
 }
 
@@ -24,9 +24,9 @@ function SkeletonCard() {
   );
 }
 
-function MarketCard({ market, event }: MarketWithEvent) {
-  const targetUsd = (market.targetPrice / 100).toLocaleString();
-  const isOpen = market.status === "open";
+function QuestionCard({ question, event }: QuestionWithEvent) {
+  const targetUsd = (question.targetPrice / 100).toLocaleString();
+  const isOpen = question.status === "open";
   const statusClasses = isOpen
     ? "bg-green-500/20 text-green-400 border-green-500/40"
     : "bg-gray-500/20 text-gray-400 border-gray-500/40";
@@ -37,7 +37,7 @@ function MarketCard({ market, event }: MarketWithEvent) {
         <span
           className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${statusClasses}`}
         >
-          {market.status.toUpperCase()}
+          {question.status.toUpperCase()}
         </span>
         <span className="text-xs text-gray-500 truncate max-w-[120px]">
           {event.title}
@@ -45,7 +45,7 @@ function MarketCard({ market, event }: MarketWithEvent) {
       </div>
 
       <p className="text-sm font-bold text-white mb-1 group-hover:text-orange-300 transition-colors leading-tight">
-        {market.question}
+        {question.question}
       </p>
       <p className="text-xs text-orange-400 font-semibold">
         Target: ${targetUsd}
@@ -54,18 +54,18 @@ function MarketCard({ market, event }: MarketWithEvent) {
       <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-700/50 text-xs text-gray-400">
         <span>
           Fee:{" "}
-          {event.useSbtc
-            ? `${event.entryFee} sats`
+          {event.
+            ? `${event.entryFee} STX`
             : `${(event.entryFee / 1_000_000).toFixed(2)} STX`}
         </span>
-        <span>Closes #{market.closeBlock}</span>
+        <span>Closes #{question.closeBlock}</span>
       </div>
     </div>
   );
 }
 
 export default function MatchesSection() {
-  const [items, setItems] = useState<MarketWithEvent[]>([]);
+  const [items, setItems] = useState<QuestionWithEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -76,27 +76,27 @@ export default function MatchesSection() {
         setLoading(true);
         const events = await getAllEvents();
         const openEvents = events.filter((e) => e.isActive);
-        // Fetch markets for each open event in parallel
+        // Fetch questions for each open event in parallel
         const nested = await Promise.allSettled(
           openEvents.map((ev) =>
-            getMarketsForEvent(ev.id).then((markets) =>
-              markets.map((m) => ({ market: m, event: ev })),
+            getQuestionsForEvent(ev.id).then((questions) =>
+              questions.map((m) => ({ question: m, event: ev })),
             ),
           ),
         );
         if (!cancelled) {
           const flat = nested
             .filter(
-              (r): r is PromiseFulfilledResult<MarketWithEvent[]> =>
+              (r): r is PromiseFulfilledResult<QuestionWithEvent[]> =>
                 r.status === "fulfilled",
             )
             .flatMap((r) => r.value)
-            .filter((x) => x.market.status === "open")
+            .filter((x) => x.question.status === "open")
             .slice(0, 12); // show max 12 cards
           setItems(flat);
         }
       } catch {
-        if (!cancelled) setError("Could not load markets from blockchain.");
+        if (!cancelled) setError("Could not load questions from blockchain.");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -116,11 +116,11 @@ export default function MatchesSection() {
         <h2 className="text-4xl lg:text-5xl font-bold text-white mb-4">
           Open{" "}
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-yellow-400">
-            Markets
+            Questions
           </span>
         </h2>
         <p className="text-gray-400 max-w-xl mx-auto text-lg">
-          Pick a BTC price market, predict YES or NO, and win from the prize
+          Pick a BTC price question, predict YES or NO, and win from the prize
           pool.
         </p>
       </div>
@@ -143,15 +143,15 @@ export default function MatchesSection() {
         {!loading && !error && items.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 gap-4">
             <p className="text-gray-400">
-              No open markets on-chain yet. Admin can create one.
+              No open questions on-chain yet. Admin can create one.
             </p>
           </div>
         )}
 
         {!loading && !error && items.length > 0 && (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {items.map(({ market, event }) => (
-              <MarketCard key={market.id} market={market} event={event} />
+            {items.map(({ question, event }) => (
+              <QuestionCard key={question.id} question={question} event={event} />
             ))}
           </div>
         )}
