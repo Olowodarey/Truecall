@@ -13,7 +13,7 @@
 ;; - If fewer than 5 participants joined, all get a full refund
 ;;
 ;; Pyth Oracle (Testnet):
-;; - finalize-question accepts `price-feed-bytes (buff 8192)` — a signed VAA from Hermes
+;; - finalize-question accepts `price-feed-bytes (buff 8192)` - a signed VAA from Hermes
 ;; - target-price is stored as a WHOLE-DOLLAR integer (e.g. 80000 = "$80,000")
 ;; - The caller of finalize-question must allow a 1 uSTX Pyth update fee
 ;; - Testnet contracts: STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.*
@@ -38,7 +38,7 @@
 ;; (Source: https://github.com/stx-labs/stacks-pyth-bridge)
 ;; -------------------------------------------------------
 
-;; Main oracle entry-point — verify VAA & read prices
+;; Main oracle entry-point - verify VAA & read prices
 (define-constant pyth-oracle-v4      'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.pyth-oracle-v4)
 ;; Price storage
 (define-constant pyth-storage-v4     'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.pyth-storage-v4)
@@ -494,7 +494,7 @@
 )
 
 ;; -------------------------------------------------------
-;; QUESTION RESOLUTION — LIVE PYTH ORACLE (TESTNET)
+;; QUESTION RESOLUTION - LIVE PYTH ORACLE (TESTNET)
 ;; -------------------------------------------------------
 ;;
 ;; Flow:
@@ -503,18 +503,18 @@
 ;;            ids[]=e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43\
 ;;            &binary=true"
 ;;   2. Keeper passes the raw VAA hex as `price-feed-bytes` to this function.
-;;   3. We call `verify-and-update-price-feeds` on pyth-oracle-v4 — this validates
+;;   3. We call `verify-and-update-price-feeds` on pyth-oracle-v4 - this validates
 ;;      the Wormhole signatures and stores the fresh price in pyth-storage-v4.
 ;;      A 1 uSTX fee is charged to tx-sender by the Pyth contract.
 ;;   4. We call `get-price` to read the just-stored BTC/USD price.
 ;;   5. We normalise the raw Pyth fixed-point price to a whole-dollar integer
-;;      (e.g. Pyth returns 10603557773590 at expo -8 → $106,035).
+;;      (e.g. Pyth returns 10603557773590 at expo -8 -> $106,035).
 ;;   6. outcome = (normalized-price >= target-price)
 ;;
 ;; Price normalization detail:
 ;;   Pyth `price` field is an `int` (signed).
 ;;   Pyth `expo` field is an `int`, always negative for BTC/USD (typically -8).
-;;   denomination = 10^(|expo|)  — computed as (pow u10 (to-uint (* expo -1)))
+;;   denomination = 10^(|expo|)  - computed as (pow u10 (to-uint (* expo -1)))
 ;;   normalized   = (to-uint price) / denomination
 ;;                = whole-dollar integer ready for comparison with target-price
 
@@ -526,7 +526,7 @@
     (q (unwrap! (map-get? questions { question-id: question-id }) err-question-not-found))
     (event (unwrap! (map-get? events { event-id: (get event-id q) }) err-event-not-found))
 
-    ;; ── Step 1: Submit VAA → validates Wormhole signatures, stores fresh price ──
+    ;; -- Step 1: Submit VAA -> validates Wormhole signatures, stores fresh price --
     ;; verify-and-update-price-feeds signature:
     ;;   (price-feed-bytes (buff 8192))
     ;;   (contracts { pyth-storage-contract: principal,
@@ -548,7 +548,7 @@
       )
     )
 
-    ;; ── Step 2: Read the freshly stored BTC/USD price ──
+    ;; -- Step 2: Read the freshly stored BTC/USD price --
     ;; get-price signature:
     ;;   (price-feed-id (buff 32)) (pyth-storage-address principal)
     ;; Returns: (response { price: int, conf: uint, expo: int,
@@ -568,7 +568,7 @@
     (price-int (get price price-data)) ;; int  e.g. 10603557773590
     (expo      (get expo  price-data)) ;; int  e.g. -8
 
-    ;; ── Step 3: Normalise to whole-dollar integer ──
+    ;; -- Step 3: Normalise to whole-dollar integer --
     ;; expo is always negative for BTC/USD; (* expo -1) gives the positive exponent.
     ;; to-uint is safe here because (* expo -1) > 0 after the asserts! below.
     (expo-abs      (to-uint (* expo -1)))            ;; e.g. 8
@@ -797,7 +797,7 @@
 (define-read-only (get-config)
   {
     admin:                   (var-get admin),
-    ;; Pyth testnet oracle (hardcoded constants — no runtime config needed)
+    ;; Pyth testnet oracle (hardcoded constants - no runtime config needed)
     pyth-oracle-v4:          pyth-oracle-v4,
     pyth-storage-v4:         pyth-storage-v4,
     pyth-decoder-v3:         pyth-decoder-v3,

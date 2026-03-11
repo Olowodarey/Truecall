@@ -8,7 +8,7 @@ cache_dir = './.cache'
 [[project.requirements]]
 contract_id = 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.sip-010-trait-ft-standard'
 
-;; ── Pyth Oracle testnet contracts (STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM) ──
+# ── Pyth Oracle testnet contracts (STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM) ──
 [[project.requirements]]
 contract_id = 'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.pyth-oracle-v4'
 
