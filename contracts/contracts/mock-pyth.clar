@@ -10,7 +10,7 @@
 
 ;; Mutable price store - tests set this via set-mock-price before calling
 ;; finalize-question.
-(define-data-var mock-price        int  i10000000000000) ;; default ~$100,000 (expo -8)
+(define-data-var mock-price        int  10000000000000) ;; default ~$100,000 (expo -8)
 (define-data-var mock-expo         int  i-8)
 (define-data-var mock-publish-time uint u0)
 

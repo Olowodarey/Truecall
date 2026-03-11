@@ -9,7 +9,7 @@
 ;; prediction-market.clar use literal hardcoded addresses (not trait dispatch)
 ;; as required by Clarity's static analysis rules.
 
-;; Pyth storage trait — used by pyth-oracle-v4 internally
+;; Pyth storage trait - used by pyth-oracle-v4 internally
 (define-trait pyth-storage-trait
   (
     ;; Store a verified price update
@@ -44,7 +44,7 @@
   )
 )
 
-;; Main Pyth oracle trait — exposed by pyth-oracle-v4
+;; Main Pyth oracle trait - exposed by pyth-oracle-v4
 (define-trait pyth-oracle-trait
   (
     ;; Verify a Wormhole VAA, decode the PNAU payload, and persist fresh prices.
