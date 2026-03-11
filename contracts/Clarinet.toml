@@ -22,10 +22,7 @@ contract_id = 'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.pyth-pnau-decoder-v3'
 contract_id = 'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.wormhole-core-v4'
 
 
-[contracts.mock-pyth]
-path = 'contracts/mock-pyth.clar'
-clarity_version = 2
-epoch = 'latest'
+
 
 [contracts.mock-sbtc]
 path = 'contracts/mock-sbtc.clar'
