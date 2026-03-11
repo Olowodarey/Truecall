@@ -25,7 +25,7 @@ function SkeletonCard() {
 }
 
 function QuestionCard({ question, event }: QuestionWithEvent) {
-  const targetUsd = (question.targetPrice / 100).toLocaleString();
+  const targetUsd = question.targetPrice.toLocaleString();
   const isOpen = question.status === "open";
   const statusClasses = isOpen
     ? "bg-green-500/20 text-green-400 border-green-500/40"
@@ -52,12 +52,7 @@ function QuestionCard({ question, event }: QuestionWithEvent) {
       </p>
 
       <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-700/50 text-xs text-gray-400">
-        <span>
-          Fee:{" "}
-          {event.
-            ? `${event.entryFee} STX`
-            : `${(event.entryFee / 1_000_000).toFixed(2)} STX`}
-        </span>
+        <span>Fee: {(event.entryFee / 1_000_000).toFixed(2)} STX</span>
         <span>Closes #{question.closeBlock}</span>
       </div>
     </div>
@@ -80,15 +75,15 @@ export default function MatchesSection() {
         const nested = await Promise.allSettled(
           openEvents.map((ev) =>
             getQuestionsForEvent(ev.id).then((questions) =>
-              questions.map((m) => ({ question: m, event: ev })),
-            ),
-          ),
+              questions.map((q) => ({ question: q, event: ev }))
+            )
+          )
         );
         if (!cancelled) {
           const flat = nested
             .filter(
               (r): r is PromiseFulfilledResult<QuestionWithEvent[]> =>
-                r.status === "fulfilled",
+                r.status === "fulfilled"
             )
             .flatMap((r) => r.value)
             .filter((x) => x.question.status === "open")

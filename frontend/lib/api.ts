@@ -7,13 +7,8 @@
 export {
   getAllEvents as fetchEvents,
   getEvent as fetchEventById,
-  getMarketsForEvent,
-  getMarketIdsForEvent,
-  getMarket,
-  getPosition,
-  getStakeInfo,
-  predictStx,
-  depositStx,
-  claimWinningsStx,
-  castVote as castGovernanceVote,
+  getQuestionsForEvent,
+  getQuestion,
+  getParticipant,
+  getUserPoints as getPosition,
 } from "./stacks";

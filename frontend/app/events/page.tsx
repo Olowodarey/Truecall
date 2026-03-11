@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getAllEvents, getMarketsForEvent } from "@/lib/stacks";
-import type { ChainEvent, EventFilter, ChainMarket } from "@/lib/types";
+import { getAllEvents, getQuestionsForEvent } from "@/lib/stacks";
+import type { ChainEvent, EventFilter, ChainQuestion } from "@/lib/types";
 import EventCard from "@/components/EventCard";
 import PredictionModal from "@/components/PredictionModal";
 import Header from "@/components/Header";
@@ -13,7 +13,7 @@ import { HIRO_API } from "@/lib/contracts";
 export default function EventsPage() {
   const { userAddress } = useWallet();
   const [events, setEvents] = useState<ChainEvent[]>([]);
-  const [markets, setMarkets] = useState<Record<number, ChainMarket[]>>({});
+  const [questions, setQuestions] = useState<Record<number, ChainQuestion[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<ChainEvent | null>(null);
@@ -38,14 +38,14 @@ export default function EventsPage() {
       setEvents(data);
 
       // Fetch markets for all events
-      const marketsData: Record<number, ChainMarket[]> = {};
+      const questionsData: Record<number, ChainQuestion[]> = {};
       await Promise.all(
         data.map(async (event) => {
-          const eventMarkets = await getMarketsForEvent(event.id);
-          marketsData[event.id] = eventMarkets;
+          const evQuestions = await getQuestionsForEvent(event.id);
+          questionsData[event.id] = evQuestions;
         }),
       );
-      setMarkets(marketsData);
+      setQuestions(questionsData);
     } catch (err) {
       console.error("Failed to load events:", err);
       setError("Failed to load on-chain events. Please try again.");
@@ -63,9 +63,9 @@ export default function EventsPage() {
     if (filter === "all") return true;
     if (filter === "open") return e.isActive;
     if (filter === "closed")
-      return !e.isActive && e.finalizedMarketCount < e.marketCount;
+      return !e.isActive && e.finalizedQuestionCount < e.questionCount;
     if (filter === "settled")
-      return !e.isActive && e.finalizedMarketCount === e.marketCount;
+      return !e.isActive && e.finalizedQuestionCount === e.questionCount;
     return true;
   });
 
@@ -121,7 +121,7 @@ export default function EventsPage() {
               Prediction Events
             </h1>
             <p className="text-gray-300 text-lg">
-              Predict outcomes on BTC price markets · Win from the prize pool
+              Earn points for correct answers and win from the prize pool
             </p>
             <p className="text-xs text-orange-400/70 mt-2">
               Live data from Stacks testnet
@@ -184,7 +184,7 @@ export default function EventsPage() {
                   <EventCard
                     key={event.id}
                     event={event}
-                    markets={markets[event.id] || []}
+                    questions={questions[event.id] || []}
                     currentBlock={currentBlock}
                     userAddress={userAddress}
                     onJoinEvent={handleJoinEvent}
