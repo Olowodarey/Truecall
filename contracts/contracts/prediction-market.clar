@@ -12,11 +12,13 @@
 ;; - 2% goes to protocol fees
 ;; - If fewer than 5 participants joined, all get a full refund
 ;;
-;; Live Pyth notes:
-;; - finalize-question now accepts `price-feed-bytes (buff 8192)`
-;; - target-price should be stored as a WHOLE-DOLLAR integer
-;;   e.g. 80000 for "$80,000"
-;; - caller of finalize-question must allow the 1 uSTX Pyth update fee
+;; Pyth Oracle (Testnet):
+;; - finalize-question accepts `price-feed-bytes (buff 8192)` — a signed VAA from Hermes
+;; - target-price is stored as a WHOLE-DOLLAR integer (e.g. 80000 = "$80,000")
+;; - The caller of finalize-question must allow a 1 uSTX Pyth update fee
+;; - Testnet contracts: STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.*
+;; - Fetch VAA at runtime:
+;;   curl "https://hermes.pyth.network/api/latest_price_feeds?ids[]=e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43&binary=true"
 
 ;; -------------------------------------------------------
 ;; CONSTANTS
@@ -28,8 +30,22 @@
 (define-constant max-questions-per-event u50)
 (define-constant min-participants        u5)
 
-;; Official BTC/USD price feed id on Pyth for Stacks
+;; Official BTC/USD price feed id (same on testnet and mainnet)
 (define-constant btc-feed-id 0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43)
+
+;; -------------------------------------------------------
+;; PYTH TESTNET CONTRACT ADDRESSES
+;; (Source: https://github.com/stx-labs/stacks-pyth-bridge)
+;; -------------------------------------------------------
+
+;; Main oracle entry-point — verify VAA & read prices
+(define-constant pyth-oracle-v4      'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.pyth-oracle-v4)
+;; Price storage
+(define-constant pyth-storage-v4     'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.pyth-storage-v4)
+;; PNAU (price-feed-no-auth-update) decoder
+(define-constant pyth-decoder-v3     'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.pyth-pnau-decoder-v3)
+;; Wormhole bridge (authenticates VAAs)
+(define-constant wormhole-core-v4    'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.wormhole-core-v4)
 
 ;; Payout percentages out of 100 (must sum to 98)
 (define-constant payout-rank1 u30)
@@ -71,7 +87,6 @@
 (define-constant err-event-still-active      (err u230))
 (define-constant err-invalid-expo            (err u231))
 (define-constant err-invalid-price           (err u232))
-(define-constant err-pyth-not-configured     (err u233))
 
 ;; -------------------------------------------------------
 ;; DATA VARS
@@ -81,13 +96,6 @@
 (define-data-var event-nonce       uint      u0)
 (define-data-var question-nonce    uint      u0)
 (define-data-var accumulated-fees  uint      u0)
-
-;; Live Pyth contract principals
-;; Set these after deployment to the correct TESTNET addresses.
-(define-data-var pyth-oracle-contract   (optional principal) none)
-(define-data-var pyth-storage-contract  (optional principal) none)
-(define-data-var pyth-decoder-contract  (optional principal) none)
-(define-data-var wormhole-core-contract (optional principal) none)
 
 ;; trusted keepers that can finalize results
 (define-map approved-keepers { keeper: principal } { active: bool })
@@ -124,10 +132,10 @@
   {
     event-id:      uint,
     question:      (string-ascii 128),
-    target-price:  uint, ;; whole-dollar integer, e.g. 80000
+    target-price:  uint, ;; whole-dollar integer, e.g. 80000 means $80,000
     close-block:   uint,
     status:        (string-ascii 8),
-    oracle-price:  uint, ;; normalized whole-dollar integer
+    oracle-price:  uint, ;; normalized whole-dollar integer returned by Pyth
     final-outcome: (optional bool)
   }
 )
@@ -324,22 +332,6 @@
   )
 )
 
-(define-public (set-pyth-contracts
-  (oracle principal)
-  (storage principal)
-  (decoder principal)
-  (wormhole principal)
-)
-  (begin
-    (asserts! (is-admin) err-unauthorized)
-    (var-set pyth-oracle-contract (some oracle))
-    (var-set pyth-storage-contract (some storage))
-    (var-set pyth-decoder-contract (some decoder))
-    (var-set wormhole-core-contract (some wormhole))
-    (ok true)
-  )
-)
-
 (define-public (withdraw-fees (amount uint))
   (let (
     (caller tx-sender)
@@ -502,8 +494,29 @@
 )
 
 ;; -------------------------------------------------------
-;; QUESTION RESOLUTION WITH LIVE PYTH
+;; QUESTION RESOLUTION — LIVE PYTH ORACLE (TESTNET)
 ;; -------------------------------------------------------
+;;
+;; Flow:
+;;   1. Keeper fetches a fresh VAA from Hermes off-chain:
+;;      curl "https://hermes.pyth.network/api/latest_price_feeds?\
+;;            ids[]=e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43\
+;;            &binary=true"
+;;   2. Keeper passes the raw VAA hex as `price-feed-bytes` to this function.
+;;   3. We call `verify-and-update-price-feeds` on pyth-oracle-v4 — this validates
+;;      the Wormhole signatures and stores the fresh price in pyth-storage-v4.
+;;      A 1 uSTX fee is charged to tx-sender by the Pyth contract.
+;;   4. We call `get-price` to read the just-stored BTC/USD price.
+;;   5. We normalise the raw Pyth fixed-point price to a whole-dollar integer
+;;      (e.g. Pyth returns 10603557773590 at expo -8 → $106,035).
+;;   6. outcome = (normalized-price >= target-price)
+;;
+;; Price normalization detail:
+;;   Pyth `price` field is an `int` (signed).
+;;   Pyth `expo` field is an `int`, always negative for BTC/USD (typically -8).
+;;   denomination = 10^(|expo|)  — computed as (pow u10 (to-uint (* expo -1)))
+;;   normalized   = (to-uint price) / denomination
+;;                = whole-dollar integer ready for comparison with target-price
 
 (define-public (finalize-question
   (question-id uint)
@@ -512,53 +525,69 @@
   (let (
     (q (unwrap! (map-get? questions { question-id: question-id }) err-question-not-found))
     (event (unwrap! (map-get? events { event-id: (get event-id q) }) err-event-not-found))
-    (oracle-principal   (unwrap! (var-get pyth-oracle-contract) err-pyth-not-configured))
-    (storage-principal  (unwrap! (var-get pyth-storage-contract) err-pyth-not-configured))
-    (decoder-principal  (unwrap! (var-get pyth-decoder-contract) err-pyth-not-configured))
-    (wormhole-principal (unwrap! (var-get wormhole-core-contract) err-pyth-not-configured))
 
+    ;; ── Step 1: Submit VAA → validates Wormhole signatures, stores fresh price ──
+    ;; verify-and-update-price-feeds signature:
+    ;;   (price-feed-bytes (buff 8192))
+    ;;   (contracts { pyth-storage-contract: principal,
+    ;;                pyth-decoder-contract: principal,
+    ;;                wormhole-core-contract: principal })
+    ;; Returns: (response (list 64 { price-identifier ... }) uint)
     (update-status
       (try!
         (contract-call?
-          oracle-principal
+          'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.pyth-oracle-v4
           verify-and-update-price-feeds
           price-feed-bytes
           {
-            pyth-storage-contract: storage-principal,
-            pyth-decoder-contract: decoder-principal,
-            wormhole-core-contract: wormhole-principal
+            pyth-storage-contract:  pyth-storage-v4,
+            pyth-decoder-contract:  pyth-decoder-v3,
+            wormhole-core-contract: wormhole-core-v4
           }
         )
       )
     )
 
+    ;; ── Step 2: Read the freshly stored BTC/USD price ──
+    ;; get-price signature:
+    ;;   (price-feed-id (buff 32)) (pyth-storage-address principal)
+    ;; Returns: (response { price: int, conf: uint, expo: int,
+    ;;                       ema-price: int, ema-conf: uint,
+    ;;                       publish-time: uint, prev-publish-time: uint } uint)
     (price-data
       (try!
         (contract-call?
-          oracle-principal
+          'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.pyth-oracle-v4
           get-price
           btc-feed-id
-          storage-principal
+          'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.pyth-storage-v4
         )
       )
     )
 
-    (price-int (get price price-data))
-    (expo (get expo price-data))
+    (price-int (get price price-data)) ;; int  e.g. 10603557773590
+    (expo      (get expo  price-data)) ;; int  e.g. -8
 
-    ;; Pyth BTC/USD commonly uses expo = -8 on Stacks docs.
-    ;; We normalize to whole-dollar integer for comparison with target-price.
-    (price-denomination (pow 10 (* expo -1)))
-    (normalized-price (/ (to-uint price-int) (to-uint price-denomination)))
+    ;; ── Step 3: Normalise to whole-dollar integer ──
+    ;; expo is always negative for BTC/USD; (* expo -1) gives the positive exponent.
+    ;; to-uint is safe here because (* expo -1) > 0 after the asserts! below.
+    (expo-abs      (to-uint (* expo -1)))            ;; e.g. 8
+    (denomination  (pow u10 expo-abs))               ;; e.g. 100000000
+    (normalized-price (/ (to-uint price-int) denomination)) ;; e.g. 106035
+
     (outcome (>= normalized-price (get target-price q)))
   )
     (begin
+      ;; Access control & state guards
       (asserts! (is-keeper) err-unauthorized)
       (asserts! (is-eq (get status q) question-status-open) err-question-closed)
       (asserts! (>= burn-block-height (get close-block q)) err-question-closed)
-      (asserts! (> price-int 0) err-invalid-price)
-      (asserts! (< expo 0) err-invalid-expo)
 
+      ;; Sanity-check the Pyth response
+      (asserts! (> price-int 0)  err-invalid-price) ;; price must be positive
+      (asserts! (< expo 0)       err-invalid-expo)  ;; expo must be negative
+
+      ;; Persist result
       (map-set questions { question-id: question-id }
         (merge q {
           status:        question-status-final,
@@ -768,10 +797,12 @@
 (define-read-only (get-config)
   {
     admin:                   (var-get admin),
-    pyth-oracle-contract:    (var-get pyth-oracle-contract),
-    pyth-storage-contract:   (var-get pyth-storage-contract),
-    pyth-decoder-contract:   (var-get pyth-decoder-contract),
-    wormhole-core-contract:  (var-get wormhole-core-contract),
+    ;; Pyth testnet oracle (hardcoded constants — no runtime config needed)
+    pyth-oracle-v4:          pyth-oracle-v4,
+    pyth-storage-v4:         pyth-storage-v4,
+    pyth-decoder-v3:         pyth-decoder-v3,
+    wormhole-core-v4:        wormhole-core-v4,
+    btc-feed-id:             btc-feed-id,
     max-questions-per-event: max-questions-per-event,
     min-participants:        min-participants,
     accumulated-fees:        (var-get accumulated-fees)
