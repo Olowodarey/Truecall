@@ -4,63 +4,39 @@ export interface ChainEvent {
   id: number;
   title: string;
   creator: string;
-  daoApproved: boolean;
-  closeBlock: number;
-  entryFee: number; // microSTX or sBTC sats
-  useSbtc: boolean;
-  marketCount: number;
-  finalizedMarketCount: number;
-  isActive: boolean;
+  startBlock: number;
+  endBlock: number;
+  entryFee: number; // in microSTX
+  questionCount: number;
+  finalizedQuestionCount: number;
+  participantCount: number;
   totalPool: number;
+  isActive: boolean;
+  feeBooked: boolean;
+  refundMode: boolean;
 }
 
-export interface ChainMarket {
+export interface ChainQuestion {
   id: number;
   eventId: number;
   question: string;
-  targetPrice: number; // BTC price in USD cents
+  targetPrice: number; // BTC price in whole dollars
   closeBlock: number;
-  status: "open" | "pending" | "disputed" | "final";
+  status: "open" | "final";
   oraclePrice: number;
-  proposalBlock: number; // burn block when propose-result was called
   finalOutcome: boolean | null;
 }
 
-export interface ChainPosition {
+export interface ChainAnswer {
   prediction: boolean; // true = YES, false = NO
-  amount: number;
-  claimed: boolean;
+  pointsClaimed: boolean;
 }
 
-export interface ChainStakeInfo {
-  stxBalance: number;
-  stxStakedAt: number;
-  lockedUntil: number;
-}
-
-export interface ChainProposal {
-  id: number;
-  proposer: string;
-  title: string;
-  question: string;
-  targetPrice: number;
-  entryFee: number;
-  blocksOpen: number;
-  useSbtc: boolean;
-  createdAt: number;
-  voteEndBlock: number;
-  status:
-    | "active"
-    | "approved"
-    | "rejected"
-    | "executed"
-    | "cancelled"
-    | "expired";
-  yesVotes: number;
-  noVotes: number;
-  eventId: number;
+export interface ChainParticipant {
+  joined: boolean;
+  refundClaimed: boolean;
 }
 
 // UI helpers
 export type EventFilter = "all" | "open" | "closed" | "settled";
-export type MarketStatus = ChainMarket["status"];
+export type QuestionStatus = ChainQuestion["status"];
