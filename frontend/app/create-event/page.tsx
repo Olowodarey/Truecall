@@ -12,6 +12,7 @@ import {
   addQuestionTxOptions,
   closeEventTxOptions,
   finalizeQuestionTxOptions,
+  pushPythPriceTxOptions,
 } from "@/lib/stacks";
 import type { ChainEvent, ChainQuestion } from "@/lib/types";
 import Header from "@/components/Header";
@@ -190,8 +191,8 @@ export default function CreateEventPage() {
   const PYTH_BTC_FEED_ID =
     "e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43";
 
-  const handleFinalize = async (questionId: number) => {
-    const key = `finalize-${questionId}`;
+  const handlePushPrice = async (questionId: number) => {
+    const key = `push-${questionId}`;
     setPendingAction(key);
     setError(null);
     try {
@@ -230,9 +231,31 @@ export default function CreateEventPage() {
 
       console.log(`[TrueCall] VAA bytes length: ${vaaBytes.length}`);
 
-      // 3. Call finalize-question on-chain (1 uSTX Pyth fee applies)
+      // 3. Call pyth-oracle-v4 on-chain directly (1 uSTX Pyth fee applies)
       await openContractCall({
-        ...finalizeQuestionTxOptions(questionId, vaaBytes),
+        ...pushPythPriceTxOptions(vaaBytes),
+        appDetails: { name: "TrueCall", icon: "/favicon.ico" },
+        onFinish: () => {
+          setPendingAction(null);
+          setSuccess(true);
+          setTimeout(() => setSuccess(false), 5000);
+        },
+        onCancel: () => setPendingAction(null),
+      });
+    } catch (err: any) {
+      setError(err?.message ?? "Failed to push Pyth price");
+      setPendingAction(null);
+    }
+  };
+
+  const handleFinalize = async (questionId: number) => {
+    const key = `finalize-${questionId}`;
+    setPendingAction(key);
+    setError(null);
+    try {
+      // Simply call our truecall-v2 contract to read the price and finalize
+      await openContractCall({
+        ...finalizeQuestionTxOptions(questionId),
         appDetails: { name: "TrueCall", icon: "/favicon.ico" },
         onFinish: async () => {
           setPendingAction(null);
@@ -695,17 +718,28 @@ export default function CreateEventPage() {
                                           )}
                                         </p>
                                       </div>
-                                      <div className="flex gap-2 shrink-0 items-center">
+                                      <div className="flex flex-col gap-2 shrink-0 items-end">
                                         {canFinalize ? (
-                                          <button
-                                            disabled={isFinalizing}
-                                            onClick={() => handleFinalize(question.id)}
-                                            className="text-xs px-3 py-1.5 rounded-md bg-orange-500/10 border border-orange-500/40 text-orange-400 hover:bg-orange-500/20 transition disabled:opacity-50"
-                                          >
-                                            {isFinalizing
-                                              ? "Fetching VAA…"
-                                              : "🔥 Finalize"}
-                                          </button>
+                                          <>
+                                            <button
+                                              disabled={pendingAction === `push-${question.id}`}
+                                              onClick={() => handlePushPrice(question.id)}
+                                              className="text-xs px-3 py-1.5 rounded-md bg-purple-500/10 border border-purple-500/40 text-purple-400 hover:bg-purple-500/20 transition disabled:opacity-50"
+                                            >
+                                              {pendingAction === `push-${question.id}`
+                                                ? "Pushing…"
+                                                : "1. Push Oracle Price"}
+                                            </button>
+                                            <button
+                                              disabled={isFinalizing}
+                                              onClick={() => handleFinalize(question.id)}
+                                              className="text-xs px-3 py-1.5 rounded-md bg-orange-500/10 border border-orange-500/40 text-orange-400 hover:bg-orange-500/20 transition disabled:opacity-50"
+                                            >
+                                              {isFinalizing
+                                                ? "Finalizing…"
+                                                : "2. Finalize Question"}
+                                            </button>
+                                          </>
                                         ) : question.status === "final" ? (
                                           <span className="text-xs text-blue-400/70 italic">Finalized</span>
                                         ) : (

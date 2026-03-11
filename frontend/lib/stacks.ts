@@ -288,21 +288,47 @@ export function answerQuestionTxOptions(questionId: number, prediction: boolean)
   };
 }
 
-export function finalizeQuestionTxOptions(
-  questionId: number,
-  priceFeedBytes: Uint8Array
-) {
+// Step A: push fresh VAA bytes directly to Pyth as the admin wallet (not from a contract)
+// This is required because pyth-governance only allows direct wallet calls, not inter-contract calls.
+export function pushPythPriceTxOptions(priceFeedBytes: Uint8Array) {
+  const PYTH_ORACLE = "STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM";
+  return {
+    contractAddress: PYTH_ORACLE,
+    contractName: "pyth-oracle-v4",
+    functionName: "verify-and-update-price-feeds",
+    functionArgs: [
+      bufferCV(priceFeedBytes),
+      // execution-plan tuple (must match pyth-governance's current plan)
+      {
+        type: 12, // ClarityType.Tuple
+        data: {
+          "pyth-storage-contract": principalCV(`${PYTH_ORACLE}.pyth-storage-v4`),
+          "pyth-decoder-contract": principalCV(`${PYTH_ORACLE}.pyth-pnau-decoder-v3`),
+          "wormhole-core-contract": principalCV(`${PYTH_ORACLE}.wormhole-core-v4`),
+        },
+      },
+    ],
+    network: STACKS_TESTNET,
+    anchorMode: AnchorMode.Any,
+    postConditionMode: PostConditionMode.Allow, // allows 1 uSTX Pyth fee
+    postConditions: [],
+  };
+}
+
+// Step B: read already-stored Pyth price and finalise the question
+export function finalizeQuestionTxOptions(questionId: number) {
   return {
     contractAddress: pmAddr,
     contractName: pmName,
     functionName: "finalize-question",
-    functionArgs: [uintCV(questionId), bufferCV(priceFeedBytes)],
+    functionArgs: [uintCV(questionId)],
     network: STACKS_TESTNET,
     anchorMode: AnchorMode.Any,
-    postConditionMode: PostConditionMode.Allow, // Allows 1 uSTX fee for Pyth
+    postConditionMode: PostConditionMode.Deny,
     postConditions: [],
   };
 }
+
 
 export function claimPointsTxOptions(questionId: number) {
   return {

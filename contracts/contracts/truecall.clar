@@ -472,83 +472,78 @@
 ;; -------------------------------------------------------
 ;; FINALIZE QUESTION WITH LIVE PYTH ORACLE (TESTNET)
 ;;
-;; 1. Keeper fetches a fresh VAA from Hermes off-chain and passes it as price-feed-bytes.
-;; 2. verify-and-update-price-feeds validates Wormhole signatures, stores price.
-;;    The Pyth contract charges 1 uSTX from tx-sender for this.
-;; 3. get-price reads the freshly stored BTC/USD price.
-;; 4. Price normalisation: Pyth returns e.g. price=10603557773590 expo=-8
-;;    denomination = 10^8 = 100000000
-;;    normalized   = 10603557773590 / 100000000 = 106035  (whole-dollar)
-;; 5. outcome = (normalized-price >= target-price)
+;; TWO-STEP PROCESS:
+;;
+;; Step A (admin wallet, separate tx):
+;;   Call pyth-oracle-v4.verify-and-update-price-feeds(vaa-bytes, execution-plan)
+;;   This pushes the signed VAA into Pyth storage.
+;;   Must be done FIRST by the admin wallet directly.
+;;
+;; Step B (this function):
+;;   Reads the price already stored in Pyth storage via get-price.
+;;   No VAA bytes needed here.
+;;
+;; Price normalisation: Pyth returns e.g. price=10603557773590 expo=-8
+;;   denomination = 10^8 = 100000000
+;;   normalized   = 10603557773590 / 100000000 = 106035  (whole-dollar)
+;; outcome = (normalized-price >= target-price)
 ;; -------------------------------------------------------
 
-(define-public (finalize-question
-  (question-id uint)
-  (price-feed-bytes (buff 8192))
-)
+(define-public (finalize-question (question-id uint))
   (let (
     (q (unwrap! (map-get? questions { question-id: question-id }) err-question-not-found))
     (event (unwrap! (map-get? events { event-id: (get event-id q) }) err-event-not-found))
-
-    ;; Step 1 -- submit VAA, validate and store fresh price
-    (update-status
-      (try!
-        (contract-call?
-          'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.pyth-oracle-v4
-          verify-and-update-price-feeds
-          price-feed-bytes
-          {
-            pyth-storage-contract:  pyth-storage-v4,
-            pyth-decoder-contract:  pyth-decoder-v3,
-            wormhole-core-contract: wormhole-core-v4
-          }
-        )
-      )
-    )
-
-    ;; Step 2 -- read the freshly stored BTC/USD price
-    (price-data
-      (try!
-        (contract-call?
-          'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.pyth-oracle-v4
-          get-price
-          btc-feed-id
-          'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.pyth-storage-v4
-        )
-      )
-    )
-
-    (price-int (get price price-data))
-    (expo      (get expo  price-data))
-
-    ;; Step 3 -- normalise fixed-point to whole-dollar integer
-    ;; expo is negative (e.g. -8); (* expo -1) gives the positive exponent value
-    (expo-abs         (to-uint (* expo -1)))
-    (denomination     (pow u10 expo-abs))
-    (normalized-price (/ (to-uint price-int) denomination))
-
-    (outcome (>= normalized-price (get target-price q)))
   )
     (begin
+      ;; Gate checks FIRST (cheap)
       (asserts! (is-keeper) err-unauthorized)
       (asserts! (is-eq (get status q) question-status-open) err-question-closed)
       (asserts! (>= burn-block-height (get close-block q)) err-question-closed)
-      (asserts! (> price-int 0) err-invalid-price)
-      (asserts! (< expo 0)     err-invalid-expo)
 
-      (map-set questions { question-id: question-id }
-        (merge q {
-          status:        question-status-final,
-          oracle-price:  normalized-price,
-          final-outcome: (some outcome)
-        })
+      ;; Read the BTC/USD price already stored in Pyth by the admin's prior tx
+      (let (
+        (price-data
+          (try!
+            (contract-call?
+              'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.pyth-oracle-v4
+              get-price
+              btc-feed-id
+              'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.pyth-storage-v4
+            )
+          )
+        )
+        (price-int (get price price-data))
+        (expo      (get expo  price-data))
       )
-      (map-set events { event-id: (get event-id q) }
-        (merge event {
-          finalized-question-count: (+ (get finalized-question-count event) u1)
-        })
+        (begin
+          (asserts! (> price-int 0) err-invalid-price)
+          (asserts! (< expo 0)     err-invalid-expo)
+
+          ;; Normalise fixed-point to whole-dollar integer
+          (let (
+            (expo-abs         (to-uint (* expo -1)))
+            (denomination     (pow u10 expo-abs))
+            (normalized-price (/ (to-uint price-int) denomination))
+            (outcome          (>= normalized-price (get target-price q)))
+          )
+            (begin
+              (map-set questions { question-id: question-id }
+                (merge q {
+                  status:        question-status-final,
+                  oracle-price:  normalized-price,
+                  final-outcome: (some outcome)
+                })
+              )
+              (map-set events { event-id: (get event-id q) }
+                (merge event {
+                  finalized-question-count: (+ (get finalized-question-count event) u1)
+                })
+              )
+              (ok outcome)
+            )
+          )
+        )
       )
-      (ok outcome)
     )
   )
 )
