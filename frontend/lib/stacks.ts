@@ -27,6 +27,7 @@ import type {
   ChainQuestion,
   ChainAnswer,
   ChainParticipant,
+  LeaderboardEntry,
 } from "./types";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -171,6 +172,27 @@ export async function getUserPoints(
     principalCV(user),
   ]);
   return parseUint(res);
+}
+
+export async function getLeaderboard(eventId: number): Promise<LeaderboardEntry[]> {
+  const res = await readOnly(pmAddr, pmName, "get-leaderboard", [uintCV(eventId)]);
+  const t = parseOptionalTuple(res);
+  if (!t) return [];
+
+  const ranks = ["rank1", "rank2", "rank3", "rank4", "rank5"];
+  const leaderboard: LeaderboardEntry[] = [];
+
+  for (const r of ranks) {
+    if (t[r] && t[r].type === ClarityType.OptionalSome) {
+      const entryTuple = t[r].value.data;
+      leaderboard.push({
+        user: parsePrincipal(entryTuple.user),
+        points: parseUint(entryTuple.points),
+      });
+    }
+  }
+
+  return leaderboard;
 }
 
 // ─── Writes ──────────────────────────────────────────────────────────────────

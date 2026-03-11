@@ -40,3 +40,8 @@ export interface ChainParticipant {
 // UI helpers
 export type EventFilter = "all" | "open" | "closed" | "settled";
 export type QuestionStatus = ChainQuestion["status"];
+
+export interface LeaderboardEntry {
+  user: string;
+  points: number;
+}

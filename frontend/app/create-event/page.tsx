@@ -125,17 +125,46 @@ export default function CreateEventPage() {
     setError(null);
 
     try {
+      const event = events.find((e) => e.id === selectedEventId);
+      if (!event) {
+        setError("Selected event not found in current list.");
+        setCreating(false);
+        return;
+      }
+
       const resp = await fetch(`${HIRO_API}/v2/info`);
       const info = await resp.json();
       const currentBlock = info.burn_block_height ?? 0;
+      
+      if (currentBlock >= event.endBlock) {
+        setError(`Event #${event.id} has already ended at block ${event.endBlock}.`);
+        setCreating(false);
+        return;
+      }
+
       // 1 Bitcoin block = ~10 minutes, so 6 blocks per hour
       const blocksToAdd = Math.ceil(questionDurationHours * 6);
+      const maxAllowedBlocks = event.endBlock - currentBlock;
+      
+      if (blocksToAdd > maxAllowedBlocks) {
+        const maxHours = Math.floor(maxAllowedBlocks / 6);
+        setError(`Question duration exceeds the event's remaining time. Max allowed is ${maxHours} hour(s).`);
+        setCreating(false);
+        return;
+      }
+      
       const closeBlock = currentBlock + blocksToAdd;
+      
+      // Ensure the string is strictly ASCII to prevent contract errors
+      const asciiTrimmedQuestion = marketQuestion
+        .replace(/[^\x00-\x7F]/g, "") // Remove non-ASCII characters like special symbols or emojis
+        .trim()
+        .slice(0, 128); // 128-byte limit
 
       await openContractCall({
         ...addQuestionTxOptions(
           selectedEventId,
-          marketQuestion.trim().slice(0, 128),
+          asciiTrimmedQuestion,
           marketTargetPrice,
           closeBlock
         ),

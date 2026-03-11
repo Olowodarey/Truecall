@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import type { ChainEvent, ChainQuestion, ChainParticipant } from "@/lib/types";
 import { claimPointsTxOptions, claimWinningsTxOptions, joinEventTxOptions, getParticipant } from "@/lib/stacks";
 import { openContractCall } from "@stacks/connect";
@@ -44,6 +45,8 @@ export default function EventCard({
 
   const setBusy = (key: string, v: boolean) =>
     setPending((p) => ({ ...p, [key]: v }));
+
+  const router = useRouter();
 
   const handleJoin = async () => {
     if (!userAddress) return;
@@ -101,120 +104,127 @@ export default function EventCard({
   };
 
   return (
-    <div className="bg-gradient-to-br from-gray-800/50 to-gray-900/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700/50 hover:border-orange-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-orange-500/10">
-      <div className="flex items-start justify-between mb-4">
-        <h3 className="text-xl font-bold text-white truncate flex-1 pr-2">
-          {event.title}
-        </h3>
-        <div className="flex flex-col items-end gap-1 shrink-0">
-          <span
-            className={`px-3 py-1 rounded-full text-xs font-semibold border ${statusColor}`}
-          >
-            {statusLabel}
-          </span>
+    <div className="bg-gradient-to-br from-gray-800/50 to-gray-900/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700/50 hover:border-orange-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-orange-500/10 flex flex-col justify-between">
+      <div>
+        <div className="flex items-start justify-between mb-4">
+          <h3 className="text-xl font-bold text-white truncate flex-1 pr-2">
+            {event.title}
+          </h3>
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            <span
+              className={`px-3 py-1 rounded-full text-xs font-semibold border ${statusColor}`}
+            >
+              {statusLabel}
+            </span>
+          </div>
         </div>
-      </div>
 
-      <div className="grid grid-cols-2 gap-3 mb-5 text-sm">
-        <div className="bg-gray-700/30 rounded-lg p-3">
-          <p className="text-gray-400 text-xs mb-1">Entry Fee</p>
-          <p className="text-white font-semibold">{feeLabel}</p>
+        <div className="grid grid-cols-2 gap-3 mb-5 text-sm">
+          <div className="bg-gray-700/30 rounded-lg p-3">
+            <p className="text-gray-400 text-xs mb-1">Entry Fee</p>
+            <p className="text-white font-semibold">{feeLabel}</p>
+          </div>
+          <div className="bg-gray-700/30 rounded-lg p-3">
+            <p className="text-gray-400 text-xs mb-1">Prize Pool</p>
+            <p className="text-orange-400 font-semibold">{poolStx} STX</p>
+          </div>
+          <div className="bg-gray-700/30 rounded-lg p-3">
+            <p className="text-gray-400 text-xs mb-1">Questions</p>
+            <p className="text-white font-semibold">
+              {event.finalizedQuestionCount}/{event.questionCount} finalized
+            </p>
+          </div>
+          <div className="bg-gray-700/30 rounded-lg p-3">
+            <p className="text-gray-400 text-xs mb-1">Ends At Block</p>
+            <p className="text-white font-semibold">#{event.endBlock}</p>
+          </div>
         </div>
-        <div className="bg-gray-700/30 rounded-lg p-3">
-          <p className="text-gray-400 text-xs mb-1">Prize Pool</p>
-          <p className="text-orange-400 font-semibold">{poolStx} STX</p>
-        </div>
-        <div className="bg-gray-700/30 rounded-lg p-3">
-          <p className="text-gray-400 text-xs mb-1">Questions</p>
-          <p className="text-white font-semibold">
-            {event.finalizedQuestionCount}/{event.questionCount} finalized
-          </p>
-        </div>
-        <div className="bg-gray-700/30 rounded-lg p-3">
-          <p className="text-gray-400 text-xs mb-1">Ends At Block</p>
-          <p className="text-white font-semibold">#{event.endBlock}</p>
-        </div>
-      </div>
 
-      {questions && questions.length > 0 && (
-        <div className="mb-5">
-          <h4 className="font-semibold text-orange-400 text-sm mb-2">
-            Questions
-          </h4>
-          <ul className="space-y-2">
-            {questions.map((q) => {
-              const isQuestionOpen = q.status === "open";
-              return (
-                <li key={q.id}>
-                  <div
-                    className={`p-3 rounded-lg text-sm border transition-all ${
-                      isQuestionOpen && isOpen
-                        ? "border-orange-500/40 bg-orange-500/5"
-                        : "border-gray-700/50 bg-gray-800/60"
-                    }`}
-                  >
-                    <p className="font-medium text-white">{q.question}</p>
-                    <div className="flex justify-between items-center mt-2 text-gray-400">
-                      <span>Target: ${q.targetPrice.toLocaleString()}</span>
-                      <span
-                        className={`capitalize px-2 py-0.5 rounded-full border text-xs ${
-                          q.status === "open"
-                            ? "bg-green-500/10 border-green-500/30 text-green-400"
-                            : "bg-blue-500/10 border-blue-500/30 text-blue-400"
-                        }`}
-                      >
-                        {q.status}
-                      </span>
+        {questions && questions.length > 0 && (
+          <div className="mb-5">
+            <h4 className="font-semibold text-orange-400 text-sm mb-2">
+              Questions
+            </h4>
+            <ul className="space-y-2">
+              {questions.map((q) => {
+                const isQuestionOpen = q.status === "open";
+                return (
+                  <li key={q.id}>
+                    <div
+                      className={`p-3 rounded-lg text-sm border transition-all ${
+                        isQuestionOpen && isOpen
+                          ? "border-orange-500/40 bg-orange-500/5"
+                          : "border-gray-700/50 bg-gray-800/60"
+                      }`}
+                    >
+                      <p className="font-medium text-white">{q.question}</p>
+                      <div className="flex justify-between items-center mt-2 text-gray-400">
+                        <span>Target: ${q.targetPrice.toLocaleString()}</span>
+                        <span
+                          className={`capitalize px-2 py-0.5 rounded-full border text-xs ${
+                            q.status === "open"
+                              ? "bg-green-500/10 border-green-500/30 text-green-400"
+                              : "bg-blue-500/10 border-blue-500/30 text-blue-400"
+                          }`}
+                        >
+                          {q.status}
+                        </span>
+                      </div>
+                      {getQuestionActions(q)}
                     </div>
-                    {getQuestionActions(q)}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+      </div>
 
-      {isOpen && userAddress && !participant?.joined ? (
-        <button
-          id={`join-event-${event.id}`}
-          disabled={!!pending[`join-${event.id}`]}
-          onClick={handleJoin}
-          className="w-full bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300 disabled:opacity-50"
-        >
-          {pending[`join-${event.id}`] ? "Waiting..." : `Join Event (${feeLabel})`}
-        </button>
-      ) : isOpen && userAddress && participant?.joined ? (
-         <button
-          onClick={() => onJoinEvent(event)}
-          className="w-full bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 hover:shadow-lg hover:shadow-orange-500/50"
-        >
-          Make Predictions →
-        </button>
-      ) : allFinalized && userAddress ? (
-        <button
-          id={`claim-winnings-${event.id}`}
-          disabled={!!pending[`winnings-${event.id}`]}
-          onClick={handleClaimWinnings}
-          className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold py-3 px-6 rounded-lg transition-all disabled:opacity-50"
-        >
-          {pending[`winnings-${event.id}`]
-            ? "Waiting for wallet…"
-            : `🎉 Claim Winnings (STX)`}
-        </button>
-      ) : allFinalized ? (
-        <div className="w-full bg-green-500/10 text-green-400 font-semibold py-3 px-6 rounded-lg text-center border border-green-500/30">
-          Event Settled ✓
-        </div>
-      ) : !isOpen ? (
-        <div className="w-full bg-gray-700/50 text-gray-400 font-semibold py-3 px-6 rounded-lg text-center">
-          Awaiting Finalization
-        </div>
-      ) : (
-        <div className="w-full bg-gray-700/50 text-gray-400 font-semibold py-3 px-6 rounded-lg text-center">
-          Connect Wallet to Participate
-        </div>
-      )}
+      <div className="mt-4">
+        {isOpen && userAddress && !participant?.joined ? (
+          <button
+            id={`join-event-${event.id}`}
+            disabled={!!pending[`join-${event.id}`]}
+            onClick={handleJoin}
+            className="w-full bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300 disabled:opacity-50"
+          >
+            {pending[`join-${event.id}`] ? "Waiting..." : `Join Event (${feeLabel})`}
+          </button>
+        ) : isOpen && userAddress && participant?.joined ? (
+           <button
+            onClick={() => router.push(`/events/${event.id}`)}
+            className="w-full bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 hover:shadow-lg hover:shadow-orange-500/50"
+          >
+            Make Predictions →
+          </button>
+        ) : allFinalized && userAddress ? (
+          <button
+            id={`claim-winnings-${event.id}`}
+            disabled={!!pending[`winnings-${event.id}`]}
+            onClick={handleClaimWinnings}
+            className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold py-3 px-6 rounded-lg transition-all disabled:opacity-50"
+          >
+            {pending[`winnings-${event.id}`]
+              ? "Waiting for wallet…"
+              : `🎉 Claim Winnings (STX)`}
+          </button>
+        ) : allFinalized ? (
+          <div className="w-full bg-green-500/10 text-green-400 font-semibold py-3 px-6 rounded-lg text-center border border-green-500/30">
+            Event Settled ✓
+          </div>
+        ) : !isOpen ? (
+           <button
+             onClick={() => router.push(`/events/${event.id}`)}
+             className="w-full bg-gray-700/50 text-white font-semibold py-3 px-6 rounded-lg transition hover:bg-gray-600"
+           >
+              View Predictions
+           </button>
+        ) : (
+          <div className="w-full bg-gray-700/50 text-gray-400 font-semibold py-3 px-6 rounded-lg text-center">
+            Connect Wallet to Participate
+          </div>
+        )}
+      </div>
     </div>
   );
 }

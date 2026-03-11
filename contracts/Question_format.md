@@ -33,6 +33,8 @@ All TrueCall questions should use one of these two formats:
 ### Format B
 **Will BTC be below $[PRICE] on [DATE], at [TIME] UTC?**
 
+Will BTC be below $100,000 on 11/05/2026, at 16:00 UTC?
+
 These are the official supported question templates for TrueCall v1.
 
 ---

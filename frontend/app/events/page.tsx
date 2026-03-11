@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { getAllEvents, getQuestionsForEvent } from "@/lib/stacks";
 import type { ChainEvent, EventFilter, ChainQuestion } from "@/lib/types";
 import EventCard from "@/components/EventCard";
-import PredictionModal from "@/components/PredictionModal";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { useWallet } from "@/contexts/WalletContext";
@@ -16,8 +15,6 @@ export default function EventsPage() {
   const [questions, setQuestions] = useState<Record<number, ChainQuestion[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedEvent, setSelectedEvent] = useState<ChainEvent | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [filter, setFilter] = useState<EventFilter>("all");
   const [currentBlock, setCurrentBlock] = useState<number>(0);
 
@@ -55,8 +52,7 @@ export default function EventsPage() {
   };
 
   const handleJoinEvent = (event: ChainEvent) => {
-    setSelectedEvent(event);
-    setIsModalOpen(true);
+    // Left empty since navigation is handled in EventCard directly via router
   };
 
   const filteredEvents = events.filter((e) => {
@@ -197,14 +193,6 @@ export default function EventsPage() {
         <Footer />
       </div>
 
-      <PredictionModal
-        event={selectedEvent}
-        isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setSelectedEvent(null);
-        }}
-      />
     </div>
   );
 }
