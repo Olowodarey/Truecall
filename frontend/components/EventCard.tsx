@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { ChainEvent, ChainQuestion, ChainParticipant } from "@/lib/types";
 import { claimPointsTxOptions, claimWinningsTxOptions, joinEventTxOptions, getParticipant } from "@/lib/stacks";
 import { openContractCall } from "@stacks/connect";
+import { formatEstimatedTime } from "@/lib/utils";
 
 interface EventCardProps {
   event: ChainEvent;
@@ -135,8 +136,8 @@ export default function EventCard({
             </p>
           </div>
           <div className="bg-gray-700/30 rounded-lg p-3">
-            <p className="text-gray-400 text-xs mb-1">Ends At Block</p>
-            <p className="text-white font-semibold">#{event.endBlock}</p>
+            <p className="text-gray-400 text-xs mb-1">Ends At</p>
+            <p className="text-white font-semibold">{formatEstimatedTime(event.endBlock, currentBlock)}</p>
           </div>
         </div>
 

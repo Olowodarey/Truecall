@@ -22,6 +22,7 @@ import {
 } from "@stacks/transactions";
 import { STACKS_TESTNET } from "@stacks/network";
 import { CONTRACTS } from "./contracts";
+import { withCache, clearCache } from "./cache";
 import type {
   ChainEvent,
   ChainQuestion,
@@ -58,8 +59,21 @@ function parseTuple(cv: ClarityValue | any): Record<string, any> {
 function parseOptionalTuple(
   cv: ClarityValue | any
 ): Record<string, any> | null {
+  if (!cv) return null;
   if (cv.type === ClarityType.OptionalNone) return null;
-  const inner = cv.value ?? cv;
+  if (cv.type === ClarityType.ResponseErr) return null;
+  
+  let inner = cv;
+  if (inner.type === ClarityType.ResponseOk) {
+    inner = inner.value;
+  }
+  
+  if (inner.type === ClarityType.OptionalNone) return null;
+  
+  if (inner.type === ClarityType.OptionalSome) {
+    inner = inner.value;
+  }
+  
   return parseTuple(inner);
 }
 

@@ -8,6 +8,8 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { HIRO_API } from "@/lib/contracts";
 
+import { formatEstimatedTime } from "@/lib/utils";
+
 import {
   getEvent,
   getQuestionsForEvent,
@@ -211,13 +213,13 @@ export default function EventPredictionPage() {
             </div>
             <div className="bg-gray-900/50 rounded-xl p-4 border border-gray-700/30">
               <p className="text-gray-400 text-xs mb-1 uppercase font-semibold">
-                Ends at Block
+                Ends At
               </p>
               <p className="text-white font-medium text-lg">
-                #{event.endBlock}
+                {formatEstimatedTime(event.endBlock, currentBlock)}
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                {Math.max(0, event.endBlock - currentBlock)} blocks left
+                Block #{event.endBlock}
               </p>
             </div>
           </div>
@@ -314,12 +316,7 @@ export default function EventPredictionPage() {
                           <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
-                          Closes #{q.closeBlock}{" "}
-                          {q.status === "open" && (
-                            <span className={blocksLeft < 6 ? "text-red-400" : "text-gray-500"}>
-                               ({blocksLeft} blocks left)
-                            </span>
-                          )}
+                          Closes {formatEstimatedTime(q.closeBlock, currentBlock)}
                         </span>
                       </div>
 
