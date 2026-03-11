@@ -11,6 +11,7 @@ import {
   createEventTxOptions,
   addQuestionTxOptions,
   closeEventTxOptions,
+  finalizeQuestionTxOptions,
 } from "@/lib/stacks";
 import type { ChainEvent, ChainQuestion } from "@/lib/types";
 import Header from "@/components/Header";
@@ -33,14 +34,14 @@ export default function CreateEventPage() {
 
   // Form state - Create Event
   const [title, setTitle] = useState("");
-  const [durationHours, setDurationHours] = useState(24); // default 24 hours
+  const [durationMinutes, setDurationMinutes] = useState(1440); // default 24 hours (1440 minutes)
   const [entryFeeStx, setEntryFeeStx] = useState(1); // STX
 
   // Form state - Add Question
   const [selectedEventId, setSelectedEventId] = useState<number>(0);
   const [marketQuestion, setMarketQuestion] = useState("");
   const [marketTargetPrice, setMarketTargetPrice] = useState<number>(100000); // USD
-  const [questionDurationHours, setQuestionDurationHours] = useState(24);
+  const [questionDurationMinutes, setQuestionDurationMinutes] = useState(1440);
 
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +65,7 @@ export default function CreateEventPage() {
 
       fetch(`${HIRO_API}/v2/info`)
         .then((r) => r.json())
-        .then((info) => setCurrentBlock(info.stacks_tip_height ?? 0))
+        .then((info) => setCurrentBlock(info.burn_block_height ?? 0))
         .catch(console.error);
     }
   }, [isConnected, userAddress]);
@@ -85,8 +86,8 @@ export default function CreateEventPage() {
       const info = await resp.json();
       const currentBlock = info.burn_block_height ?? 0;
       const startBlock = currentBlock;
-      // 1 Bitcoin block = ~10 minutes, so 6 blocks per hour
-      const blocksToAdd = Math.ceil(durationHours * 6);
+      // 1 Bitcoin block = ~10 minutes
+      const blocksToAdd = Math.ceil(durationMinutes / 10);
       const endBlock = currentBlock + blocksToAdd;
       const entryFeeMicro = Math.round(entryFeeStx * 1_000_000);
 
@@ -142,13 +143,13 @@ export default function CreateEventPage() {
         return;
       }
 
-      // 1 Bitcoin block = ~10 minutes, so 6 blocks per hour
-      const blocksToAdd = Math.ceil(questionDurationHours * 6);
+      // 1 Bitcoin block = ~10 minutes
+      const blocksToAdd = Math.ceil(questionDurationMinutes / 10);
       const maxAllowedBlocks = event.endBlock - currentBlock;
       
       if (blocksToAdd > maxAllowedBlocks) {
-        const maxHours = Math.floor(maxAllowedBlocks / 6);
-        setError(`Question duration exceeds the event's remaining time. Max allowed is ${maxHours} hour(s).`);
+        const maxMins = maxAllowedBlocks * 10;
+        setError(`Question duration exceeds the event's remaining time. Max allowed is ${maxMins} minute(s).`);
         setCreating(false);
         return;
       }
@@ -182,6 +183,75 @@ export default function CreateEventPage() {
     } catch (err: any) {
       setError(err?.message ?? "Failed to add question");
       setCreating(false);
+    }
+  };
+
+  // BTC/USD price feed id on Pyth
+  const PYTH_BTC_FEED_ID =
+    "e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43";
+
+  const handleFinalize = async (questionId: number) => {
+    const key = `finalize-${questionId}`;
+    setPendingAction(key);
+    setError(null);
+    try {
+      // 1. Fetch a fresh signed price update (PNAU) from Pyth Hermes v2
+      //    The v2 endpoint returns binary data[] in base64 encoding.
+      const hermesUrl =
+        `https://hermes.pyth.network/v2/updates/price/latest` +
+        `?ids[]=${PYTH_BTC_FEED_ID}&encoding=base64`;
+      const hermesRes = await fetch(hermesUrl);
+      if (!hermesRes.ok)
+        throw new Error(`Hermes API error: ${hermesRes.status} ${hermesRes.statusText}`);
+      const hermesData = await hermesRes.json();
+
+      // v2 response: { binary: { encoding: "base64", data: ["..."] }, parsed: [...] }
+      const b64Raw: string | undefined = hermesData?.binary?.data?.[0];
+      if (!b64Raw) throw new Error("No price update data returned from Hermes.");
+
+      // Log the live BTC price so admin can see it in the console
+      const parsedPrice = hermesData?.parsed?.[0]?.price;
+      if (parsedPrice) {
+        const usd = Number(parsedPrice.price) / Math.pow(10, -parsedPrice.expo);
+        console.log(`[TrueCall] Live BTC price from Pyth: $${usd.toFixed(2)}`);
+      }
+
+      // 2. Decode base64 → Uint8Array
+      //    Hermes returns URL-safe base64 (uses - and _ instead of + and /).
+      //    Standard atob() ONLY handles standard base64, so we must convert first.
+      const b64Standard = b64Raw
+        .replace(/-/g, "+")
+        .replace(/_/g, "/");
+      const binaryStr = atob(b64Standard);
+      const vaaBytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) {
+        vaaBytes[i] = binaryStr.charCodeAt(i);
+      }
+
+      console.log(`[TrueCall] VAA bytes length: ${vaaBytes.length}`);
+
+      // 3. Call finalize-question on-chain (1 uSTX Pyth fee applies)
+      await openContractCall({
+        ...finalizeQuestionTxOptions(questionId, vaaBytes),
+        appDetails: { name: "TrueCall", icon: "/favicon.ico" },
+        onFinish: async () => {
+          setPendingAction(null);
+          // Refresh questions + events
+          const allQuestions: Record<number, ChainQuestion[]> = { ...eventQuestions };
+          await Promise.all(
+            events.map(async (ev) => {
+              allQuestions[ev.id] = await getQuestionsForEvent(ev.id);
+            })
+          );
+          setEventQuestions({ ...allQuestions });
+          const refreshed = await getAllEvents();
+          setEvents(refreshed);
+        },
+        onCancel: () => setPendingAction(null),
+      });
+    } catch (err: any) {
+      setError(err?.message ?? "Failed to finalize question");
+      setPendingAction(null);
     }
   };
 
@@ -320,17 +390,17 @@ export default function CreateEventPage() {
 
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Duration (Hours)
+                        Duration (Minutes)
                       </label>
                       <input
                         type="number"
-                        value={durationHours}
+                        value={durationMinutes}
                         onChange={(e) =>
-                          setDurationHours(Number(e.target.value))
+                          setDurationMinutes(Number(e.target.value))
                         }
                         disabled={creating}
-                        min={1}
-                        max={52560}
+                        min={0}
+                        max={3153600}
                         className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
                       />
                     </div>
@@ -409,45 +479,70 @@ export default function CreateEventPage() {
                         disabled={creating}
                         maxLength={128}
                         className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
-                        placeholder="e.g., Will BTC be above $100k by close?"
+                        placeholder="e.g., Will BTC be at or above $100,000 when this question is resolved?"
                       />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Target BTC Price (Whole USD)
-                      </label>
-                      <input
-                        type="number"
-                        value={marketTargetPrice}
-                        onChange={(e) =>
-                          setMarketTargetPrice(Number(e.target.value))
-                        }
-                        disabled={creating}
-                        min={0}
-                        step={1}
-                        className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        Example: 100000 = $100,000
+                      <p className="text-xs text-orange-400/80 mt-2">
+                        <strong>Standard Format:</strong> Will BTC be at or above $[Target] when this question is resolved?
                       </p>
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Question Duration (Hours)
-                      </label>
-                      <input
-                        type="number"
-                        value={questionDurationHours}
-                        onChange={(e) =>
-                          setQuestionDurationHours(Number(e.target.value))
-                        }
-                        disabled={creating}
-                        min={1}
-                        max={52560}
-                        className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
-                      />
+                    {/* Target Price + Close Time — inline side-by-side row */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Target Price (USD)
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-medium">$</span>
+                          <input
+                            type="number"
+                            value={marketTargetPrice}
+                            onChange={(e) =>
+                              setMarketTargetPrice(Number(e.target.value))
+                            }
+                            disabled={creating}
+                            min={0}
+                            step={1}
+                            className="w-full pl-7 pr-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
+                            placeholder="100000"
+                          />
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          e.g. 100000 = $100,000
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Close Time (Minutes)
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            value={questionDurationMinutes}
+                            onChange={(e) =>
+                              setQuestionDurationMinutes(Number(e.target.value))
+                            }
+                            disabled={creating}
+                            min={10}
+                            max={3153600}
+                            step={10}
+                            className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 pr-16"
+                            placeholder="1440"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs pointer-events-none">
+                            min
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          ≈ {Math.ceil(questionDurationMinutes / 10)} BTC block{Math.ceil(questionDurationMinutes / 10) !== 1 ? "s" : ""} from now
+                          {currentBlock > 0 && (
+                            <span className="text-orange-400/70 ml-1">
+                              (close block ~{currentBlock + Math.ceil(questionDurationMinutes / 10)})
+                            </span>
+                          )}
+                        </p>
+                      </div>
                     </div>
 
                     {error && (
@@ -548,33 +643,78 @@ export default function CreateEventPage() {
                               </p>
                             ) : (
                               <ul className="space-y-2">
-                                {mks.map((question) => (
-                                  <li
-                                    key={question.id}
-                                    className="flex items-center justify-between bg-gray-900/50 rounded-lg px-3 py-2 text-sm gap-3"
-                                  >
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-white truncate">
-                                        {question.question}
-                                      </p>
-                                      <p className="text-xs text-gray-400 mt-0.5">
-                                        <span
-                                          className={
-                                            question.status === "open"
-                                              ? "text-green-400"
-                                              : "text-blue-400"
-                                          }
-                                        >
-                                          {question.status}
-                                        </span>
-                                        {" · "}Close #{question.closeBlock}
-                                      </p>
-                                    </div>
-                                    <div className="flex gap-2 shrink-0">
-                                      <span className="text-xs text-gray-500 italic">VAA required to finalize</span>
-                                    </div>
-                                  </li>
-                                ))}
+                                {mks.map((question) => {
+                                  const isPastClose =
+                                    currentBlock > 0 &&
+                                    currentBlock >= question.closeBlock;
+                                  const canFinalize =
+                                    question.status === "open" && isPastClose;
+                                  const isFinalizing =
+                                    pendingAction === `finalize-${question.id}`;
+
+                                  return (
+                                    <li
+                                      key={question.id}
+                                      className="flex items-start justify-between bg-gray-900/50 rounded-lg px-3 py-3 text-sm gap-3"
+                                    >
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-white truncate font-medium">
+                                          {question.question}
+                                        </p>
+                                        <p className="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-x-2">
+                                          <span
+                                            className={
+                                              question.status === "open"
+                                                ? canFinalize
+                                                  ? "text-yellow-400"
+                                                  : "text-green-400"
+                                                : "text-blue-400"
+                                            }
+                                          >
+                                            {question.status === "open"
+                                              ? canFinalize
+                                                ? "⏰ Ready to Finalize"
+                                                : "🟢 Open"
+                                              : "✅ Final"}
+                                          </span>
+                                          <span>Close #{question.closeBlock}</span>
+                                          {question.status === "final" && question.oraclePrice > 0 && (
+                                            <span className="text-orange-400">
+                                              Oracle: ${question.oraclePrice.toLocaleString()}
+                                              {" · "}
+                                              <span
+                                                className={
+                                                  question.finalOutcome
+                                                    ? "text-green-400"
+                                                    : "text-red-400"
+                                                }
+                                              >
+                                                {question.finalOutcome ? "YES ✓" : "NO ✗"}
+                                              </span>
+                                            </span>
+                                          )}
+                                        </p>
+                                      </div>
+                                      <div className="flex gap-2 shrink-0 items-center">
+                                        {canFinalize ? (
+                                          <button
+                                            disabled={isFinalizing}
+                                            onClick={() => handleFinalize(question.id)}
+                                            className="text-xs px-3 py-1.5 rounded-md bg-orange-500/10 border border-orange-500/40 text-orange-400 hover:bg-orange-500/20 transition disabled:opacity-50"
+                                          >
+                                            {isFinalizing
+                                              ? "Fetching VAA…"
+                                              : "🔥 Finalize"}
+                                          </button>
+                                        ) : question.status === "final" ? (
+                                          <span className="text-xs text-blue-400/70 italic">Finalized</span>
+                                        ) : (
+                                          <span className="text-xs text-gray-500 italic">Awaiting close</span>
+                                        )}
+                                      </div>
+                                    </li>
+                                  );
+                                })}
                               </ul>
                             )}
                           </div>

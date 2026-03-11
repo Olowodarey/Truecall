@@ -1,13 +1,40 @@
-```markdown
 # TrueCall Question Format Rulebook
 
 ## Overview
 
 TrueCall questions must be written in a format that can be resolved clearly, fairly, and consistently using oracle price data.
 
-Because TrueCall resolves questions using the **BTC price from the approved oracle at the scheduled question close time**, every question must follow a strict and objective structure.
+Every question is resolved by the **admin calling `finalize-question`** after the prediction window closes. At that moment, the contract fetches the **live BTC/USD price from the Pyth oracle** and compares it against the configured `target-price`.
 
-This rulebook defines the approved format for all official and private TrueCall questions.
+This rulebook defines the approved format for all TrueCall questions.
+
+---
+
+## ⏱ How the Price Snapshot Timing Works
+
+This is critical to understand before writing any question.
+
+```
+Admin creates question
+  → sets close-block (Bitcoin burn block = prediction deadline)
+
+Users predict YES or NO
+  → allowed while burn-block-height < close-block
+
+close-block is reached  (prediction window ends)
+
+Admin calls finalize-question
+  → Pyth VAA is fetched from Hermes AT THIS MOMENT
+  → The contract reads the live BTC price AT THIS MOMENT
+  → Outcome is determined
+```
+
+**The price snapshot is taken when the admin finalizes — not at the exact close block.**
+
+The `close-block` only controls **when predictions stop being accepted**. The actual oracle price is read when the admin triggers finalization, which is at or after the close block.
+
+> **How close is it in practice?**  
+> Admins should finalize as soon as possible after the close block. On testnet, 1 Bitcoin block ≈ 10 minutes. If an admin finalizes 1 block late, the price could shift.
 
 ---
 
@@ -15,61 +42,67 @@ This rulebook defines the approved format for all official and private TrueCall 
 
 Every TrueCall question is resolved using:
 
-- the **BTC price from the approved oracle**
-- read **at or after the scheduled close time**
-- compared against the configured **target price**
+- the **live BTC/USD price from the Pyth oracle**
+- read **at the moment the admin calls `finalize-question`** (at or after the close block)
+- compared against the configured **`target-price`**
 
-This means every question must be framed around a **single BTC price threshold** at a **specific date and time**.
+The outcome is:
+- **YES** → `oracle_price >= target_price`
+- **NO** → `oracle_price < target_price`
 
 ---
 
 ## Approved Standard Format
 
-All TrueCall questions should use one of these two formats:
+All questions MUST use one of these two templates:
 
-### Format A
-**Will BTC be at or above $[PRICE] on [DATE], at [TIME] UTC?**
+### Template 1 — Above or Equal
+```
+Will BTC be at or above $[PRICE] when this question is resolved?
+```
 
-### Format B
-**Will BTC be below $[PRICE] on [DATE], at [TIME] UTC?**
+### Template 2 — Below
+```
+Will BTC be below $[PRICE] when this question is resolved?
+```
 
-Will BTC be below $100,000 on 11/05/2026, at 16:00 UTC?
-
-These are the official supported question templates for TrueCall v1.
+The **prediction deadline** (close block converted to estimated time) is shown separately in the UI — it is NOT the price snapshot time.
 
 ---
 
-## Examples of Valid Questions
+## ✅ Valid Question Examples
 
 ### Above format
-- Will BTC be at or above $80,000 on March 12, 2026, at 18:00 UTC?
-- Will BTC be at or above $72,500 on March 15, 2026, at 12:00 UTC?
-- Will BTC be at or above $90,000 on April 2, 2026, at 00:00 UTC?
+- Will BTC be at or above $80,000 when this question is resolved?
+- Will BTC be at or above $72,500 when this question is resolved?
+- Will BTC be at or above $90,000 when this question is resolved?
 
 ### Below format
-- Will BTC be below $60,000 on March 12, 2026, at 18:00 UTC?
-- Will BTC be below $58,500 on March 20, 2026, at 09:00 UTC?
-- Will BTC be below $70,000 on April 1, 2026, at 21:00 UTC?
+- Will BTC be below $60,000 when this question is resolved?
+- Will BTC be below $58,500 when this question is resolved?
+- Will BTC be below $70,000 when this question is resolved?
 
 ---
 
-## Why This Format Is Required
+## ❌ Invalid Question Examples
 
-This format works because it is:
+### Do NOT include a specific time in the question
+```
+Will BTC be at or above $80,000 on March 12, at 18:00 UTC?   ← WRONG
+```
+Why: The oracle snapshot is NOT guaranteed to be taken at 18:00 UTC.  
+The prediction deadline might be at 18:00, but the actual price is read when the admin finalizes — which may be later.
 
-- **binary**
-- **clear**
-- **measurable**
-- **time-specific**
-- **oracle-resolvable**
+### Do NOT say "when this question closes"
+```
+Will BTC be at or above $80,000 when this question closes?   ← MISLEADING
+```
+Why: "Closes" refers to the prediction deadline (when users stop predicting). The price snapshot happens at finalization, which is after the close block.
 
-Each question depends on only:
-
-1. one BTC price  
-2. one threshold  
-3. one exact resolution time  
-
-This removes ambiguity and makes settlement straightforward.
+### Do NOT use vague language
+- Will BTC pump this week? ← not measurable
+- Will BTC crash tomorrow? ← not objective
+- Will BTC hit $70,000? ← path-dependent, not a snapshot
 
 ---
 
@@ -77,184 +110,50 @@ This removes ambiguity and makes settlement straightforward.
 
 Every valid TrueCall question must include:
 
-- **BTC** as the asset
-- a **single price threshold**
-- a **specific date**
-- a **specific UTC time**
-- a **clear comparison direction**
-  - at or above
-  - below
-
-If any of these are missing, the question should not be used.
+| Element | Requirement |
+|---|---|
+| Asset | BTC only (v1) |
+| Price threshold | A single whole-dollar number (e.g. $80,000) |
+| Direction | "at or above" OR "below" — never "hit", "reach", "touch" |
+| Resolution phrasing | "when this question is resolved" — not a specific time |
 
 ---
 
-## Recommended Writing Rules
+## Admin Workflow
 
-Questions should always be:
+When creating a question:
 
-- short
-- direct
-- objective
-- specific
-- easy to resolve from one oracle price read
-
-### Good examples
-- Will BTC be at or above $80,000 on March 12, 2026, at 18:00 UTC?
-- Will BTC be below $60,000 on March 12, 2026, at 18:00 UTC?
-- Will BTC be at or above $75,500 on March 18, 2026, at 09:00 UTC?
-
-### Bad examples
-- Will BTC pump this week?
-- Will BTC crash tomorrow?
-- Will BTC perform strongly this month?
-- Will BTC surprise the market?
-
-These are too vague and cannot be resolved objectively.
-
----
-
-## Unsupported Question Types
-
-The following question types are not supported in TrueCall v1.
-
-### 1. Path-dependent questions
-These depend on whether BTC crossed a level at any point during a period.
-
-**Do not use**
-- Will BTC hit $70,000 on March 11?
-- Will BTC touch $80,000 this week?
-- Will BTC drop below $55,000 tomorrow?
-
-These are not supported because the current oracle logic resolves using a single price at a specific time, not full historical price movement.
-
----
-
-### 2. Multi-condition questions
-These combine more than one condition.
-
-**Do not use**
-- Will BTC be above $70,000 and ETH be above $4,000 on March 12?
-- Will BTC be below $60,000 and dominance rise above 60%?
-
-Each question must test only one condition.
-
----
-
-### 3. Subjective questions
-These cannot be verified objectively.
-
-**Do not use**
-- Will BTC have a bullish day?
-- Will BTC perform well this week?
-- Will BTC market sentiment improve tomorrow?
-
-These are opinion-based and not machine-resolvable.
-
----
-
-### 4. Non-price questions
-Unless additional oracle feeds are added, non-price questions should not be used.
-
-**Do not use**
-- Will Bitcoin dominance rise on March 12?
-- Will ETF inflows be positive this week?
-- Will on-chain activity increase tomorrow?
-
-These require data beyond the current BTC price oracle.
+1. Choose a `target-price` (whole dollars, e.g. 80000 = $80,000)
+2. Choose a **close time in minutes** — this is the prediction window  
+   _e.g. 1440 min = ~24 hours = ~144 Bitcoin blocks_
+3. Write the question using the approved template
+4. The UI will show users: *"Predictions close: Mar 12, 18:00 UTC (estimated)"*
+5. After the close block passes, admin goes to **Manage Questions** and clicks **🔥 Finalize**
+6. The Pyth oracle price at that moment determines YES or NO
 
 ---
 
 ## Resolution Rule
 
-Each question is resolved by comparing the oracle BTC price at the scheduled resolution time with the configured threshold.
+```
+outcome = (oracle_price >= target_price)
+```
 
-### Example
-Question:
-**Will BTC be at or above $80,000 on March 12, 2026, at 18:00 UTC?**
+| Resolved Price | Target | Outcome |
+|---|---|---|
+| $81,000 | $80,000 | YES ✓ |
+| $79,999 | $80,000 | NO ✗ |
+| $60,000 | $60,000 | YES ✓ (equal counts as YES) |
+| $59,999 | $60,000 | NO ✗ |
 
-Resolution:
-- **YES** if the oracle BTC price at resolution is greater than or equal to $80,000
-- **NO** otherwise
-
-Another example:
-
-Question:
-**Will BTC be below $60,000 on March 12, 2026, at 18:00 UTC?**
-
-Resolution:
-- **YES** if the oracle BTC price at resolution is less than $60,000
-- **NO** otherwise
-
----
-
-## Admin Formatting Checklist
-
-Before publishing any question, confirm the following:
-
-- Is the question only about **BTC price**?
-- Does it use **at or above** or **below**?
-- Does it include a **specific date**?
-- Does it include a **specific UTC time**?
-- Does it use only **one price threshold**?
-- Can the answer be determined from **one oracle price read**?
-
-If the answer to any of these is no, the question should be rejected.
-
----
-
-## Official TrueCall Templates
-
-Admins should preferably create questions only from these templates.
-
-### Template 1
-**Will BTC be at or above $[PRICE] on [DATE], at [TIME] UTC?**
-
-### Template 2
-**Will BTC be below $[PRICE] on [DATE], at [TIME] UTC?**
-
-These two templates are sufficient for a clean and fair v1 system.
-
----
-
-## Examples for Official Events
-
-- Will BTC be at or above $80,000 on March 12, 2026, at 18:00 UTC?
-- Will BTC be below $60,000 on March 12, 2026, at 18:00 UTC?
-- Will BTC be at or above $85,000 on March 16, 2026, at 12:00 UTC?
-- Will BTC be below $58,000 on March 20, 2026, at 09:00 UTC?
-
----
-
-## Examples for Private Events
-
-- Will BTC be at or above $78,000 on March 14, 2026, at 15:00 UTC?
-- Will BTC be below $62,500 on March 15, 2026, at 20:00 UTC?
-- Will BTC be at or above $90,000 on March 30, 2026, at 10:00 UTC?
-
----
-
-## Future Expansion
-
-Future versions of TrueCall may support more advanced market formats if new oracle feeds or historical price data are added.
-
-Possible future market types may include:
-
-- intraday high/low questions
-- first-to-hit price questions
-- dominance questions
-- ETF flow questions
-- on-chain metric questions
-
-Until then, all TrueCall v1 questions should follow the approved standard format only.
+For below questions, the question phrasing inverts the user's intuition — but the contract always computes `oracle_price >= target_price`. If a user predicts YES on a "below $60,000" question, they are predicting YES to `price >= 60000` which is the "not below" answer. The question wording should always be in "at or above" form to avoid confusion.
 
 ---
 
 ## Final Rule
 
-For TrueCall v1, every question must follow this rule:
+For TrueCall v1, every question must follow:
 
-**One BTC price. One threshold. One exact date and time. One objective outcome.**
+> **One BTC price. One threshold. One clear direction. Resolved when the admin finalizes.**
 
-That is the format that keeps TrueCall fair, simple, and fully resolvable on-chain.
-```
+Do not promise a specific time in the question text. The prediction deadline is shown in the UI — the question text itself should only reference "when this question is resolved."

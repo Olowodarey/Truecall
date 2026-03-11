@@ -319,7 +319,7 @@ export default function EventPredictionPage() {
                           <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
-                          Closes {formatEstimatedTime(q.closeBlock, currentBlock)}
+                          Closes {formatEstimatedTime(q.closeBlock, currentBlock, q.status)}
                         </span>
                       </div>
 
@@ -335,26 +335,28 @@ export default function EventPredictionPage() {
                                 e.stopPropagation();
                                 setPrediction(true);
                               }}
-                              className={`py-3 rounded-lg border-2 font-bold transition ${
+                              className={`py-3 px-2 rounded-lg border-2 transition flex flex-col items-center justify-center gap-1 ${
                                 prediction === true
                                   ? "border-green-500 bg-green-500/20 text-green-400"
                                   : "border-gray-600/50 bg-gray-800 hover:bg-gray-750 text-gray-300"
                               }`}
                             >
-                              ✅ YES
+                              <span className="font-bold text-lg">✅ YES</span>
+                              <span className="text-xs opacity-80">(Price &ge; Target)</span>
                             </button>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setPrediction(false);
                               }}
-                              className={`py-3 rounded-lg border-2 font-bold transition ${
+                              className={`py-3 px-2 rounded-lg border-2 transition flex flex-col items-center justify-center gap-1 ${
                                 prediction === false
                                   ? "border-red-500 bg-red-500/20 text-red-400"
                                   : "border-gray-600/50 bg-gray-800 hover:bg-gray-750 text-gray-300"
                               }`}
                             >
-                              ❌ NO
+                              <span className="font-bold text-lg">❌ NO</span>
+                              <span className="text-xs opacity-80">(Price &lt; Target)</span>
                             </button>
                           </div>
 
