@@ -3,7 +3,7 @@ export const NETWORK = "testnet" as const;
 export const DEPLOYER = "ST3TWY4THYR9PMMD72N7SA8SE1FJPSF219RNZQY5F";
 
 export const CONTRACTS = {
-  PREDICTION_MARKET: `${DEPLOYER}.truecall-v2`,
+  PREDICTION_MARKET: `${DEPLOYER}.truecall-v3`,
 } as const;
 
 // Hiro API base for testnet read-only calls

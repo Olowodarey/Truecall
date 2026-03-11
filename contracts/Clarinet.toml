@@ -37,7 +37,7 @@ clarity_version = 2
 epoch = 'latest'
 
 # Main prediction market contract (deployed as "truecall")
-[contracts.truecall]
+[contracts.truecall-v3]
 path = 'contracts/truecall.clar'
 clarity_version = 2
 epoch = 'latest'
