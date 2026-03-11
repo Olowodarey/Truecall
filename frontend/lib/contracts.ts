@@ -3,12 +3,7 @@ export const NETWORK = "testnet" as const;
 export const DEPLOYER = "ST3TWY4THYR9PMMD72N7SA8SE1FJPSF219RNZQY5F";
 
 export const CONTRACTS = {
-  PREDICTION_MARKET: `${DEPLOYER}.prediction-market`,
-  GOVERNANCE: `${DEPLOYER}.governance`,
-  STAKING: `${DEPLOYER}.staking`,
-  REPUTATION_POINTS: `${DEPLOYER}.reputation-points`,
-  MOCK_PYTH: `${DEPLOYER}.mock-pyth`,
-  MOCK_SBTC: `${DEPLOYER}.mock-sbtc`,
+  PREDICTION_MARKET: `${DEPLOYER}.truecall`,
 } as const;
 
 // Hiro API base for testnet read-only calls
