@@ -83,13 +83,18 @@ async function readOnly(
   functionName: string,
   args: ClarityValue[]
 ): Promise<ClarityValue> {
-  return fetchCallReadOnlyFunction({
-    contractAddress,
-    contractName,
-    functionName,
-    functionArgs: args,
-    senderAddress: contractAddress,
-    network: STACKS_TESTNET,
+  const argStr = args.map(a => String((a as any).value ?? (a as any).data ?? a.type)).join("-");
+  const cacheKey = `readOnly-${functionName}-${argStr}`;
+
+  return withCache(cacheKey, async () => {
+    return fetchCallReadOnlyFunction({
+      contractAddress,
+      contractName,
+      functionName,
+      functionArgs: args,
+      senderAddress: contractAddress,
+      network: STACKS_TESTNET,
+    });
   });
 }
 

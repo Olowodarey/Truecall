@@ -6,6 +6,7 @@ import type { ChainEvent, ChainQuestion, ChainParticipant } from "@/lib/types";
 import { claimPointsTxOptions, claimWinningsTxOptions, joinEventTxOptions, getParticipant } from "@/lib/stacks";
 import { openContractCall } from "@stacks/connect";
 import { formatEstimatedTime } from "@/lib/utils";
+import { clearCache } from "@/lib/cache";
 
 interface EventCardProps {
   event: ChainEvent;
@@ -56,6 +57,7 @@ export default function EventCard({
     await openContractCall({
       ...joinEventTxOptions(event.id),
       onFinish: () => {
+        clearCache();
         setBusy(key, false);
         onRefresh?.();
       },
@@ -69,6 +71,7 @@ export default function EventCard({
     await openContractCall({
       ...claimPointsTxOptions(questionId),
       onFinish: () => {
+        clearCache();
         setBusy(key, false);
         onRefresh?.();
       },
@@ -82,6 +85,7 @@ export default function EventCard({
     await openContractCall({
         ...claimWinningsTxOptions(event.id),
         onFinish: () => {
+          clearCache();
           setBusy(key, false);
           onRefresh?.();
         },

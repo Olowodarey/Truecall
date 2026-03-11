@@ -9,6 +9,7 @@ import Footer from "@/components/Footer";
 import { HIRO_API } from "@/lib/contracts";
 
 import { formatEstimatedTime } from "@/lib/utils";
+import { clearCache } from "@/lib/cache";
 
 import {
   getEvent,
@@ -128,6 +129,7 @@ export default function EventPredictionPage() {
     await openContractCall({
       ...joinEventTxOptions(event.id),
       onFinish: () => {
+        clearCache();
         setJoining(false);
         fetchData();
       },
@@ -143,6 +145,7 @@ export default function EventPredictionPage() {
       await openContractCall({
         ...answerQuestionTxOptions(selectedQuestion.id, prediction),
         onFinish: () => {
+          clearCache();
           setPredictSuccess(true);
           setTimeout(() => {
             setPredictSuccess(false);
