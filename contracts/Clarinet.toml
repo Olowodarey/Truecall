@@ -8,7 +8,7 @@ cache_dir = './.cache'
 [[project.requirements]]
 contract_id = 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.sip-010-trait-ft-standard'
 
-# ── Pyth Oracle testnet contracts (STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM) ──
+# Pyth Oracle testnet contracts (STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM)
 [[project.requirements]]
 contract_id = 'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.pyth-oracle-v4'
 
@@ -21,16 +21,8 @@ contract_id = 'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.pyth-pnau-decoder-v3'
 [[project.requirements]]
 contract_id = 'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.wormhole-core-v4'
 
-
-
-
 [contracts.mock-sbtc]
 path = 'contracts/mock-sbtc.clar'
-clarity_version = 2
-epoch = 'latest'
-
-[contracts.prediction-market]
-path = 'contracts/prediction-market.clar'
 clarity_version = 2
 epoch = 'latest'
 
@@ -39,13 +31,16 @@ path = 'contracts/pyth-oracle-trait.clar'
 clarity_version = 2
 epoch = 'latest'
 
-
-
 [contracts.sip-010-trait]
 path = 'contracts/sip-010-trait.clar'
 clarity_version = 2
 epoch = 'latest'
 
+# Main prediction market contract (deployed as "truecall")
+[contracts.truecall]
+path = 'contracts/truecall.clar'
+clarity_version = 2
+epoch = 'latest'
 
 [repl.analysis]
 passes = [
