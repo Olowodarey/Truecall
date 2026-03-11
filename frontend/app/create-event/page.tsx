@@ -33,14 +33,14 @@ export default function CreateEventPage() {
 
   // Form state - Create Event
   const [title, setTitle] = useState("");
-  const [durationBlocks, setDurationBlocks] = useState(144); // ~24h of blocks
+  const [durationHours, setDurationHours] = useState(24); // default 24 hours
   const [entryFeeStx, setEntryFeeStx] = useState(1); // STX
 
   // Form state - Add Question
   const [selectedEventId, setSelectedEventId] = useState<number>(0);
   const [marketQuestion, setMarketQuestion] = useState("");
   const [marketTargetPrice, setMarketTargetPrice] = useState<number>(100000); // USD
-  const [questionDurationBlocks, setQuestionDurationBlocks] = useState(144);
+  const [questionDurationHours, setQuestionDurationHours] = useState(24);
 
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,9 +83,11 @@ export default function CreateEventPage() {
       // Fetch current block height to compute blocks
       const resp = await fetch(`${HIRO_API}/v2/info`);
       const info = await resp.json();
-      const currentBlock = info.stacks_tip_height ?? 0;
+      const currentBlock = info.burn_block_height ?? 0;
       const startBlock = currentBlock;
-      const endBlock = currentBlock + durationBlocks;
+      // 1 Bitcoin block = ~10 minutes, so 6 blocks per hour
+      const blocksToAdd = Math.ceil(durationHours * 6);
+      const endBlock = currentBlock + blocksToAdd;
       const entryFeeMicro = Math.round(entryFeeStx * 1_000_000);
 
       await openContractCall({
@@ -125,8 +127,10 @@ export default function CreateEventPage() {
     try {
       const resp = await fetch(`${HIRO_API}/v2/info`);
       const info = await resp.json();
-      const currentBlock = info.stacks_tip_height ?? 0;
-      const closeBlock = currentBlock + questionDurationBlocks;
+      const currentBlock = info.burn_block_height ?? 0;
+      // 1 Bitcoin block = ~10 minutes, so 6 blocks per hour
+      const blocksToAdd = Math.ceil(questionDurationHours * 6);
+      const closeBlock = currentBlock + blocksToAdd;
 
       await openContractCall({
         ...addQuestionTxOptions(
@@ -287,18 +291,16 @@ export default function CreateEventPage() {
 
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Duration (blocks) · ~
-                        {Math.round((durationBlocks * 10) / 60)}min at 10
-                        blocks/min
+                        Duration (Hours)
                       </label>
                       <input
                         type="number"
-                        value={durationBlocks}
+                        value={durationHours}
                         onChange={(e) =>
-                          setDurationBlocks(Number(e.target.value))
+                          setDurationHours(Number(e.target.value))
                         }
                         disabled={creating}
-                        min={10}
+                        min={1}
                         max={52560}
                         className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
                       />
@@ -404,13 +406,13 @@ export default function CreateEventPage() {
 
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Question Duration (blocks)
+                        Question Duration (Hours)
                       </label>
                       <input
                         type="number"
-                        value={questionDurationBlocks}
+                        value={questionDurationHours}
                         onChange={(e) =>
-                          setQuestionDurationBlocks(Number(e.target.value))
+                          setQuestionDurationHours(Number(e.target.value))
                         }
                         disabled={creating}
                         min={1}

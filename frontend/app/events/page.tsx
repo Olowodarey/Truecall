@@ -26,7 +26,7 @@ export default function EventsPage() {
     // Fetch current block height for dispute window calculations
     fetch(`${HIRO_API}/v2/info`)
       .then((r) => r.json())
-      .then((info) => setCurrentBlock(info.stacks_tip_height ?? 0))
+      .then((info) => setCurrentBlock(info.burn_block_height ?? 0))
       .catch(console.error);
   }, []);
 
