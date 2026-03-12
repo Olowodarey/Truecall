@@ -1,0 +1,7 @@
+#!/usr/bin/expect -f
+set timeout -1
+spawn clarinet deployments apply --testnet -d --no-dashboard
+expect "Continue \\\[Y/n\\\]?" {
+    send "y\r"
+}
+expect eof

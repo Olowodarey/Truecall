@@ -469,83 +469,49 @@
   )
 )
 
-;; -------------------------------------------------------
-;; FINALIZE QUESTION WITH LIVE PYTH ORACLE (TESTNET)
+;; FINALIZE QUESTION
 ;;
-;; TWO-STEP PROCESS:
+;; The keeper (admin or approved keeper) calls this after the question's close-block
+;; is reached. They pass the BTC/USD price in WHOLE DOLLARS (e.g. 84500 for $84,500).
+;; The price can be obtained from the Hermes Pyth REST API off-chain:
+;;   https://hermes.pyth.network/api/latest_price_feeds?ids[]=e62df6c8...
+;; Then normalise: price / 10^abs(expo) = whole-dollar value.
 ;;
-;; Step A (admin wallet, separate tx):
-;;   Call pyth-oracle-v4.verify-and-update-price-feeds(vaa-bytes, execution-plan)
-;;   This pushes the signed VAA into Pyth storage.
-;;   Must be done FIRST by the admin wallet directly.
-;;
-;; Step B (this function):
-;;   Reads the price already stored in Pyth storage via read-price-feed.
-;;   Uses pyth-storage.read (no staleness check) — safe for testnet set-price-testnet flow.
-;;   No VAA bytes needed here.
-;;
-;; Price normalisation: Pyth returns e.g. price=10603557773590 expo=-8
-;;   denomination = 10^8 = 100000000
-;;   normalized   = 10603557773590 / 100000000 = 106035  (whole-dollar)
-;; outcome = (normalized-price >= target-price)
+;; outcome = (oracle-price >= target-price)
+;; The keeper is a trusted role - passing the price directly avoids all on-chain
+;; oracle complexity (VAA, staleness checks, governance guards, Pyth fees).
 ;; -------------------------------------------------------
 
-(define-public (finalize-question (question-id uint))
+(define-public (finalize-question (question-id uint) (oracle-price uint))
   (let (
     (q (unwrap! (map-get? questions { question-id: question-id }) err-question-not-found))
     (event (unwrap! (map-get? events { event-id: (get event-id q) }) err-event-not-found))
   )
     (begin
-      ;; Gate checks FIRST (cheap)
+      ;; Gate checks
       (asserts! (is-keeper) err-unauthorized)
       (asserts! (is-eq (get status q) question-status-open) err-question-closed)
       (asserts! (>= burn-block-height (get close-block q)) err-question-closed)
+      (asserts! (> oracle-price u0) err-invalid-price)
 
-      ;; Read the BTC/USD price already stored in Pyth by the admin's prior tx.
-      ;; Use read-price-feed (not get-price) — read-price-feed calls pyth-storage.read
-      ;; which has NO staleness check, whereas get-price calls read-price-with-staleness-check
-      ;; and fails with ERR_STALE_PRICE for prices stored via set-price-testnet.
+      ;; Compare keeper-provided price against target and record outcome
       (let (
-        (price-data
-          (try!
-            (contract-call?
-              'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.pyth-oracle-v4
-              read-price-feed
-              btc-feed-id
-              'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.pyth-storage-v4
-            )
-          )
-        )
-        (price-int (get price price-data))
-        (expo      (get expo  price-data))
+        (outcome (>= oracle-price (get target-price q)))
       )
         (begin
-          (asserts! (> price-int 0) err-invalid-price)
-          (asserts! (< expo 0)     err-invalid-expo)
-
-          ;; Normalise fixed-point to whole-dollar integer
-          (let (
-            (expo-abs         (to-uint (* expo -1)))
-            (denomination     (pow u10 expo-abs))
-            (normalized-price (/ (to-uint price-int) denomination))
-            (outcome          (>= normalized-price (get target-price q)))
+          (map-set questions { question-id: question-id }
+            (merge q {
+              status:        question-status-final,
+              oracle-price:  oracle-price,
+              final-outcome: (some outcome)
+            })
           )
-            (begin
-              (map-set questions { question-id: question-id }
-                (merge q {
-                  status:        question-status-final,
-                  oracle-price:  normalized-price,
-                  final-outcome: (some outcome)
-                })
-              )
-              (map-set events { event-id: (get event-id q) }
-                (merge event {
-                  finalized-question-count: (+ (get finalized-question-count event) u1)
-                })
-              )
-              (ok outcome)
-            )
+          (map-set events { event-id: (get event-id q) }
+            (merge event {
+              finalized-question-count: (+ (get finalized-question-count event) u1)
+            })
           )
+          (ok outcome)
         )
       )
     )
