@@ -12,7 +12,8 @@ import {
   addQuestionTxOptions,
   closeEventTxOptions,
   finalizeQuestionTxOptions,
-  pushPythPriceTxOptions,
+  setPriceTestnetTxOptions,
+  getPythStoredPrice,
 } from "@/lib/stacks";
 import type { ChainEvent, ChainQuestion } from "@/lib/types";
 import Header from "@/components/Header";
@@ -32,6 +33,13 @@ export default function CreateEventPage() {
   >({});
   const [currentBlock, setCurrentBlock] = useState(0);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
+  // Tracks question IDs where Step A (Push Oracle Price) has been submitted this session.
+  // Step B (Finalize) is gated on this — admin must push price first, then wait ~10 min for confirmation.
+  const [pushedQuestions, setPushedQuestions] = useState<Set<number>>(new Set());
+  // Stores live BTC price fetched from Hermes (used to populate set-price-testnet args)
+  const [pythPriceInfo, setPythPriceInfo] = useState<{
+    price: number; expo: number; conf: number; publishTime: number;
+  } | null>(null);
 
   // Form state - Create Event
   const [title, setTitle] = useState("");
@@ -68,6 +76,28 @@ export default function CreateEventPage() {
         .then((r) => r.json())
         .then((info) => setCurrentBlock(info.burn_block_height ?? 0))
         .catch(console.error);
+
+      // Check if Pyth storage already has a BTC price stored from a previous session.
+      // If yes, pre-mark ALL questions as "pushed" so admin can finalize immediately.
+      getPythStoredPrice().then((stored) => {
+        if (stored) {
+          console.log(
+            `[TrueCall] Pyth storage already has BTC price: $${(
+              stored.price / Math.pow(10, -stored.expo)
+            ).toFixed(2)} (publish-time: ${stored.publishTime})`
+          );
+          // Unlock finalize for all currently-loaded questions
+          getAllEvents().then((evs) => {
+            const allQIds: number[] = [];
+            Promise.all(evs.map((ev) => getQuestionsForEvent(ev.id))).then((qsArr) => {
+              qsArr.forEach((qs) => qs.forEach((q) => allQIds.push(q.id)));
+              if (allQIds.length > 0) {
+                setPushedQuestions(new Set(allQIds));
+              }
+            });
+          });
+        }
+      }).catch(console.error);
     }
   }, [isConnected, userAddress]);
 
@@ -196,47 +226,38 @@ export default function CreateEventPage() {
     setPendingAction(key);
     setError(null);
     try {
-      // 1. Fetch a fresh signed price update (PNAU) from Pyth Hermes v2
-      //    The v2 endpoint returns binary data[] in base64 encoding.
+      // 1. Fetch live BTC price from Hermes v2 as JSON (no binary/bytes needed)
       const hermesUrl =
         `https://hermes.pyth.network/v2/updates/price/latest` +
-        `?ids[]=${PYTH_BTC_FEED_ID}&encoding=base64`;
+        `?ids[]=${PYTH_BTC_FEED_ID}&encoding=hex&parsed=true`;
       const hermesRes = await fetch(hermesUrl);
       if (!hermesRes.ok)
         throw new Error(`Hermes API error: ${hermesRes.status} ${hermesRes.statusText}`);
       const hermesData = await hermesRes.json();
 
-      // v2 response: { binary: { encoding: "base64", data: ["..."] }, parsed: [...] }
-      const b64Raw: string | undefined = hermesData?.binary?.data?.[0];
-      if (!b64Raw) throw new Error("No price update data returned from Hermes.");
+      // v2 parsed response: { parsed: [{ price: { price, conf, expo, publish_time }, ... }] }
+      const parsed = hermesData?.parsed?.[0]?.price;
+      if (!parsed) throw new Error("No parsed price from Hermes. Try again.");
 
-      // Log the live BTC price so admin can see it in the console
-      const parsedPrice = hermesData?.parsed?.[0]?.price;
-      if (parsedPrice) {
-        const usd = Number(parsedPrice.price) / Math.pow(10, -parsedPrice.expo);
-        console.log(`[TrueCall] Live BTC price from Pyth: $${usd.toFixed(2)}`);
-      }
+      const priceInt = Number(parsed.price);       // e.g. 8368745000000
+      const conf     = Number(parsed.conf);        // confidence interval
+      const expo     = Number(parsed.expo);        // e.g. -8
+      const publishTime = Number(parsed.publish_time); // unix timestamp
 
-      // 2. Decode base64 → Uint8Array
-      //    Hermes returns URL-safe base64 (uses - and _ instead of + and /).
-      //    Standard atob() ONLY handles standard base64, so we must convert first.
-      const b64Standard = b64Raw
-        .replace(/-/g, "+")
-        .replace(/_/g, "/");
-      const binaryStr = atob(b64Standard);
-      const vaaBytes = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) {
-        vaaBytes[i] = binaryStr.charCodeAt(i);
-      }
+      const usdPrice = priceInt / Math.pow(10, -expo);
+      console.log(`[TrueCall] Live BTC/USD from Hermes: $${usdPrice.toFixed(2)} (raw: ${priceInt}, expo: ${expo})`);
 
-      console.log(`[TrueCall] VAA bytes length: ${vaaBytes.length}`);
+      // Store for logging/debugging
+      setPythPriceInfo({ price: priceInt, expo, conf, publishTime });
 
-      // 3. Call pyth-oracle-v4 on-chain directly (1 uSTX Pyth fee applies)
+      // 2. Call pyth-storage-v4.set-price-testnet — testnet shortcut (no Wormhole VAA!)
       await openContractCall({
-        ...pushPythPriceTxOptions(vaaBytes),
+        ...setPriceTestnetTxOptions(priceInt, expo, conf, publishTime),
         appDetails: { name: "TrueCall", icon: "/favicon.ico" },
         onFinish: () => {
           setPendingAction(null);
+          // Mark this question as having Step A submitted — unlocks Step B button
+          setPushedQuestions((prev) => new Set(prev).add(questionId));
           setSuccess(true);
           setTimeout(() => setSuccess(false), 5000);
         },
@@ -594,6 +615,33 @@ export default function CreateEventPage() {
                   </form>
                 ) : activeTab === "manage-questions" ? (
                   <div className="space-y-6">
+                    {/* Pyth Oracle Status Banner */}
+                    <div className={`rounded-lg px-4 py-3 text-xs border flex items-start gap-2 ${
+                      pushedQuestions.size > 0
+                        ? "bg-green-500/10 border-green-500/30 text-green-300"
+                        : "bg-yellow-500/10 border-yellow-500/30 text-yellow-300"
+                    }`}>
+                      <span className="text-base leading-none mt-0.5">
+                        {pushedQuestions.size > 0 ? "✅" : "⏳"}
+                      </span>
+                      <div>
+                        {pushedQuestions.size > 0 ? (
+                          <>
+                            <span className="font-semibold">Pyth storage has a BTC price.</span>{" "}
+                            {pythPriceInfo
+                              ? `Live: $${(pythPriceInfo.price / Math.pow(10, -pythPriceInfo.expo)).toFixed(2)} — `
+                              : ""}
+                            Click <strong>2. Finalize Question</strong> on any ready question below.
+                          </>
+                        ) : (
+                          <>
+                            <span className="font-semibold">No BTC price in Pyth storage yet.</span>{" "}
+                            For each ready question, click <strong>1. Push Oracle Price</strong> first,
+                            then wait ~10 min for the tx to confirm before finalizing.
+                          </>
+                        )}
+                      </div>
+                    </div>
                     {events.length === 0 ? (
                       <p className="text-gray-400 text-sm text-center py-8">
                         No events on-chain yet.
@@ -730,15 +778,24 @@ export default function CreateEventPage() {
                                                 ? "Pushing…"
                                                 : "1. Push Oracle Price"}
                                             </button>
-                                            <button
-                                              disabled={isFinalizing}
-                                              onClick={() => handleFinalize(question.id)}
-                                              className="text-xs px-3 py-1.5 rounded-md bg-orange-500/10 border border-orange-500/40 text-orange-400 hover:bg-orange-500/20 transition disabled:opacity-50"
-                                            >
-                                              {isFinalizing
-                                                ? "Finalizing…"
-                                                : "2. Finalize Question"}
-                                            </button>
+                                            {pushedQuestions.has(question.id) ? (
+                                              <>
+                                                <p className="text-[10px] text-yellow-400/80 text-right max-w-[120px]">
+                                                  ⏳ Wait ~10 min for Step 1 to confirm on-chain, then click Step 2.
+                                                </p>
+                                                <button
+                                                  disabled={isFinalizing}
+                                                  onClick={() => handleFinalize(question.id)}
+                                                  className="text-xs px-3 py-1.5 rounded-md bg-orange-500/10 border border-orange-500/40 text-orange-400 hover:bg-orange-500/20 transition disabled:opacity-50"
+                                                >
+                                                  {isFinalizing ? "Finalizing…" : "2. Finalize Question"}
+                                                </button>
+                                              </>
+                                            ) : (
+                                              <span className="text-[10px] text-gray-500 italic text-right max-w-[120px]">
+                                                Push oracle price first (Step 1)
+                                              </span>
+                                            )}
                                           </>
                                         ) : question.status === "final" ? (
                                           <span className="text-xs text-blue-400/70 italic">Finalized</span>

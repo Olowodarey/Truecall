@@ -480,7 +480,8 @@
 ;;   Must be done FIRST by the admin wallet directly.
 ;;
 ;; Step B (this function):
-;;   Reads the price already stored in Pyth storage via get-price.
+;;   Reads the price already stored in Pyth storage via read-price-feed.
+;;   Uses pyth-storage.read (no staleness check) — safe for testnet set-price-testnet flow.
 ;;   No VAA bytes needed here.
 ;;
 ;; Price normalisation: Pyth returns e.g. price=10603557773590 expo=-8
@@ -500,13 +501,16 @@
       (asserts! (is-eq (get status q) question-status-open) err-question-closed)
       (asserts! (>= burn-block-height (get close-block q)) err-question-closed)
 
-      ;; Read the BTC/USD price already stored in Pyth by the admin's prior tx
+      ;; Read the BTC/USD price already stored in Pyth by the admin's prior tx.
+      ;; Use read-price-feed (not get-price) — read-price-feed calls pyth-storage.read
+      ;; which has NO staleness check, whereas get-price calls read-price-with-staleness-check
+      ;; and fails with ERR_STALE_PRICE for prices stored via set-price-testnet.
       (let (
         (price-data
           (try!
             (contract-call?
               'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.pyth-oracle-v4
-              get-price
+              read-price-feed
               btc-feed-id
               'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.pyth-storage-v4
             )

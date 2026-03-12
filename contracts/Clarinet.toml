@@ -36,8 +36,14 @@ path = 'contracts/sip-010-trait.clar'
 clarity_version = 2
 epoch = 'latest'
 
-# Main prediction market contract (deployed as "truecall")
+# Main prediction market contract (deployed as "truecall-v3" - old, keep for reference)
 [contracts.truecall-v3]
+path = 'contracts/truecall.clar'
+clarity_version = 2
+epoch = 'latest'
+
+# truecall-v4: fixes finalize-question to use read-price-feed (no staleness check)
+[contracts.truecall-v4]
 path = 'contracts/truecall.clar'
 clarity_version = 2
 epoch = 'latest'

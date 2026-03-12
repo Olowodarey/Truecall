@@ -15,9 +15,11 @@ import {
   PostConditionMode,
   stringAsciiCV,
   uintCV,
+  intCV,
   boolCV,
   principalCV,
   bufferCV,
+  tupleCV,
   type ClarityValue,
 } from "@stacks/transactions";
 import { STACKS_TESTNET } from "@stacks/network";
@@ -288,34 +290,101 @@ export function answerQuestionTxOptions(questionId: number, prediction: boolean)
   };
 }
 
-// Step A: push fresh VAA bytes directly to Pyth as the admin wallet (not from a contract)
-// This is required because pyth-governance only allows direct wallet calls, not inter-contract calls.
-export function pushPythPriceTxOptions(priceFeedBytes: Uint8Array) {
-  const PYTH_ORACLE = "STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM";
+// ── Pyth storage constants ────────────────────────────────────────────────────
+const PYTH_STORAGE = "STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM";
+const BTC_FEED_ID_HEX =
+  "e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43";
+
+// Read the stored BTC price from pyth-storage-v4 (read-only, no wallet needed).
+// Returns null if no price is stored yet.
+export async function getPythStoredPrice(): Promise<{
+  price: number;
+  expo: number;
+  publishTime: number;
+} | null> {
+  try {
+    const feedIdBytes = Uint8Array.from(
+      BTC_FEED_ID_HEX.match(/.{1,2}/g)!.map((b) => parseInt(b, 16))
+    );
+    const res = await fetchCallReadOnlyFunction({
+      contractAddress: PYTH_STORAGE,
+      contractName: "pyth-storage-v4",
+      functionName: "get-price",
+      functionArgs: [bufferCV(feedIdBytes)],
+      senderAddress: PYTH_STORAGE,
+      network: STACKS_TESTNET,
+    });
+    if ((res as any).type === ClarityType.ResponseErr) return null;
+    const inner =
+      (res as any).type === ClarityType.ResponseOk
+        ? (res as any).value
+        : res;
+    const d = (inner as any).data ?? (inner as any).value ?? {};
+    const rawPrice = Number(
+      (d.price?.value ?? d.price ?? 0).toString().replace(/n$/, "")
+    );
+    const rawExpo = Number(
+      (d.expo?.value ?? d.expo ?? 0).toString().replace(/n$/, "")
+    );
+    const rawPublish = Number(
+      (d["publish-time"]?.value ?? d["publish-time"] ?? 0)
+        .toString()
+        .replace(/n$/, "")
+    );
+    if (rawPrice === 0) return null;
+    return { price: rawPrice, expo: rawExpo, publishTime: rawPublish };
+  } catch {
+    return null;
+  }
+}
+
+// Step A (TESTNET SHORTCUT): call pyth-storage-v4.set-price-testnet directly.
+// This bypasses Wormhole VAA validation — only works on testnet.
+// Fetches the live BTC price from Hermes REST (JSON only, no bytes needed)
+// and writes it straight to on-chain Pyth storage.
+export function setPriceTestnetTxOptions(
+  priceInt: number,   // e.g. 8368745000000 (raw Pyth integer)
+  expo: number,       // e.g. -8
+  conf: number,       // confidence interval
+  publishTime: number // unix timestamp
+) {
+  const feedIdBytes = Uint8Array.from(
+    BTC_FEED_ID_HEX.match(/.{1,2}/g)!.map((b) => parseInt(b, 16))
+  );
   return {
-    contractAddress: PYTH_ORACLE,
-    contractName: "pyth-oracle-v4",
-    functionName: "verify-and-update-price-feeds",
+    contractAddress: PYTH_STORAGE,
+    contractName: "pyth-storage-v4",
+    functionName: "set-price-testnet",
     functionArgs: [
-      bufferCV(priceFeedBytes),
-      // execution-plan tuple (must match pyth-governance's current plan)
-      {
-        type: 12, // ClarityType.Tuple
-        data: {
-          "pyth-storage-contract": principalCV(`${PYTH_ORACLE}.pyth-storage-v4`),
-          "pyth-decoder-contract": principalCV(`${PYTH_ORACLE}.pyth-pnau-decoder-v3`),
-          "wormhole-core-contract": principalCV(`${PYTH_ORACLE}.wormhole-core-v4`),
-        },
-      },
+      tupleCV({
+        "price-identifier": bufferCV(feedIdBytes),
+        price:              intCV(priceInt),
+        conf:               uintCV(conf),
+        expo:               intCV(expo),
+        "ema-price":        intCV(priceInt),   // use same as price for simplicity
+        "ema-conf":         uintCV(conf),
+        "publish-time":     uintCV(publishTime),
+        "prev-publish-time": uintCV(Math.max(0, publishTime - 1)),
+      }),
     ],
     network: STACKS_TESTNET,
     anchorMode: AnchorMode.Any,
-    postConditionMode: PostConditionMode.Allow, // allows 1 uSTX Pyth fee
+    postConditionMode: PostConditionMode.Deny,
     postConditions: [],
   };
 }
 
-// Step B: read already-stored Pyth price and finalise the question
+// Keep old export name as an alias so existing imports don't break.
+// @deprecated — use setPriceTestnetTxOptions instead
+export const pushPythPriceTxOptions = (_: Uint8Array) => {
+  throw new Error(
+    "pushPythPriceTxOptions is deprecated. Use setPriceTestnetTxOptions."
+  );
+};
+
+// Step B: read already-stored Pyth price and finalise the question.
+// PostConditionMode.Allow is required because pyth-oracle-v4.get-price charges a 1 uSTX fee
+// when called from an inter-contract call. Deny mode would abort the tx.
 export function finalizeQuestionTxOptions(questionId: number) {
   return {
     contractAddress: pmAddr,
@@ -324,7 +393,7 @@ export function finalizeQuestionTxOptions(questionId: number) {
     functionArgs: [uintCV(questionId)],
     network: STACKS_TESTNET,
     anchorMode: AnchorMode.Any,
-    postConditionMode: PostConditionMode.Deny,
+    postConditionMode: PostConditionMode.Allow, // Pyth get-price charges 1 uSTX inter-contract fee
     postConditions: [],
   };
 }
