@@ -274,13 +274,38 @@ export default function CreateEventPage() {
     setPendingAction(key);
     setError(null);
     try {
-      // Simply call our truecall-v2 contract to read the price and finalize
+      // Fetch live BTC/USD price from Hermes off-chain, then pass it directly to the contract.
+      // The contract just compares this price vs target — no on-chain oracle calls at all.
+      const BTC_FEED_ID = "e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43";
+      let oraclePrice = 0;
+      try {
+        const hermesResp = await fetch(
+          `https://hermes.pyth.network/api/latest_price_feeds?ids[]=${BTC_FEED_ID}&binary=true`
+        );
+        const hermesData = await hermesResp.json();
+        const feed = hermesData?.[0]?.price ?? hermesData?.[0]?.price_feed?.price;
+        if (feed) {
+          const rawPrice = Number(feed.price);
+          const expo = Number(feed.expo);
+          // Normalise: price / 10^abs(expo) = whole-dollar value
+          oraclePrice = Math.floor(rawPrice / Math.pow(10, Math.abs(expo)));
+        }
+      } catch {
+        // Fallback: use the displayed price from pythPriceInfo if Hermes fails
+        if (pythPriceInfo?.price && pythPriceInfo?.expo) {
+          oraclePrice = Math.floor(pythPriceInfo.price / Math.pow(10, Math.abs(pythPriceInfo.expo)));
+        }
+      }
+
+      if (oraclePrice <= 0) {
+        throw new Error("Could not fetch a valid BTC price from Hermes. Please try again.");
+      }
+
       await openContractCall({
-        ...finalizeQuestionTxOptions(questionId),
+        ...finalizeQuestionTxOptions(questionId, oraclePrice),
         appDetails: { name: "TrueCall", icon: "/favicon.ico" },
         onFinish: async () => {
           setPendingAction(null);
-          // Refresh questions + events
           const allQuestions: Record<number, ChainQuestion[]> = { ...eventQuestions };
           await Promise.all(
             events.map(async (ev) => {

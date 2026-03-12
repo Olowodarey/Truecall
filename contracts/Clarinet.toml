@@ -8,26 +8,8 @@ cache_dir = './.cache'
 [[project.requirements]]
 contract_id = 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.sip-010-trait-ft-standard'
 
-# Pyth Oracle testnet contracts (STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM)
-[[project.requirements]]
-contract_id = 'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.pyth-oracle-v4'
 
-[[project.requirements]]
-contract_id = 'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.pyth-storage-v4'
-
-[[project.requirements]]
-contract_id = 'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.pyth-pnau-decoder-v3'
-
-[[project.requirements]]
-contract_id = 'STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM.wormhole-core-v4'
-
-# truecall-v4: uses read-price-feed (still fails due to governance check)
-[contracts.truecall-v4]
-path = 'contracts/truecall.clar'
-clarity_version = 2
-epoch = 'latest'
-
-# truecall-v5: calls pyth-storage-v4.read directly - no oracle, no staleness, no governance
+# truecall-v5: finalize-question accepts oracle-price directly - no on-chain oracle calls
 [contracts.truecall-v5]
 path = 'contracts/truecall.clar'
 clarity_version = 2

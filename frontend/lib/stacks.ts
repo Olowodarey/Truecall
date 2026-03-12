@@ -382,18 +382,18 @@ export const pushPythPriceTxOptions = (_: Uint8Array) => {
   );
 };
 
-// Step B: read already-stored Pyth price and finalise the question.
-// PostConditionMode.Allow is required because pyth-oracle-v4.get-price charges a 1 uSTX fee
-// when called from an inter-contract call. Deny mode would abort the tx.
-export function finalizeQuestionTxOptions(questionId: number) {
+// Step B: Pass the live BTC/USD price (whole dollars, e.g. 84500) directly to the contract.
+// The admin fetches price from Hermes API off-chain and passes it in.
+// No oracle calls in the contract anymore — zero Pyth dependency on-chain.
+export function finalizeQuestionTxOptions(questionId: number, oraclePrice: number) {
   return {
     contractAddress: pmAddr,
     contractName: pmName,
     functionName: "finalize-question",
-    functionArgs: [uintCV(questionId)],
+    functionArgs: [uintCV(questionId), uintCV(oraclePrice)],
     network: STACKS_TESTNET,
     anchorMode: AnchorMode.Any,
-    postConditionMode: PostConditionMode.Allow, // Pyth get-price charges 1 uSTX inter-contract fee
+    postConditionMode: PostConditionMode.Deny,
     postConditions: [],
   };
 }
