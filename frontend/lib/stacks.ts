@@ -42,6 +42,7 @@ function parsePrincipal(cv: ClarityValue): string {
 }
 
 function parseUint(cv: ClarityValue | any): number {
+  if (cv === undefined || cv === null) return 0;
   const val = cv.value !== undefined ? cv.value : cv;
   return Number(val);
 }
@@ -116,7 +117,7 @@ export async function getEvent(eventId: number): Promise<ChainEvent | null> {
     entryFee: parseUint(t["entry-fee"]),
     questionCount: parseUint(t["question-count"]),
     finalizedQuestionCount: parseUint(t["finalized-question-count"]),
-    participantCount: parseUint(t["participant-count"]),
+    participantCount: parseUint(t["participant_count"]),
     totalPool: parseUint(t["total-pool"]),
     isActive: parseBool(t["is-active"]),
     feeBooked: parseBool(t["fee-booked"]),
