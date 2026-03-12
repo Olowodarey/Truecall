@@ -197,24 +197,33 @@ export async function getUserPoints(
 }
 
 export async function getLeaderboard(eventId: number): Promise<LeaderboardEntry[]> {
-  const res = await readOnly(pmAddr, pmName, "get-leaderboard", [uintCV(eventId)]);
-  const t = parseOptionalTuple(res);
-  if (!t) return [];
+  try {
+    const res = await readOnly(pmAddr, pmName, "get-leaderboard", [uintCV(eventId)]);
+    const t = parseOptionalTuple(res);
+    if (!t) return [];
 
-  const ranks = ["rank1", "rank2", "rank3", "rank4", "rank5"];
-  const leaderboard: LeaderboardEntry[] = [];
+    const ranks = ["rank1", "rank2", "rank3", "rank4", "rank5"];
+    const leaderboard: LeaderboardEntry[] = [];
 
-  for (const r of ranks) {
-    if (t[r] && t[r].type === ClarityType.OptionalSome) {
-      const entryTuple = t[r].value.data;
-      leaderboard.push({
-        user: parsePrincipal(entryTuple.user),
-        points: parseUint(entryTuple.points),
-      });
+    for (const r of ranks) {
+      const slot = t[r];
+      if (!slot || slot.type !== ClarityType.OptionalSome) continue;
+
+      // The inner value can come as a TupleCV { data: {...} }
+      // or the Hiro API may unwrap it to { value: {...} } — handle both
+      const inner = slot.value;
+      const entryData: Record<string, any> =
+        inner?.data ?? inner?.value ?? inner ?? {};
+
+      const user = parsePrincipal(entryData.user);
+      const points = parseUint(entryData.points);
+      if (user) leaderboard.push({ user, points });
     }
-  }
 
-  return leaderboard;
+    return leaderboard;
+  } catch {
+    return [];
+  }
 }
 
 // ─── Writes ──────────────────────────────────────────────────────────────────
@@ -465,19 +474,37 @@ export async function getAllEvents(): Promise<ChainEvent[]> {
 }
 
 export async function getQuestionsForEvent(eventId: number): Promise<ChainQuestion[]> {
-  const ev = await getEvent(eventId);
-  if (!ev) return [];
-  const questions: ChainQuestion[] = [];
-  for (let i = 0; i < ev.questionCount; i++) {
-    const res = await readOnly(pmAddr, pmName, "get-question-id-for-event", [
-      uintCV(eventId),
-      uintCV(i),
-    ]);
-    const t = parseOptionalTuple(res);
-    if (!t) continue;
-    const qId = parseUint(t["question-id"]);
-    const q = await getQuestion(qId);
-    if (q) questions.push(q);
+  try {
+    const ev = await getEvent(eventId);
+    if (!ev || ev.questionCount === 0) return [];
+
+    // 1) Fetch all question-id lookups in parallel
+    const indices = Array.from({ length: ev.questionCount }, (_, i) => i);
+    const idResults = await Promise.all(
+      indices.map((i) =>
+        readOnly(pmAddr, pmName, "get-question-id-for-event", [
+          uintCV(eventId),
+          uintCV(i),
+        ]).catch(() => null)
+      )
+    );
+
+    // 2) Collect valid question IDs
+    const questionIds: number[] = [];
+    for (const res of idResults) {
+      if (!res) continue;
+      const t = parseOptionalTuple(res);
+      if (!t) continue;
+      questionIds.push(parseUint(t["question-id"]));
+    }
+
+    // 3) Fetch all question details in parallel
+    const questions = await Promise.all(
+      questionIds.map((qId) => getQuestion(qId).catch(() => null))
+    );
+
+    return questions.filter(Boolean) as ChainQuestion[];
+  } catch {
+    return [];
   }
-  return questions;
 }

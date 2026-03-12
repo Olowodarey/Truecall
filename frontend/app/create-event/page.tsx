@@ -491,21 +491,48 @@ export default function CreateEventPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Market Question * (Binary YES/NO)
-                      </label>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-sm font-medium text-gray-300">
+                          Market Question * (Binary YES/NO)
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setMarketQuestion(
+                              `Will BTC be at or above $${marketTargetPrice.toLocaleString()} when this question closes?`
+                            )
+                          }
+                          className="text-xs text-orange-400 hover:text-orange-300 underline"
+                        >
+                          Auto-fill from target ↓
+                        </button>
+                      </div>
                       <input
                         type="text"
                         value={marketQuestion}
                         onChange={(e) => setMarketQuestion(e.target.value)}
                         disabled={creating}
                         maxLength={128}
-                        className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
-                        placeholder="e.g., Will BTC be at or above $100,000 when this question is resolved?"
+                        className={`w-full px-4 py-3 bg-gray-700/50 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 ${
+                          /\b(below|under|less than|drop|fall)\b/i.test(marketQuestion)
+                            ? "border-red-500/70"
+                            : "border-gray-600"
+                        }`}
+                        placeholder="Will BTC be at or above $100,000 when this question closes?"
                       />
-                      <p className="text-xs text-orange-400/80 mt-2">
-                        <strong>Standard Format:</strong> Will BTC be at or above $[Target] when this question is resolved?
-                      </p>
+                      {/* Contract logic reminder */}
+                      <div className="mt-2 p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs text-blue-300">
+                        <strong>⚙️ Contract logic:</strong> YES = oracle price ≥ target. NO = oracle price &lt; target.
+                        Always phrase as <em>"Will [asset] be at or above $[target]?"</em>
+                      </div>
+                      {/* Danger: wrong wording detected */}
+                      {/\b(below|under|less than|drop|fall)\b/i.test(marketQuestion) && (
+                        <div className="mt-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-400">
+                          ⚠️ <strong>Wrong framing detected!</strong> Words like "below", "under", "less than" don't match
+                          the contract's <code>(&gt;= oracle-price target-price)</code> logic and will resolve incorrectly.
+                          Click <em>"Auto-fill from target"</em> above to get the correct phrasing.
+                        </div>
+                      )}
                     </div>
 
                     {/* Target Price + Close Time — inline side-by-side row */}

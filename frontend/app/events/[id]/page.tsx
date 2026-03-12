@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useWallet } from "@/contexts/WalletContext";
 import { openContractCall } from "@stacks/connect";
@@ -15,14 +15,19 @@ import {
   getEvent,
   getQuestionsForEvent,
   getLeaderboard,
+  getParticipant,
+  getAnswer,
   joinEventTxOptions,
   answerQuestionTxOptions,
-  getParticipant,
+  claimPointsTxOptions,
+  claimWinningsTxOptions,
+  claimRefundTxOptions,
 } from "@/lib/stacks";
 
 import type {
   ChainEvent,
   ChainQuestion,
+  ChainAnswer,
   LeaderboardEntry,
   ChainParticipant,
 } from "@/lib/types";
@@ -38,31 +43,57 @@ export default function EventPredictionPage() {
   const [questions, setQuestions] = useState<ChainQuestion[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [participant, setParticipant] = useState<ChainParticipant | null>(null);
+  // Map of questionId → ChainAnswer (to show claim state)
+  const [answers, setAnswers] = useState<Record<number, ChainAnswer | null>>({});
   const [currentBlock, setCurrentBlock] = useState(0);
+  const [lbLoading, setLbLoading] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Joining state
-  const [joining, setJoining] = useState(false);
+  // Per-action pending state keyed by action string
+  const [pending, setPending] = useState<Record<string, boolean>>({});
+  const setBusy = (key: string, v: boolean) =>
+    setPending((p) => ({ ...p, [key]: v }));
 
-  // Prediction state
+  // Prediction UI state
   const [selectedQuestion, setSelectedQuestion] = useState<ChainQuestion | null>(null);
   const [prediction, setPrediction] = useState<boolean | null>(null);
-  const [submitting, setSubmitting] = useState(false);
   const [predictSuccess, setPredictSuccess] = useState(false);
   const [predictError, setPredictError] = useState<string | null>(null);
+
+  // ── Data fetching ──────────────────────────────────────────────────────────
+
+  // Lightweight leaderboard-only refresh (no spinner, just silently updates)
+  const refreshLeaderboard = useCallback(async () => {
+    if (isNaN(eventId)) return;
+    setLbLoading(true);
+    try {
+      clearCache(`readOnly-get-leaderboard`);
+      const lb = await getLeaderboard(eventId);
+      setLeaderboard(lb);
+    } catch {
+      // fail silently — stale data is fine
+    } finally {
+      setLbLoading(false);
+    }
+  }, [eventId]);
 
   const fetchData = async () => {
     if (isNaN(eventId)) return;
 
     try {
-      const [ev, infoRes] = await Promise.all([
-        getEvent(eventId),
-        fetch(`${HIRO_API}/v2/info`),
-      ]);
-      const info = await infoRes.json();
-      setCurrentBlock(info.burn_block_height ?? 0);
+      setLoading(true);
+      setError(null);
+
+      // Fetch block height separately so a CORS/network hiccup never aborts
+      // loading the event itself.
+      fetch(`${HIRO_API}/v2/info`)
+        .then((r) => r.json())
+        .then((info) => setCurrentBlock(info.burn_block_height ?? 0))
+        .catch(() => {/* ignore — currentBlock stays 0 */});
+
+      const ev = await getEvent(eventId);
 
       if (!ev) {
         setError("Event not found");
@@ -78,8 +109,20 @@ export default function EventPredictionPage() {
       setLeaderboard(lb);
 
       if (userAddress) {
-        const p = await getParticipant(eventId, userAddress);
+        // Fetch participant + all answers — errors per-question are swallowed
+        const [p, ...answerResults] = await Promise.all([
+          getParticipant(eventId, userAddress),
+          ...qs.map((q) =>
+            getAnswer(q.id, userAddress!).catch(() => null)
+          ),
+        ]);
         setParticipant(p);
+
+        const answerMap: Record<number, ChainAnswer | null> = {};
+        qs.forEach((q, i) => {
+          answerMap[q.id] = (answerResults[i] as ChainAnswer | null) ?? null;
+        });
+        setAnswers(answerMap);
       }
     } catch (err) {
       console.error(err);
@@ -89,10 +132,112 @@ export default function EventPredictionPage() {
     }
   };
 
+
   useEffect(() => {
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId, userAddress]);
+
+  // Auto-poll leaderboard every 30 s
+  useEffect(() => {
+    const id = setInterval(refreshLeaderboard, 30_000);
+    return () => clearInterval(id);
+  }, [refreshLeaderboard]);
+
+  // ── Actions ────────────────────────────────────────────────────────────────
+
+  const handleJoin = async () => {
+    if (!userAddress) return;
+    setBusy("join", true);
+    await openContractCall({
+      ...joinEventTxOptions(eventId),
+      onFinish: () => {
+        clearCache();
+        setBusy("join", false);
+        fetchData();
+      },
+      onCancel: () => setBusy("join", false),
+    });
+  };
+
+  const handlePredict = async () => {
+    if (!selectedQuestion || prediction === null) return;
+    setBusy(`answer-${selectedQuestion.id}`, true);
+    setPredictError(null);
+    try {
+      await openContractCall({
+        ...answerQuestionTxOptions(selectedQuestion.id, prediction),
+        onFinish: () => {
+          clearCache();
+          setPredictSuccess(true);
+          setTimeout(() => {
+            setPredictSuccess(false);
+            setSelectedQuestion(null);
+            setPrediction(null);
+            setBusy(`answer-${selectedQuestion.id}`, false);
+            fetchData();
+          }, 3000);
+        },
+        onCancel: () => {
+          setBusy(`answer-${selectedQuestion.id}`, false);
+        },
+      });
+    } catch (err: any) {
+      setPredictError(err?.message || "Prediction failed");
+      setBusy(`answer-${selectedQuestion.id}`, false);
+    }
+  };
+
+  const handleClaimPoints = async (questionId: number) => {
+    setBusy(`points-${questionId}`, true);
+    await openContractCall({
+      ...claimPointsTxOptions(questionId),
+      onFinish: () => {
+        clearCache();
+        setBusy(`points-${questionId}`, false);
+        fetchData();
+        // Give the chain ~3 s to anchor the block, then refresh leaderboard
+        setTimeout(() => refreshLeaderboard(), 3000);
+      },
+      onCancel: () => setBusy(`points-${questionId}`, false),
+    });
+  };
+
+  const handleClaimWinnings = async () => {
+    setBusy("winnings", true);
+    await openContractCall({
+      ...claimWinningsTxOptions(eventId),
+      onFinish: () => {
+        clearCache();
+        setBusy("winnings", false);
+        fetchData();
+      },
+      onCancel: () => setBusy("winnings", false),
+    });
+  };
+
+  const handleClaimRefund = async () => {
+    setBusy("refund", true);
+    await openContractCall({
+      ...claimRefundTxOptions(eventId),
+      onFinish: () => {
+        clearCache();
+        setBusy("refund", false);
+        fetchData();
+      },
+      onCancel: () => setBusy("refund", false),
+    });
+  };
+
+  // ── Derived state ──────────────────────────────────────────────────────────
+
+  const isJoined = !!participant?.joined;
+  const allFinalized =
+    event !== null &&
+    event.questionCount > 0 &&
+    event.finalizedQuestionCount === event.questionCount;
+
+  // ── Loading / error screens ────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -107,7 +252,7 @@ export default function EventPredictionPage() {
     return (
       <div className="min-h-screen pt-20 bg-gradient-to-br from-gray-900 via-black to-gray-900 flex flex-col items-center justify-center p-4">
         <div className="bg-red-500/10 border border-red-500/50 p-6 rounded-xl max-w-md w-full text-center">
-          <p className="text-red-400 font-semibold mb-4">{error}</p>
+          <p className="text-red-400 font-semibold mb-4">{error ?? "Event not found"}</p>
           <button
             onClick={() => router.push("/events")}
             className="px-6 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition"
@@ -121,54 +266,13 @@ export default function EventPredictionPage() {
 
   const feeLabel = `${(event.entryFee / 1_000_000).toFixed(2)} STX`;
   const poolStx = (event.totalPool / 1_000_000).toFixed(2);
-  const isJoined = !!participant?.joined;
-
-  const handleJoin = async () => {
-    if (!userAddress) return;
-    setJoining(true);
-    await openContractCall({
-      ...joinEventTxOptions(event.id),
-      onFinish: () => {
-        clearCache();
-        setJoining(false);
-        fetchData();
-      },
-      onCancel: () => setJoining(false),
-    });
-  };
-
-  const handlePredict = async () => {
-    if (!selectedQuestion || prediction === null) return;
-    setSubmitting(true);
-    setPredictError(null);
-    try {
-      await openContractCall({
-        ...answerQuestionTxOptions(selectedQuestion.id, prediction),
-        onFinish: () => {
-          clearCache();
-          setPredictSuccess(true);
-          setTimeout(() => {
-            setPredictSuccess(false);
-            setSelectedQuestion(null);
-            setPrediction(null);
-            setSubmitting(false);
-            fetchData();
-          }, 3000);
-        },
-        onCancel: () => setSubmitting(false),
-      });
-    } catch (err: any) {
-      setPredictError(err?.message || "Prediction failed");
-      setSubmitting(false);
-    }
-  };
 
   return (
     <div className="relative pt-20 min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 pb-20">
       <Header />
 
       <main className="container mx-auto px-4 max-w-5xl mt-8">
-        {/* Back navigation */}
+        {/* Back */}
         <button
           onClick={() => router.push("/events")}
           className="text-gray-400 hover:text-white mb-6 flex items-center gap-2 transition"
@@ -176,7 +280,7 @@ export default function EventPredictionPage() {
           <span>←</span> Back
         </button>
 
-        {/* Hero Event Banner */}
+        {/* ── Event Banner ── */}
         <div className="bg-gray-800/40 border border-gray-700/50 rounded-2xl p-6 lg:p-10 mb-8 backdrop-blur-sm shadow-xl">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
             <h1 className="text-3xl lg:text-4xl font-bold text-white leading-tight">
@@ -193,40 +297,30 @@ export default function EventPredictionPage() {
             </span>
           </div>
 
+          {/* Stats grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             <div className="bg-gray-900/50 rounded-xl p-4 border border-gray-700/30">
-              <p className="text-gray-400 text-xs mb-1 uppercase font-semibold">
-                Entry Fee
-              </p>
+              <p className="text-gray-400 text-xs mb-1 uppercase font-semibold">Entry Fee</p>
               <p className="text-white font-medium text-lg">{feeLabel}</p>
             </div>
             <div className="bg-gray-900/50 rounded-xl p-4 border border-gray-700/30">
-              <p className="text-gray-400 text-xs mb-1 uppercase font-semibold">
-                Prize Pool
-              </p>
+              <p className="text-gray-400 text-xs mb-1 uppercase font-semibold">Prize Pool</p>
               <p className="text-orange-400 font-bold text-lg">{poolStx} STX</p>
             </div>
             <div className="bg-gray-900/50 rounded-xl p-4 border border-gray-700/30">
-              <p className="text-gray-400 text-xs mb-1 uppercase font-semibold">
-                Participants
-              </p>
-              <p className="text-white font-medium text-lg">
-                {event.participantCount}
-              </p>
+              <p className="text-gray-400 text-xs mb-1 uppercase font-semibold">Participants</p>
+              <p className="text-white font-medium text-lg">{event.participantCount}</p>
             </div>
             <div className="bg-gray-900/50 rounded-xl p-4 border border-gray-700/30">
-              <p className="text-gray-400 text-xs mb-1 uppercase font-semibold">
-                Ends At
-              </p>
+              <p className="text-gray-400 text-xs mb-1 uppercase font-semibold">Ends At</p>
               <p className="text-white font-medium text-lg">
                 {formatEstimatedTime(event.endBlock, currentBlock)}
               </p>
-              <p className="text-xs text-gray-500 mt-1">
-                Block #{event.endBlock}
-              </p>
+              <p className="text-xs text-gray-500 mt-1">Block #{event.endBlock}</p>
             </div>
           </div>
 
+          {/* ── Join / Status CTA ── */}
           {!isConnected ? (
             <div className="text-center p-6 bg-gray-900/80 rounded-xl border border-gray-700">
               <p className="text-gray-400 mb-4">
@@ -241,33 +335,64 @@ export default function EventPredictionPage() {
             </div>
           ) : event.isActive && !isJoined ? (
             <div className="p-6 bg-blue-900/20 rounded-xl border border-blue-500/30 text-center">
-              <h3 className="text-white font-bold text-xl mb-2">
-                Join Event to Forecast
-              </h3>
+              <h3 className="text-white font-bold text-xl mb-2">Join Event to Forecast</h3>
               <p className="text-gray-400 text-sm mb-6">
-                Pay the entry fee of {feeLabel} to enter the event. You can then
-                forecast on all questions for free and earn points!
+                Pay {feeLabel} to enter. Forecast on all questions and earn points!
               </p>
               <button
                 onClick={handleJoin}
-                disabled={joining}
+                disabled={!!pending["join"]}
                 className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-lg transition disabled:opacity-50"
               >
-                {joining ? "Waiting for wallet..." : `Join Event (${feeLabel})`}
+                {pending["join"] ? "Waiting for wallet..." : `Join Event (${feeLabel})`}
               </button>
             </div>
-          ) : isJoined ? (
+          ) : event.isActive && isJoined ? (
             <div className="bg-green-500/10 border border-green-500/30 text-green-400 p-4 rounded-xl text-center font-medium flex items-center justify-center gap-2">
-              <span>✅</span> You have joined this event! Choose a question below
-              to forecast.
+              ✅ You have joined this event! Choose a question below to forecast.
+            </div>
+          ) : /* Event closed */ !event.isActive && isJoined && event.refundMode ? (
+            /* Refund mode — under 5 participants */
+            <div className="p-5 bg-yellow-900/20 rounded-xl border border-yellow-500/30 text-center">
+              <p className="text-yellow-400 font-semibold mb-3">
+                ⚠️ Event ended with too few participants — refund available
+              </p>
+              <button
+                disabled={!!pending["refund"] || !!participant?.refundClaimed}
+                onClick={handleClaimRefund}
+                className="bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-3 px-8 rounded-lg transition disabled:opacity-50"
+              >
+                {participant?.refundClaimed
+                  ? "Refund Already Claimed"
+                  : pending["refund"]
+                  ? "Waiting for wallet..."
+                  : `Claim Refund (${feeLabel})`}
+              </button>
+            </div>
+          ) : !event.isActive && isJoined && allFinalized ? (
+            /* Normal close — claim winnings */
+            <div className="p-5 bg-green-900/20 rounded-xl border border-green-500/30 text-center">
+              <p className="text-green-400 font-semibold mb-3">
+                🎉 Event settled! Top scorers can claim their winnings.
+              </p>
+              <button
+                disabled={!!pending["winnings"]}
+                onClick={handleClaimWinnings}
+                className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold py-3 px-8 rounded-lg transition disabled:opacity-50"
+              >
+                {pending["winnings"] ? "Waiting for wallet..." : "🏆 Claim Winnings"}
+              </button>
             </div>
           ) : null}
         </div>
 
+        {/* ── Questions + Leaderboard ── */}
         <div className="grid lg:grid-cols-3 gap-8">
-          {/* Main Questions Column */}
+
+          {/* Questions column */}
           <div className="lg:col-span-2 space-y-6">
             <h2 className="text-2xl font-bold text-white mb-2">Questions</h2>
+
             {questions.length === 0 ? (
               <p className="text-gray-500 italic p-4 bg-gray-800/30 rounded-xl text-center">
                 No questions available for this event yet.
@@ -275,25 +400,33 @@ export default function EventPredictionPage() {
             ) : (
               <div className="grid gap-4">
                 {questions.map((q) => {
-                  const blocksLeft = Math.max(0, q.closeBlock - currentBlock);
-                  const activeClass =
-                    selectedQuestion?.id === q.id
-                      ? "border-orange-500 ring-2 ring-orange-500/30"
-                      : "border-gray-700/50 hover:border-gray-600";
+                  const userAnswer = answers[q.id];
+                  const alreadyAnswered = !!userAnswer;
+                  const pointsClaimed = !!userAnswer?.pointsClaimed;
+                  const isSelected = selectedQuestion?.id === q.id;
+                  const isQuestionOpen = q.status === "open";
+
+                  const activeClass = isSelected
+                    ? "border-orange-500 ring-2 ring-orange-500/30"
+                    : "border-gray-700/50 hover:border-gray-600";
 
                   return (
                     <div
                       key={q.id}
                       className={`bg-gray-800/50 backdrop-blur-sm p-5 rounded-2xl border transition-all ${activeClass} ${
-                        q.status === "open" ? "cursor-pointer" : "opacity-80"
+                        isQuestionOpen && isJoined && !alreadyAnswered
+                          ? "cursor-pointer"
+                          : "opacity-90"
                       }`}
                       onClick={() => {
-                        if (q.status === "open" && isJoined) {
+                        if (isQuestionOpen && isJoined && !alreadyAnswered) {
                           setSelectedQuestion(q);
                           setPrediction(null);
+                          setPredictError(null);
                         }
                       }}
                     >
+                      {/* Question header */}
                       <div className="flex justify-between items-start mb-2 gap-4">
                         <h3 className="text-lg font-medium text-white leading-tight">
                           {q.question}
@@ -308,23 +441,91 @@ export default function EventPredictionPage() {
                           {q.status}
                         </span>
                       </div>
-                      <div className="flex flex-wrap gap-4 text-xs text-gray-400 mb-4">
-                        <span className="flex items-center gap-1">
-                          <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                          </svg>
-                          Target: ${q.targetPrice.toLocaleString()}
+
+                      {/* Meta */}
+                      <div className="flex flex-wrap gap-4 text-xs text-gray-400 mb-3">
+                        <span>⚡ Target: ${q.targetPrice.toLocaleString()}</span>
+                        <span>
+                          🕒 Closes {formatEstimatedTime(q.closeBlock, currentBlock, q.status)}
                         </span>
-                        <span className="flex items-center gap-1">
-                          <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          Closes {formatEstimatedTime(q.closeBlock, currentBlock, q.status)}
-                        </span>
+                        {q.status === "final" && q.oraclePrice > 0 && (
+                          <span className="text-green-400">
+                            ✅ Oracle: ${q.oraclePrice.toLocaleString()}
+                          </span>
+                        )}
                       </div>
 
-                      {/* Prediction Expansion */}
-                      {selectedQuestion?.id === q.id && q.status === "open" && (
+                      {/* Outcome badge */}
+                      {q.status === "final" && q.finalOutcome !== null && (
+                        <div
+                          className={`text-xs font-semibold inline-block px-3 py-1 rounded-full mb-3 ${
+                            q.finalOutcome
+                              ? "bg-green-500/10 text-green-400 border border-green-500/30"
+                              : "bg-red-500/10 text-red-400 border border-red-500/30"
+                          }`}
+                        >
+                          Outcome: {q.finalOutcome ? "YES — Price ≥ Target" : "NO — Price < Target"}
+                        </div>
+                      )}
+
+                      {/* User's answer badge */}
+                      {alreadyAnswered && (
+                        <div className="text-xs text-gray-400 mb-3 flex items-center gap-2">
+                          <span>Your answer:</span>
+                          <span
+                            className={`font-bold px-2 py-0.5 rounded ${
+                              userAnswer!.prediction
+                                ? "bg-green-500/20 text-green-400"
+                                : "bg-red-500/20 text-red-400"
+                            }`}
+                          >
+                            {userAnswer!.prediction ? "YES" : "NO"}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* ── CLAIM POINTS button ── */}
+                      {q.status === "final" &&
+                        isJoined &&
+                        userAddress &&
+                        alreadyAnswered &&
+                        !pointsClaimed &&
+                        q.finalOutcome !== null &&
+                        userAnswer!.prediction === q.finalOutcome && (
+                          <button
+                            disabled={!!pending[`points-${q.id}`]}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleClaimPoints(q.id);
+                            }}
+                            className="mt-2 w-full py-2.5 rounded-lg border border-purple-500/50 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 font-semibold text-sm transition disabled:opacity-50"
+                          >
+                            {pending[`points-${q.id}`]
+                              ? "Waiting for wallet..."
+                              : "🏆 Claim Points"}
+                          </button>
+                        )}
+
+                      {/* Already claimed */}
+                      {q.status === "final" && pointsClaimed && (
+                        <div className="mt-2 text-center text-xs text-green-400 font-semibold">
+                          ✅ Points claimed
+                        </div>
+                      )}
+
+                      {/* Wrong answer */}
+                      {q.status === "final" &&
+                        alreadyAnswered &&
+                        q.finalOutcome !== null &&
+                        !pointsClaimed &&
+                        userAnswer!.prediction !== q.finalOutcome && (
+                          <div className="mt-2 text-center text-xs text-red-400 font-semibold">
+                            ❌ Incorrect prediction — no points
+                          </div>
+                        )}
+
+                      {/* ── Prediction expansion (open questions only) ── */}
+                      {isSelected && isQuestionOpen && !alreadyAnswered && (
                         <div className="mt-6 pt-5 border-t border-gray-700/50">
                           <p className="text-sm text-gray-300 font-medium mb-3 text-center">
                             Your Forecast
@@ -342,7 +543,7 @@ export default function EventPredictionPage() {
                               }`}
                             >
                               <span className="font-bold text-lg">✅ YES</span>
-                              <span className="text-xs opacity-80">(Price &ge; Target)</span>
+                              <span className="text-xs opacity-80">(Price ≥ Target)</span>
                             </button>
                             <button
                               onClick={(e) => {
@@ -367,7 +568,7 @@ export default function EventPredictionPage() {
                           )}
                           {predictSuccess && (
                             <p className="text-green-400 text-xs text-center mb-3 font-medium">
-                              Forecast successful!
+                              Forecast submitted successfully!
                             </p>
                           )}
 
@@ -376,13 +577,23 @@ export default function EventPredictionPage() {
                               e.stopPropagation();
                               handlePredict();
                             }}
-                            disabled={prediction === null || submitting}
+                            disabled={
+                              prediction === null ||
+                              !!pending[`answer-${q.id}`]
+                            }
                             className="w-full bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold py-3 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            {submitting
+                            {pending[`answer-${q.id}`]
                               ? "Waiting for wallet..."
                               : "Submit Forecast"}
                           </button>
+                        </div>
+                      )}
+
+                      {/* Already answered notice */}
+                      {alreadyAnswered && isQuestionOpen && (
+                        <div className="mt-3 text-center text-xs text-gray-500">
+                          Answer locked in — awaiting close block
                         </div>
                       )}
                     </div>
@@ -392,55 +603,106 @@ export default function EventPredictionPage() {
             )}
           </div>
 
-          {/* Leaderboard Column */}
+          {/* Leaderboard column */}
           <div className="lg:col-span-1">
             <div className="bg-gray-800/60 backdrop-blur-sm border border-orange-500/20 rounded-2xl p-6 sticky top-24">
-              <h2 className="text-xl font-bold text-white mb-1 flex justify-between items-center">
-                <span>Leaderboard</span>
-                <span className="text-xs bg-orange-500/10 text-orange-400 px-2 py-1 rounded">
-                  Top 5
-                </span>
-              </h2>
-              <p className="text-xs text-gray-400 mb-6">
-                Points are awarded for correct forecasts when questions are finalized.
+              {/* Header */}
+              <div className="flex items-center justify-between mb-1">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  🏆 Leaderboard
+                </h2>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs bg-orange-500/10 text-orange-400 px-2 py-1 rounded font-semibold">
+                    Top 5
+                  </span>
+                  <button
+                    onClick={refreshLeaderboard}
+                    disabled={lbLoading}
+                    title="Refresh leaderboard"
+                    className="text-gray-400 hover:text-orange-400 transition disabled:opacity-40 p-1 rounded-md hover:bg-gray-700/50"
+                  >
+                    <svg
+                      className={`w-4 h-4 ${lbLoading ? "animate-spin" : ""}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mb-5">
+                Updates after claiming points · auto-refreshes every 30s
               </p>
 
               {leaderboard.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-gray-500 text-sm">No points awarded yet.</p>
+                <div className="text-center py-10">
+                  <div className="text-4xl mb-3">🎯</div>
+                  <p className="text-gray-400 text-sm font-medium">No points yet</p>
+                  <p className="text-gray-600 text-xs mt-1">
+                    Claim points on a finalized question to appear here
+                  </p>
                 </div>
               ) : (
-                <ul className="space-y-3">
-                  {leaderboard.map((lb, idx) => (
-                    <li
-                      key={`${lb.user}-${idx}`}
-                      className="bg-gray-900/50 rounded-lg p-3 flex justify-between items-center border border-gray-700/30"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-gray-500 font-bold w-4 text-center">
-                          {idx + 1}
-                        </span>
-                        <img
-                          src={`https://api.dicebear.com/7.x/identicon/svg?seed=${lb.user}`}
-                          alt="avatar"
-                          className="w-6 h-6 rounded-full opacity-80"
-                        />
-                        <span className="text-sm font-medium text-gray-200">
-                          {lb.user.slice(0, 4)}...{lb.user.slice(-4)}
-                        </span>
-                      </div>
-                      <span className="text-orange-400 font-bold text-sm">
-                        {lb.points} pts
-                      </span>
-                    </li>
-                  ))}
+                <ul className="space-y-2">
+                  {leaderboard.map((lb, idx) => {
+                    const medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
+                    const isMe = userAddress?.toLowerCase() === lb.user.toLowerCase();
+                    return (
+                      <li
+                        key={`${lb.user}-${idx}`}
+                        className={`rounded-xl p-3 flex justify-between items-center border transition-all ${
+                          isMe
+                            ? "bg-orange-500/10 border-orange-500/40 shadow-sm shadow-orange-500/10"
+                            : idx === 0
+                            ? "bg-yellow-500/5 border-yellow-500/20"
+                            : "bg-gray-900/40 border-gray-700/30"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-lg leading-none w-6 text-center">
+                            {medals[idx] ?? idx + 1}
+                          </span>
+                          <img
+                            src={`https://api.dicebear.com/7.x/identicon/svg?seed=${lb.user}`}
+                            alt="avatar"
+                            className="w-7 h-7 rounded-full opacity-90 border border-gray-600/50"
+                          />
+                          <div>
+                            <span className={`text-sm font-semibold ${isMe ? "text-orange-300" : "text-gray-200"}`}>
+                              {lb.user.slice(0, 5)}…{lb.user.slice(-4)}
+                            </span>
+                            {isMe && (
+                              <span className="ml-2 text-[10px] bg-orange-500/30 text-orange-400 px-1.5 py-0.5 rounded font-bold">
+                                YOU
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className={`font-bold text-sm ${idx === 0 ? "text-yellow-400" : "text-orange-400"}`}>
+                            {lb.points}
+                          </span>
+                          <span className="text-gray-500 text-xs ml-1">pts</span>
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>
           </div>
         </div>
       </main>
+
       <Footer />
     </div>
   );
 }
+
