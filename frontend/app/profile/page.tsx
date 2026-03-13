@@ -245,7 +245,7 @@ function StatCard({
   color: string;
 }) {
   return (
-    <div className="bg-gray-800/40 backdrop-blur-md p-4 rounded-2xl border border-gray-700/50 flex flex-col items-center text-center">
+    <div className="bg-gray-800/40 backdrop-blur-md p-4 rounded-2xl border border-gray-700/50 flex flex-col hover:border-gray-500 transition-colors items-center text-center">
       <span className="text-2xl mb-1">{icon}</span>
       <span
         className={`text-2xl font-black bg-gradient-to-r ${color} bg-clip-text text-transparent`}
