@@ -215,7 +215,7 @@ export default function ProfilePage() {
             ) : (
               <div className="bg-gray-800/30 border border-gray-700/50 rounded-2xl p-12 text-center">
                 <p className="text-gray-500 text-lg mb-4">
-                  You haven't joined any events yet.
+                  You haven't joined any events yet. Check out the events page to get started.
                 </p>
                 <a
                   href="/events"
