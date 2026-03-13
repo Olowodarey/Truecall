@@ -9,6 +9,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import UnifiedBackground from "@/components/UnifiedBackground";
 
+// Profile Page Component
 export default function ProfilePage() {
   const { isConnected, userAddress } = useWallet();
   const [events, setEvents] = useState<ChainEvent[]>([]);
