@@ -221,7 +221,7 @@ export default function ProfilePage() {
                   href="/events"
                   className="text-orange-500 hover:text-orange-400 font-semibold transition-colors"
                 >
-                  Explore events and start predicting &rarr;
+                  Explore events and start predicting <span aria-hidden="true">&rarr;</span>
                 </a>
               </div>
             )}
