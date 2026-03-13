@@ -283,7 +283,7 @@ function RewardCard({
         {description}
       </p>
       <div
-        className={`text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full inline-block ${isLocked ? "bg-gray-900/50 text-gray-600" : "bg-orange-500/10 text-orange-500"}`}
+        className={`text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full inline-block select-none ${isLocked ? "bg-gray-900/50 text-gray-600" : "bg-orange-500/10 text-orange-500"}`}
       >
         {status}
       </div>
