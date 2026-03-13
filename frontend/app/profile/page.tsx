@@ -105,7 +105,7 @@ export default function ProfilePage() {
             <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-orange-500 to-yellow-500 p-1">
               <div className="w-full h-full rounded-xl bg-gray-900 flex items-center justify-center overflow-hidden">
                 <img
-                  src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${userAddress}`}
+                  src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${userAddress}&backgroundColor=transparent`}
                   alt="Avatar"
                   className="w-full h-full object-cover"
                 />
