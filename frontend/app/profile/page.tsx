@@ -107,6 +107,7 @@ export default function ProfilePage() {
                 <img
                   src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${userAddress}&backgroundColor=transparent`}
                   alt="Avatar"
+                  title="User Avatar"
                   className="w-full h-full object-cover"
                 />
               </div>
