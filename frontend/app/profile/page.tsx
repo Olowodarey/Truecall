@@ -79,6 +79,7 @@ export default function ProfilePage() {
               profile, track your predictions, and claim your rewards.
             </p>
             <button
+              aria-label="Connect Stacks Wallet"
               onClick={() =>
                 (window as any).StacksProvider?.authenticationRequest()
               }
