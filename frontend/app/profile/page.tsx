@@ -76,7 +76,7 @@ export default function ProfilePage() {
             </h1>
             <p className="text-gray-400 mb-8 leading-relaxed">
               Please connect your Stacks wallet to view your personalized
-              profile, track your predictions, and claim your rewards.
+              dashboard, track your predictions, and claim your rewards.
             </p>
             <button
               aria-label="Connect Stacks Wallet"
