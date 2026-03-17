@@ -52,6 +52,9 @@ function parseBool(cv: ClarityValue | any): boolean {
   if (cv === false) return false;
   if (cv?.type === ClarityType.BoolTrue) return true;
   if (cv?.type === ClarityType.BoolFalse) return false;
+  // Hiro API returns { type: "true" } or { type: "false" } as strings
+  if (cv?.type === "true") return true;
+  if (cv?.type === "false") return false;
   // Hiro API sometimes returns { value: true/false }
   if (cv?.value === true) return true;
   if (cv?.value === false) return false;
@@ -187,7 +190,6 @@ export async function getAnswer(
   questionId: number,
   user: string,
 ): Promise<ChainAnswer | null> {
-  // Bypass cache — answers change after tx confirmation and must always be fresh
   const res = await fetchCallReadOnlyFunction({
     contractAddress: pmAddr,
     contractName: pmName,
@@ -197,18 +199,17 @@ export async function getAnswer(
     network: STACKS_TESTNET,
   });
 
-  // The Hiro API can return the tuple wrapped in ResponseOk → OptionalSome → Tuple
-  // or just OptionalSome → Tuple. Walk through all layers manually.
   let inner: any = res;
-
-  // Unwrap ResponseOk
   if (inner?.type === ClarityType.ResponseOk) inner = inner.value;
-  // Unwrap OptionalNone
-  if (!inner || inner?.type === ClarityType.OptionalNone) return null;
-  // Unwrap OptionalSome
-  if (inner?.type === ClarityType.OptionalSome) inner = inner.value;
+  if (
+    !inner ||
+    inner?.type === ClarityType.OptionalNone ||
+    inner?.type === "none"
+  )
+    return null;
+  if (inner?.type === ClarityType.OptionalSome || inner?.type === "some")
+    inner = inner.value;
 
-  // Now inner should be the tuple
   const data: Record<string, any> = inner?.data ?? inner?.value ?? inner ?? {};
   if (!data || Object.keys(data).length === 0) return null;
 
