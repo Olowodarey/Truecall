@@ -159,10 +159,6 @@ export default function EventPredictionPage() {
   // ── Derived state ──────────────────────────────────────────────────────────
 
   const isJoined = !!participant?.joined;
-  const allFinalized =
-    event !== null &&
-    event.questionCount > 0 &&
-    event.finalizedQuestionCount === event.questionCount;
 
   // ── Loading / error screens ────────────────────────────────────────────────
 
@@ -318,7 +314,10 @@ export default function EventPredictionPage() {
                     : `Claim Refund (${feeLabel})`}
               </button>
             </div>
-          ) : !event.isActive && isJoined && allFinalized ? (
+          ) : !event.isActive &&
+            isJoined &&
+            event.questionCount > 0 &&
+            event.finalizedQuestionCount === event.questionCount ? (
             /* Normal close — claim winnings */
             <div className="p-5 bg-green-900/20 rounded-xl border border-green-500/30 text-center">
               <p className="text-green-400 font-semibold mb-3">
@@ -337,276 +336,29 @@ export default function EventPredictionPage() {
           ) : null}
         </div>
 
-        {/* ── Questions + Leaderboard ── */}
+        {/* ── Leaderboard + Questions CTA ── */}
         <div className="grid lg:grid-cols-3 gap-8">
-          {/* Questions column */}
-          <div className="lg:col-span-2 space-y-6">
-            <h2 className="text-2xl font-bold text-white mb-2">Questions</h2>
-
-            {questions.length === 0 ? (
-              <p className="text-gray-500 italic p-4 bg-gray-800/30 rounded-xl text-center">
-                No questions available for this event yet.
-              </p>
-            ) : (
-              <div className="grid gap-4">
-                {questions.map((q) => {
-                  const userAnswer = answers[q.id];
-                  const alreadyAnswered = !!userAnswer;
-                  const pointsClaimed = !!userAnswer?.pointsClaimed;
-                  const isSelected = selectedQuestion?.id === q.id;
-                  const isQuestionOpen = q.status === "open";
-
-                  const activeClass = isSelected
-                    ? "border-orange-500 ring-2 ring-orange-500/30"
-                    : "border-gray-700/50 hover:border-gray-600";
-
-                  return (
-                    <div
-                      key={q.id}
-                      className={`bg-gray-800/50 backdrop-blur-sm p-5 rounded-2xl border transition-all ${activeClass} ${
-                        isQuestionOpen && isJoined && !alreadyAnswered
-                          ? "cursor-pointer"
-                          : "opacity-90"
-                      }`}
-                      onClick={() => {
-                        if (isQuestionOpen && isJoined && !alreadyAnswered) {
-                          setSelectedQuestion(q);
-                          setPrediction(null);
-                          setPredictError(null);
-                        }
-                      }}
-                    >
-                      {/* Question header */}
-                      <div className="flex justify-between items-start mb-2 gap-4">
-                        <h3 className="text-lg font-medium text-white leading-tight">
-                          {q.question}
-                        </h3>
-                        <span
-                          className={`shrink-0 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${
-                            q.status === "open"
-                              ? "bg-blue-500/10 text-blue-400"
-                              : "bg-purple-500/10 text-purple-400"
-                          }`}
-                        >
-                          {q.status}
-                        </span>
-                      </div>
-
-                      {/* Meta */}
-                      <div className="flex flex-wrap gap-4 text-xs text-gray-400 mb-3">
-                        <span>
-                          ⚡ Target: ${q.targetPrice.toLocaleString()}
-                        </span>
-                        <span>
-                          🔒 Predictions close:{" "}
-                          {formatEstimatedTime(
-                            q.closeBlock,
-                            currentBlock,
-                            q.status,
-                          )}
-                        </span>
-                        {q.status === "open" && (
-                          <span className="text-yellow-400/80">
-                            ⏳ Resolves:{" "}
-                            {formatEstimatedTime(q.resolveBlock, currentBlock)}
-                          </span>
-                        )}
-                        {q.status === "final" && q.oraclePrice > 0 && (
-                          <span className="text-green-400">
-                            ✅ Oracle: ${q.oraclePrice.toLocaleString()}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Outcome badge */}
-                      {q.status === "final" && q.finalOutcome !== null && (
-                        <div
-                          className={`text-xs font-semibold inline-block px-3 py-1 rounded-full mb-3 ${
-                            q.finalOutcome
-                              ? "bg-green-500/10 text-green-400 border border-green-500/30"
-                              : "bg-red-500/10 text-red-400 border border-red-500/30"
-                          }`}
-                        >
-                          Outcome:{" "}
-                          {q.finalOutcome
-                            ? "YES — Price ≥ Target"
-                            : "NO — Price < Target"}
-                        </div>
-                      )}
-
-                      {/* User's answer + result — shown on finalized questions */}
-                      {q.status === "final" &&
-                        q.finalOutcome !== null &&
-                        (alreadyAnswered ? (
-                          <div
-                            className={`flex items-center gap-3 mb-3 p-3 rounded-xl border ${
-                              userAnswer!.prediction === q.finalOutcome
-                                ? "bg-green-500/10 border-green-500/30"
-                                : "bg-red-500/10 border-red-500/30"
-                            }`}
-                          >
-                            <span className="text-lg">
-                              {userAnswer!.prediction === q.finalOutcome
-                                ? "✅"
-                                : "❌"}
-                            </span>
-                            <div className="flex flex-col gap-0.5">
-                              <span className="text-xs text-gray-400">
-                                Your prediction
-                              </span>
-                              <span
-                                className={`text-sm font-bold ${
-                                  userAnswer!.prediction === q.finalOutcome
-                                    ? "text-green-400"
-                                    : "text-red-400"
-                                }`}
-                              >
-                                {userAnswer!.prediction ? "YES" : "NO"} —{" "}
-                                {userAnswer!.prediction === q.finalOutcome
-                                  ? "Correct"
-                                  : "Wrong"}
-                              </span>
-                            </div>
-                          </div>
-                        ) : isJoined && userAddress ? (
-                          <div className="flex items-center gap-3 mb-3 p-3 rounded-xl border bg-gray-700/30 border-gray-600/30">
-                            <span className="text-lg">⚪</span>
-                            <div className="flex flex-col gap-0.5">
-                              <span className="text-xs text-gray-400">
-                                Your prediction
-                              </span>
-                              <span className="text-sm font-bold text-gray-500">
-                                No prediction made
-                              </span>
-                            </div>
-                          </div>
-                        ) : null)}
-
-                      {/* User's answer badge — shown on open questions */}
-                      {q.status === "open" && alreadyAnswered && (
-                        <div className="text-xs text-gray-400 mb-3 flex items-center gap-2">
-                          <span>Your answer:</span>
-                          <span
-                            className={`font-bold px-2 py-0.5 rounded ${
-                              userAnswer!.prediction
-                                ? "bg-green-500/20 text-green-400"
-                                : "bg-red-500/20 text-red-400"
-                            }`}
-                          >
-                            {userAnswer!.prediction ? "YES" : "NO"}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* ── CLAIM POINTS button ── */}
-                      {q.status === "final" &&
-                        isJoined &&
-                        userAddress &&
-                        alreadyAnswered &&
-                        !pointsClaimed &&
-                        q.finalOutcome !== null &&
-                        userAnswer!.prediction === q.finalOutcome && (
-                          <button
-                            disabled={!!pending[`points-${q.id}`]}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleClaimPoints(q.id);
-                            }}
-                            className="mt-2 w-full py-2.5 rounded-lg border border-purple-500/50 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 font-semibold text-sm transition disabled:opacity-50"
-                          >
-                            {pending[`points-${q.id}`]
-                              ? "Waiting for wallet..."
-                              : "🏆 Claim Points"}
-                          </button>
-                        )}
-
-                      {/* Already claimed */}
-                      {q.status === "final" && pointsClaimed && (
-                        <div className="mt-2 text-center text-xs text-green-400 font-semibold">
-                          ✅ Points claimed
-                        </div>
-                      )}
-
-                      {/* ── Prediction expansion (open questions only) ── */}
-                      {isSelected && isQuestionOpen && !alreadyAnswered && (
-                        <div className="mt-6 pt-5 border-t border-gray-700/50">
-                          <p className="text-sm text-gray-300 font-medium mb-3 text-center">
-                            Your Forecast
-                          </p>
-                          <div className="grid grid-cols-2 gap-3 mb-4">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setPrediction(true);
-                              }}
-                              className={`py-3 px-2 rounded-lg border-2 transition flex flex-col items-center justify-center gap-1 ${
-                                prediction === true
-                                  ? "border-green-500 bg-green-500/20 text-green-400"
-                                  : "border-gray-600/50 bg-gray-800 hover:bg-gray-750 text-gray-300"
-                              }`}
-                            >
-                              <span className="font-bold text-lg">✅ YES</span>
-                              <span className="text-xs opacity-80">
-                                (Price ≥ Target)
-                              </span>
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setPrediction(false);
-                              }}
-                              className={`py-3 px-2 rounded-lg border-2 transition flex flex-col items-center justify-center gap-1 ${
-                                prediction === false
-                                  ? "border-red-500 bg-red-500/20 text-red-400"
-                                  : "border-gray-600/50 bg-gray-800 hover:bg-gray-750 text-gray-300"
-                              }`}
-                            >
-                              <span className="font-bold text-lg">❌ NO</span>
-                              <span className="text-xs opacity-80">
-                                (Price &lt; Target)
-                              </span>
-                            </button>
-                          </div>
-
-                          {predictError && (
-                            <p className="text-red-400 text-xs text-center mb-3">
-                              {predictError}
-                            </p>
-                          )}
-                          {predictSuccess && (
-                            <p className="text-green-400 text-xs text-center mb-3 font-medium">
-                              Forecast submitted successfully!
-                            </p>
-                          )}
-
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handlePredict();
-                            }}
-                            disabled={
-                              prediction === null || !!pending[`answer-${q.id}`]
-                            }
-                            className="w-full bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold py-3 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {pending[`answer-${q.id}`]
-                              ? "Waiting for wallet..."
-                              : "Submit Forecast"}
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Already answered notice */}
-                      {alreadyAnswered && isQuestionOpen && (
-                        <div className="mt-3 text-center text-xs text-gray-500">
-                          Answer locked in — awaiting close block
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+          {/* Questions CTA */}
+          <div className="lg:col-span-2">
+            <div className="bg-gray-800/40 border border-gray-700/50 rounded-2xl p-8 flex flex-col items-center justify-center text-center gap-4 h-full min-h-[200px]">
+              <div className="text-4xl">🎯</div>
+              <div>
+                <h2 className="text-xl font-bold text-white mb-1">
+                  {event.questionCount} Question
+                  {event.questionCount !== 1 ? "s" : ""}
+                </h2>
+                <p className="text-gray-400 text-sm">
+                  {event.finalizedQuestionCount} of {event.questionCount}{" "}
+                  finalized
+                </p>
               </div>
-            )}
+              <button
+                onClick={() => router.push(`/events/${eventId}/questions`)}
+                className="bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold py-3 px-8 rounded-lg transition-all duration-300 transform hover:scale-105"
+              >
+                View Questions →
+              </button>
+            </div>
           </div>
 
           {/* Leaderboard column */}
