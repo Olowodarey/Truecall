@@ -13,21 +13,15 @@ import { clearCache } from "@/lib/cache";
 
 import {
   getEvent,
-  getQuestionsForEvent,
   getLeaderboard,
   getParticipant,
-  getAnswer,
   joinEventTxOptions,
-  answerQuestionTxOptions,
-  claimPointsTxOptions,
   claimWinningsTxOptions,
   claimRefundTxOptions,
 } from "@/lib/stacks";
 
 import type {
   ChainEvent,
-  ChainQuestion,
-  ChainAnswer,
   LeaderboardEntry,
   ChainParticipant,
 } from "@/lib/types";
@@ -40,13 +34,8 @@ export default function EventPredictionPage() {
   const eventId = Number(params?.id);
 
   const [event, setEvent] = useState<ChainEvent | null>(null);
-  const [questions, setQuestions] = useState<ChainQuestion[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [participant, setParticipant] = useState<ChainParticipant | null>(null);
-  // Map of questionId → ChainAnswer (to show claim state)
-  const [answers, setAnswers] = useState<Record<number, ChainAnswer | null>>(
-    {},
-  );
   const [currentBlock, setCurrentBlock] = useState(0);
   const [lbLoading, setLbLoading] = useState(false);
 
@@ -57,13 +46,6 @@ export default function EventPredictionPage() {
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const setBusy = (key: string, v: boolean) =>
     setPending((p) => ({ ...p, [key]: v }));
-
-  // Prediction UI state
-  const [selectedQuestion, setSelectedQuestion] =
-    useState<ChainQuestion | null>(null);
-  const [prediction, setPrediction] = useState<boolean | null>(null);
-  const [predictSuccess, setPredictSuccess] = useState(false);
-  const [predictError, setPredictError] = useState<string | null>(null);
 
   // ── Data fetching ──────────────────────────────────────────────────────────
 
@@ -106,26 +88,12 @@ export default function EventPredictionPage() {
       }
       setEvent(ev);
 
-      const [qs, lb] = await Promise.all([
-        getQuestionsForEvent(eventId),
-        getLeaderboard(eventId),
-      ]);
-      setQuestions(qs);
+      const lb = await getLeaderboard(eventId);
       setLeaderboard(lb);
 
       if (userAddress) {
-        // Fetch participant + all answers — errors per-question are swallowed
-        const [p, ...answerResults] = await Promise.all([
-          getParticipant(eventId, userAddress),
-          ...qs.map((q) => getAnswer(q.id, userAddress!).catch(() => null)),
-        ]);
+        const p = await getParticipant(eventId, userAddress);
         setParticipant(p);
-
-        const answerMap: Record<number, ChainAnswer | null> = {};
-        qs.forEach((q, i) => {
-          answerMap[q.id] = (answerResults[i] as ChainAnswer | null) ?? null;
-        });
-        setAnswers(answerMap);
       }
     } catch (err) {
       console.error(err);
@@ -159,59 +127,6 @@ export default function EventPredictionPage() {
         fetchData();
       },
       onCancel: () => setBusy("join", false),
-    });
-  };
-
-  const handlePredict = async () => {
-    if (!selectedQuestion || prediction === null) return;
-    const questionId = selectedQuestion.id;
-    const lockedPrediction = prediction;
-    setBusy(`answer-${questionId}`, true);
-    setPredictError(null);
-    try {
-      await openContractCall({
-        ...answerQuestionTxOptions(questionId, lockedPrediction),
-        onFinish: () => {
-          clearCache();
-          // Optimistically lock the answer in local state immediately —
-          // the tx won't confirm for ~10 min so we can't rely on fetchData
-          setAnswers((prev) => ({
-            ...prev,
-            [questionId]: {
-              prediction: lockedPrediction,
-              pointsClaimed: false,
-            },
-          }));
-          setPredictSuccess(true);
-          setTimeout(() => {
-            setPredictSuccess(false);
-            setSelectedQuestion(null);
-            setPrediction(null);
-            setBusy(`answer-${questionId}`, false);
-          }, 3000);
-        },
-        onCancel: () => {
-          setBusy(`answer-${questionId}`, false);
-        },
-      });
-    } catch (err: any) {
-      setPredictError(err?.message || "Prediction failed");
-      setBusy(`answer-${questionId}`, false);
-    }
-  };
-
-  const handleClaimPoints = async (questionId: number) => {
-    setBusy(`points-${questionId}`, true);
-    await openContractCall({
-      ...claimPointsTxOptions(questionId),
-      onFinish: () => {
-        clearCache();
-        setBusy(`points-${questionId}`, false);
-        fetchData();
-        // Give the chain ~3 s to anchor the block, then refresh leaderboard
-        setTimeout(() => refreshLeaderboard(), 3000);
-      },
-      onCancel: () => setBusy(`points-${questionId}`, false),
     });
   };
 
