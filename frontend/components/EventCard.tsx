@@ -3,8 +3,13 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { ChainEvent, ChainQuestion, ChainParticipant } from "@/lib/types";
-import { claimPointsTxOptions, claimWinningsTxOptions, joinEventTxOptions, getParticipant } from "@/lib/stacks";
-import { openContractCall } from "@stacks/connect";
+import {
+  claimPointsTxOptions,
+  claimWinningsTxOptions,
+  joinEventTxOptions,
+  getParticipant,
+} from "@/lib/stacks";
+const { openContractCall } = require("@stacks/connect") as any;
 import { formatEstimatedTime } from "@/lib/utils";
 import { clearCache } from "@/lib/cache";
 
@@ -30,7 +35,9 @@ export default function EventCard({
 
   useEffect(() => {
     if (userAddress) {
-      getParticipant(event.id, userAddress).then(setParticipant).catch(console.error);
+      getParticipant(event.id, userAddress)
+        .then(setParticipant)
+        .catch(console.error);
     }
   }, [event.id, userAddress]);
 
@@ -41,7 +48,8 @@ export default function EventCard({
     : "bg-gray-500/20 text-gray-400 border-gray-500/50";
 
   const allFinalized =
-    event.questionCount > 0 && event.finalizedQuestionCount === event.questionCount;
+    event.questionCount > 0 &&
+    event.finalizedQuestionCount === event.questionCount;
   const poolStx = (event.totalPool / 1_000_000).toFixed(2);
   const feeLabel = `${(event.entryFee / 1_000_000).toFixed(2)} STX`;
 
@@ -83,13 +91,13 @@ export default function EventCard({
     const key = `winnings-${event.id}`;
     setBusy(key, true);
     await openContractCall({
-        ...claimWinningsTxOptions(event.id),
-        onFinish: () => {
-          clearCache();
-          setBusy(key, false);
-          onRefresh?.();
-        },
-        onCancel: () => setBusy(key, false),
+      ...claimWinningsTxOptions(event.id),
+      onFinish: () => {
+        clearCache();
+        setBusy(key, false);
+        onRefresh?.();
+      },
+      onCancel: () => setBusy(key, false),
     });
   };
 
@@ -141,48 +149,11 @@ export default function EventCard({
           </div>
           <div className="bg-gray-700/30 rounded-lg p-3">
             <p className="text-gray-400 text-xs mb-1">Ends At</p>
-            <p className="text-white font-semibold">{formatEstimatedTime(event.endBlock, currentBlock)}</p>
+            <p className="text-white font-semibold">
+              {formatEstimatedTime(event.endBlock, currentBlock)}
+            </p>
           </div>
         </div>
-
-        {questions && questions.length > 0 && (
-          <div className="mb-5">
-            <h4 className="font-semibold text-orange-400 text-sm mb-2">
-              Questions
-            </h4>
-            <ul className="space-y-2">
-              {questions.map((q) => {
-                const isQuestionOpen = q.status === "open";
-                return (
-                  <li key={q.id}>
-                    <div
-                      className={`p-3 rounded-lg text-sm border transition-all ${
-                        isQuestionOpen && isOpen
-                          ? "border-orange-500/40 bg-orange-500/5"
-                          : "border-gray-700/50 bg-gray-800/60"
-                      }`}
-                    >
-                      <p className="font-medium text-white">{q.question}</p>
-                      <div className="flex justify-between items-center mt-2 text-gray-400">
-                        <span>Target: ${q.targetPrice.toLocaleString()}</span>
-                        <span
-                          className={`capitalize px-2 py-0.5 rounded-full border text-xs ${
-                            q.status === "open"
-                              ? "bg-green-500/10 border-green-500/30 text-green-400"
-                              : "bg-blue-500/10 border-blue-500/30 text-blue-400"
-                          }`}
-                        >
-                          {q.status}
-                        </span>
-                      </div>
-                      {getQuestionActions(q)}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        )}
       </div>
 
       <div className="mt-4">
@@ -193,10 +164,12 @@ export default function EventCard({
             onClick={handleJoin}
             className="w-full bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300 disabled:opacity-50"
           >
-            {pending[`join-${event.id}`] ? "Waiting..." : `Join Event (${feeLabel})`}
+            {pending[`join-${event.id}`]
+              ? "Waiting..."
+              : `Join Event (${feeLabel})`}
           </button>
         ) : isOpen && userAddress && participant?.joined ? (
-           <button
+          <button
             onClick={() => router.push(`/events/${event.id}`)}
             className="w-full bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 hover:shadow-lg hover:shadow-orange-500/50"
           >
@@ -218,12 +191,12 @@ export default function EventCard({
             Event Settled ✓
           </div>
         ) : !isOpen ? (
-           <button
-             onClick={() => router.push(`/events/${event.id}`)}
-             className="w-full bg-gray-700/50 text-white font-semibold py-3 px-6 rounded-lg transition hover:bg-gray-600"
-           >
-              View Predictions
-           </button>
+          <button
+            onClick={() => router.push(`/events/${event.id}`)}
+            className="w-full bg-gray-700/50 text-white font-semibold py-3 px-6 rounded-lg transition hover:bg-gray-600"
+          >
+            View Predictions
+          </button>
         ) : (
           <div className="w-full bg-gray-700/50 text-gray-400 font-semibold py-3 px-6 rounded-lg text-center">
             Connect Wallet to Participate
