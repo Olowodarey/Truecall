@@ -565,7 +565,7 @@
   )
 )
 
-;; If submitter misses the submission window, any member can skip that round
+;; If submitter misses the submission window, only the creator can skip that round
 (define-public (skip-missed-round (event-id uint) (round-number uint))
   (let (
     (caller tx-sender)
@@ -574,7 +574,7 @@
     (completed-next (+ (get completed-rounds event) u1))
   )
     (begin
-      (asserts! (is-event-member event-id caller) err-not-joined)
+      (asserts! (is-eq caller (get creator event)) err-not-event-creator)
       (asserts! (get is-active event) err-event-ended)
       (asserts! (is-eq (get status round) status-pending-submission) err-round-not-awaiting-sub)
       (asserts! (>= burn-block-height (get submission-deadline round)) err-round-submission-open)
@@ -633,9 +633,8 @@
 ;; ROUND RESOLUTION
 ;; -------------------------------------------------------
 
-;; Any joined member resolves a round by supplying the keeper price.
-;; FIX: removed oracle trait — uses keeper-supplied price like truecall.
-;; FIX: membership check is now first, before any computation.
+;; Only the event creator can resolve a round by supplying the keeper price.
+;; This is their sole admin privilege — no other special powers.
 (define-public (resolve-round
   (event-id uint)
   (round-number uint)
@@ -648,8 +647,8 @@
     (completed-next (+ (get completed-rounds event) u1))
   )
     (begin
-      ;; Membership check first — before any expensive computation
-      (asserts! (is-event-member event-id caller) err-not-joined)
+      ;; Only the creator of this event can finalize/resolve rounds
+      (asserts! (is-eq caller (get creator event)) err-not-event-creator)
       (asserts! (get is-active event) err-event-ended)
       (asserts! (is-eq (get status round) status-open-answering) err-round-not-open)
       (asserts! (>= burn-block-height (get answer-close-block round)) err-round-not-closable)
