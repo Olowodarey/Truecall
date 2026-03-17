@@ -52,6 +52,9 @@ export default function CreateEventPage() {
   const [marketQuestion, setMarketQuestion] = useState("");
   const [marketTargetPrice, setMarketTargetPrice] = useState<number>(100000); // USD
   const [questionDurationMinutes, setQuestionDurationMinutes] = useState(1440);
+  // How many minutes BEFORE resolution the prediction window closes (lock-in offset)
+  const [predictionLockOffsetMinutes, setPredictionLockOffsetMinutes] =
+    useState(1440); // default 24h before
 
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -188,10 +191,13 @@ export default function CreateEventPage() {
       }
 
       // 1 Bitcoin block = ~10 minutes
-      const blocksToAdd = Math.ceil(questionDurationMinutes / 10);
+      // questionDurationMinutes = total time from now until resolution
+      // predictionLockOffsetMinutes = how far before resolution predictions lock
+      const resolutionBlocks = Math.ceil(questionDurationMinutes / 10);
+      const lockOffsetBlocks = Math.ceil(predictionLockOffsetMinutes / 10);
       const maxAllowedBlocks = event.endBlock - currentBlock;
 
-      if (blocksToAdd > maxAllowedBlocks) {
+      if (resolutionBlocks > maxAllowedBlocks) {
         const maxMins = maxAllowedBlocks * 10;
         setError(
           `Question duration exceeds the event's remaining time. Max allowed is ${maxMins} minute(s).`,
@@ -200,7 +206,17 @@ export default function CreateEventPage() {
         return;
       }
 
-      const closeBlock = currentBlock + blocksToAdd;
+      if (lockOffsetBlocks >= resolutionBlocks) {
+        setError(
+          `Prediction lock offset must be less than the total question duration.`,
+        );
+        setCreating(false);
+        return;
+      }
+
+      // close-block = when predictions lock (resolution block minus the offset)
+      const resolutionBlock = currentBlock + resolutionBlocks;
+      const closeBlock = resolutionBlock - lockOffsetBlocks;
 
       // Ensure the string is strictly ASCII to prevent contract errors
       const asciiTrimmedQuestion = marketQuestion
@@ -562,7 +578,7 @@ export default function CreateEventPage() {
                       )}
                     </div>
 
-                    {/* Target Price + Close Time — inline side-by-side row */}
+                    {/* Target Price + Resolution Time + Lock Offset */}
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -592,7 +608,7 @@ export default function CreateEventPage() {
 
                       <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Close Time (Minutes)
+                          Resolution In (Minutes)
                         </label>
                         <div className="relative">
                           <input
@@ -606,27 +622,74 @@ export default function CreateEventPage() {
                             max={3153600}
                             step={10}
                             className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 pr-16"
-                            placeholder="1440"
+                            placeholder="2880"
                           />
                           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs pointer-events-none">
                             min
                           </span>
                         </div>
                         <p className="text-xs text-gray-500 mt-1">
-                          ≈ {Math.ceil(questionDurationMinutes / 10)} BTC block
-                          {Math.ceil(questionDurationMinutes / 10) !== 1
-                            ? "s"
-                            : ""}{" "}
-                          from now
+                          Admin finalizes ~
+                          {Math.ceil(questionDurationMinutes / 10)} blocks from
+                          now
                           {currentBlock > 0 && (
                             <span className="text-orange-400/70 ml-1">
-                              (close block ~
+                              (block ~
                               {currentBlock +
                                 Math.ceil(questionDurationMinutes / 10)}
                               )
                             </span>
                           )}
                         </p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                        Prediction Lock-in (Minutes before resolution)
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          value={predictionLockOffsetMinutes}
+                          onChange={(e) =>
+                            setPredictionLockOffsetMinutes(
+                              Number(e.target.value),
+                            )
+                          }
+                          disabled={creating}
+                          min={10}
+                          max={questionDurationMinutes - 10}
+                          step={10}
+                          className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 pr-16"
+                          placeholder="1440"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs pointer-events-none">
+                          min
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Predictions lock ~
+                        {Math.ceil(predictionLockOffsetMinutes / 10)} blocks
+                        before resolution
+                        {currentBlock > 0 && (
+                          <span className="text-orange-400/70 ml-1">
+                            (close block ~
+                            {currentBlock +
+                              Math.ceil(questionDurationMinutes / 10) -
+                              Math.ceil(predictionLockOffsetMinutes / 10)}
+                            )
+                          </span>
+                        )}
+                      </p>
+                      <div className="mt-2 p-2.5 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-xs text-yellow-300">
+                        ⏱ Predictions close{" "}
+                        <strong>
+                          {predictionLockOffsetMinutes} min (~
+                          {Math.ceil(predictionLockOffsetMinutes / 10)} blocks)
+                        </strong>{" "}
+                        before the admin finalizes. Set to 1440 for a 24h
+                        lock-in window.
                       </div>
                     </div>
 
