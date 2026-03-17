@@ -197,7 +197,7 @@
 )
 
 (define-private (get-participant-user (event-id uint) (index uint))
-  (get user (unwrap! (map-get? participant-index { event-id: event-id, index: index }) err-invalid-participant))
+  (get user (map-get? participant-index { event-id: event-id, index: index }))
 )
 
 (define-private (get-rank-multiplier (event-id uint) (caller principal))
@@ -216,7 +216,7 @@
   )
 )
 
-;; Inline top-5 leaderboard update — identical to truecall
+;; Inline top-5 leaderboard update  identical to truecall
 (define-private (update-top5 (event-id uint) (user principal) (new-points uint))
   (let (
     (current (default-to
@@ -351,7 +351,7 @@
       (asserts! (> participant-count u0) err-invalid-participant)
       (asserts! (<= next-round-number (get max-rounds event)) err-invalid-round-number)
       (let (
-        (submitter (get-participant-user event-id submitter-index))
+        (submitter (unwrap! (get-participant-user event-id submitter-index) err-invalid-participant))
         (submission-deadline (+ submission-open (get submission-window event)))
       )
         (begin
@@ -590,7 +590,8 @@
             (map-set private-events { event-id: event-id }
               (merge event { completed-rounds: completed-next })
             )
-            (spawn-next-round event-id)
+            (try! (spawn-next-round event-id))
+            (ok true)
           )
       )
     )
@@ -634,7 +635,7 @@
 ;; -------------------------------------------------------
 
 ;; Only the event creator can resolve a round by supplying the keeper price.
-;; This is their sole admin privilege — no other special powers.
+;; This is their sole admin privilege no other special powers.
 (define-public (resolve-round
   (event-id uint)
   (round-number uint)
@@ -673,7 +674,8 @@
                 (map-set private-events { event-id: event-id }
                   (merge event { completed-rounds: completed-next })
                 )
-                (spawn-next-round event-id)
+                (try! (spawn-next-round event-id))
+                (ok true)
               )
           )
         )
@@ -686,7 +688,7 @@
 ;; POINTS
 ;; -------------------------------------------------------
 
-;; FIX: inline points storage — no external .reputation-points contract
+;; FIX: inline points storage no external .reputation-points contract
 (define-public (claim-round-points (event-id uint) (round-number uint))
   (let (
     (caller tx-sender)

@@ -10,8 +10,8 @@ contract_id = 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.sip-010-trait-ft-standa
 
 
 # truecall-v5: finalize-question accepts oracle-price directly - no on-chain oracle calls
-[contracts.truecall-v6]
-path = 'contracts/truecall.clar'
+[contracts.private-event]
+path = 'contracts/private-event.clar'
 clarity_version = 2
 epoch = 'latest'
 

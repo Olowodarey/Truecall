@@ -4,6 +4,7 @@ export const DEPLOYER = "ST3TWY4THYR9PMMD72N7SA8SE1FJPSF219RNZQY5F";
 
 export const CONTRACTS = {
   PREDICTION_MARKET: `${DEPLOYER}.truecall-v6`,
+  PRIVATE_EVENT: `${DEPLOYER}.private-event`,
 } as const;
 
 // Hiro API base for testnet read-only calls
