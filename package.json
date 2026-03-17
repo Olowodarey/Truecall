@@ -1,8 +1,0 @@
-{
-  "name": "truecall1-monorepo",
-  "private": true,
-  "workspaces": [
-    "contracts",
-    "frontend"
-  ]
-}

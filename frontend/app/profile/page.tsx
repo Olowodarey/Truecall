@@ -11,7 +11,7 @@ import UnifiedBackground from "@/components/UnifiedBackground";
 
 // Profile Page Component
 export default function ProfilePage() {
-  const { isConnected, userAddress } = useWallet();
+  const { isConnected, stxAddress: userAddress } = useWallet();
   const [events, setEvents] = useState<ChainEvent[]>([]);
   const [joinedEvents, setJoinedEvents] = useState<ChainEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -215,13 +215,15 @@ export default function ProfilePage() {
             ) : (
               <div className="bg-gray-800/30 border border-gray-700/50 rounded-2xl p-12 text-center">
                 <p className="text-gray-500 text-lg mb-4">
-                  You haven't joined any events yet. Check out the events page to get started.
+                  You haven't joined any events yet. Check out the events page
+                  to get started.
                 </p>
                 <a
                   href="/events"
                   className="text-orange-500 hover:text-orange-400 font-semibold transition-colors"
                 >
-                  Explore events and start predicting <span aria-hidden="true">&rarr;</span>
+                  Explore events and start predicting{" "}
+                  <span aria-hidden="true">&rarr;</span>
                 </a>
               </div>
             )}

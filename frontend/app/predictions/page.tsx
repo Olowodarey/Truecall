@@ -10,7 +10,7 @@ import Footer from "@/components/Footer";
 import UnifiedBackground from "@/components/UnifiedBackground";
 
 export default function PredictionsPage() {
-  const { isConnected, userAddress } = useWallet();
+  const { isConnected, stxAddress: userAddress } = useWallet();
   const [predictions, setPredictions] = useState<ChainEvent[]>([]);
   const [loading, setLoading] = useState(true);
 

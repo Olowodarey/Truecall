@@ -10,7 +10,7 @@ import { useWallet } from "@/contexts/WalletContext";
 import { HIRO_API } from "@/lib/contracts";
 
 export default function EventsPage() {
-  const { userAddress } = useWallet();
+  const { stxAddress: userAddress } = useWallet();
   const [events, setEvents] = useState<ChainEvent[]>([]);
   const [questions, setQuestions] = useState<Record<number, ChainQuestion[]>>({});
   const [loading, setLoading] = useState(true);

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@/contexts/WalletContext";
+import { HIRO_API, DEPLOYER } from "@/lib/contracts";
 
 const { openContractCall } = require("@stacks/connect") as any;
 import {

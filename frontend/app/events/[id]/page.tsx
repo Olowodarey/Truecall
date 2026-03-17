@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useWallet } from "@/contexts/WalletContext";
-import { openContractCall } from "@stacks/connect";
+const { openContractCall } = require("@stacks/connect") as any;
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { HIRO_API } from "@/lib/contracts";
@@ -35,7 +35,7 @@ import type {
 export default function EventPredictionPage() {
   const params = useParams();
   const router = useRouter();
-  const { isConnected, connectWallet, userAddress } = useWallet();
+  const { isConnected, connectWallet, stxAddress: userAddress } = useWallet();
 
   const eventId = Number(params?.id);
 
@@ -44,7 +44,9 @@ export default function EventPredictionPage() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [participant, setParticipant] = useState<ChainParticipant | null>(null);
   // Map of questionId → ChainAnswer (to show claim state)
-  const [answers, setAnswers] = useState<Record<number, ChainAnswer | null>>({});
+  const [answers, setAnswers] = useState<Record<number, ChainAnswer | null>>(
+    {},
+  );
   const [currentBlock, setCurrentBlock] = useState(0);
   const [lbLoading, setLbLoading] = useState(false);
 
@@ -57,7 +59,8 @@ export default function EventPredictionPage() {
     setPending((p) => ({ ...p, [key]: v }));
 
   // Prediction UI state
-  const [selectedQuestion, setSelectedQuestion] = useState<ChainQuestion | null>(null);
+  const [selectedQuestion, setSelectedQuestion] =
+    useState<ChainQuestion | null>(null);
   const [prediction, setPrediction] = useState<boolean | null>(null);
   const [predictSuccess, setPredictSuccess] = useState(false);
   const [predictError, setPredictError] = useState<string | null>(null);
@@ -91,7 +94,9 @@ export default function EventPredictionPage() {
       fetch(`${HIRO_API}/v2/info`)
         .then((r) => r.json())
         .then((info) => setCurrentBlock(info.burn_block_height ?? 0))
-        .catch(() => {/* ignore — currentBlock stays 0 */});
+        .catch(() => {
+          /* ignore — currentBlock stays 0 */
+        });
 
       const ev = await getEvent(eventId);
 
@@ -112,9 +117,7 @@ export default function EventPredictionPage() {
         // Fetch participant + all answers — errors per-question are swallowed
         const [p, ...answerResults] = await Promise.all([
           getParticipant(eventId, userAddress),
-          ...qs.map((q) =>
-            getAnswer(q.id, userAddress!).catch(() => null)
-          ),
+          ...qs.map((q) => getAnswer(q.id, userAddress!).catch(() => null)),
         ]);
         setParticipant(p);
 
@@ -131,7 +134,6 @@ export default function EventPredictionPage() {
       setLoading(false);
     }
   };
-
 
   useEffect(() => {
     fetchData();
@@ -252,7 +254,9 @@ export default function EventPredictionPage() {
     return (
       <div className="min-h-screen pt-20 bg-gradient-to-br from-gray-900 via-black to-gray-900 flex flex-col items-center justify-center p-4">
         <div className="bg-red-500/10 border border-red-500/50 p-6 rounded-xl max-w-md w-full text-center">
-          <p className="text-red-400 font-semibold mb-4">{error ?? "Event not found"}</p>
+          <p className="text-red-400 font-semibold mb-4">
+            {error ?? "Event not found"}
+          </p>
           <button
             onClick={() => router.push("/events")}
             className="px-6 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition"
@@ -300,23 +304,35 @@ export default function EventPredictionPage() {
           {/* Stats grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             <div className="bg-gray-900/50 rounded-xl p-4 border border-gray-700/30">
-              <p className="text-gray-400 text-xs mb-1 uppercase font-semibold">Entry Fee</p>
+              <p className="text-gray-400 text-xs mb-1 uppercase font-semibold">
+                Entry Fee
+              </p>
               <p className="text-white font-medium text-lg">{feeLabel}</p>
             </div>
             <div className="bg-gray-900/50 rounded-xl p-4 border border-gray-700/30">
-              <p className="text-gray-400 text-xs mb-1 uppercase font-semibold">Prize Pool</p>
+              <p className="text-gray-400 text-xs mb-1 uppercase font-semibold">
+                Prize Pool
+              </p>
               <p className="text-orange-400 font-bold text-lg">{poolStx} STX</p>
             </div>
             <div className="bg-gray-900/50 rounded-xl p-4 border border-gray-700/30">
-              <p className="text-gray-400 text-xs mb-1 uppercase font-semibold">Participants</p>
-              <p className="text-white font-medium text-lg">{event.participantCount}</p>
+              <p className="text-gray-400 text-xs mb-1 uppercase font-semibold">
+                Participants
+              </p>
+              <p className="text-white font-medium text-lg">
+                {event.participantCount}
+              </p>
             </div>
             <div className="bg-gray-900/50 rounded-xl p-4 border border-gray-700/30">
-              <p className="text-gray-400 text-xs mb-1 uppercase font-semibold">Ends At</p>
+              <p className="text-gray-400 text-xs mb-1 uppercase font-semibold">
+                Ends At
+              </p>
               <p className="text-white font-medium text-lg">
                 {formatEstimatedTime(event.endBlock, currentBlock)}
               </p>
-              <p className="text-xs text-gray-500 mt-1">Block #{event.endBlock}</p>
+              <p className="text-xs text-gray-500 mt-1">
+                Block #{event.endBlock}
+              </p>
             </div>
           </div>
 
@@ -335,23 +351,31 @@ export default function EventPredictionPage() {
             </div>
           ) : event.isActive && !isJoined ? (
             <div className="p-6 bg-blue-900/20 rounded-xl border border-blue-500/30 text-center">
-              <h3 className="text-white font-bold text-xl mb-2">Join Event to Forecast</h3>
+              <h3 className="text-white font-bold text-xl mb-2">
+                Join Event to Forecast
+              </h3>
               <p className="text-gray-400 text-sm mb-6">
-                Pay {feeLabel} to enter. Forecast on all questions and earn points!
+                Pay {feeLabel} to enter. Forecast on all questions and earn
+                points!
               </p>
               <button
                 onClick={handleJoin}
                 disabled={!!pending["join"]}
                 className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-lg transition disabled:opacity-50"
               >
-                {pending["join"] ? "Waiting for wallet..." : `Join Event (${feeLabel})`}
+                {pending["join"]
+                  ? "Waiting for wallet..."
+                  : `Join Event (${feeLabel})`}
               </button>
             </div>
           ) : event.isActive && isJoined ? (
             <div className="bg-green-500/10 border border-green-500/30 text-green-400 p-4 rounded-xl text-center font-medium flex items-center justify-center gap-2">
-              ✅ You have joined this event! Choose a question below to forecast.
+              ✅ You have joined this event! Choose a question below to
+              forecast.
             </div>
-          ) : /* Event closed */ !event.isActive && isJoined && event.refundMode ? (
+          ) : /* Event closed */ !event.isActive &&
+            isJoined &&
+            event.refundMode ? (
             /* Refund mode — under 5 participants */
             <div className="p-5 bg-yellow-900/20 rounded-xl border border-yellow-500/30 text-center">
               <p className="text-yellow-400 font-semibold mb-3">
@@ -365,8 +389,8 @@ export default function EventPredictionPage() {
                 {participant?.refundClaimed
                   ? "Refund Already Claimed"
                   : pending["refund"]
-                  ? "Waiting for wallet..."
-                  : `Claim Refund (${feeLabel})`}
+                    ? "Waiting for wallet..."
+                    : `Claim Refund (${feeLabel})`}
               </button>
             </div>
           ) : !event.isActive && isJoined && allFinalized ? (
@@ -380,7 +404,9 @@ export default function EventPredictionPage() {
                 onClick={handleClaimWinnings}
                 className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold py-3 px-8 rounded-lg transition disabled:opacity-50"
               >
-                {pending["winnings"] ? "Waiting for wallet..." : "🏆 Claim Winnings"}
+                {pending["winnings"]
+                  ? "Waiting for wallet..."
+                  : "🏆 Claim Winnings"}
               </button>
             </div>
           ) : null}
@@ -388,7 +414,6 @@ export default function EventPredictionPage() {
 
         {/* ── Questions + Leaderboard ── */}
         <div className="grid lg:grid-cols-3 gap-8">
-
           {/* Questions column */}
           <div className="lg:col-span-2 space-y-6">
             <h2 className="text-2xl font-bold text-white mb-2">Questions</h2>
@@ -444,9 +469,16 @@ export default function EventPredictionPage() {
 
                       {/* Meta */}
                       <div className="flex flex-wrap gap-4 text-xs text-gray-400 mb-3">
-                        <span>⚡ Target: ${q.targetPrice.toLocaleString()}</span>
                         <span>
-                          🕒 Closes {formatEstimatedTime(q.closeBlock, currentBlock, q.status)}
+                          ⚡ Target: ${q.targetPrice.toLocaleString()}
+                        </span>
+                        <span>
+                          🕒 Closes{" "}
+                          {formatEstimatedTime(
+                            q.closeBlock,
+                            currentBlock,
+                            q.status,
+                          )}
                         </span>
                         {q.status === "final" && q.oraclePrice > 0 && (
                           <span className="text-green-400">
@@ -464,7 +496,10 @@ export default function EventPredictionPage() {
                               : "bg-red-500/10 text-red-400 border border-red-500/30"
                           }`}
                         >
-                          Outcome: {q.finalOutcome ? "YES — Price ≥ Target" : "NO — Price < Target"}
+                          Outcome:{" "}
+                          {q.finalOutcome
+                            ? "YES — Price ≥ Target"
+                            : "NO — Price < Target"}
                         </div>
                       )}
 
@@ -543,7 +578,9 @@ export default function EventPredictionPage() {
                               }`}
                             >
                               <span className="font-bold text-lg">✅ YES</span>
-                              <span className="text-xs opacity-80">(Price ≥ Target)</span>
+                              <span className="text-xs opacity-80">
+                                (Price ≥ Target)
+                              </span>
                             </button>
                             <button
                               onClick={(e) => {
@@ -557,7 +594,9 @@ export default function EventPredictionPage() {
                               }`}
                             >
                               <span className="font-bold text-lg">❌ NO</span>
-                              <span className="text-xs opacity-80">(Price &lt; Target)</span>
+                              <span className="text-xs opacity-80">
+                                (Price &lt; Target)
+                              </span>
                             </button>
                           </div>
 
@@ -578,8 +617,7 @@ export default function EventPredictionPage() {
                               handlePredict();
                             }}
                             disabled={
-                              prediction === null ||
-                              !!pending[`answer-${q.id}`]
+                              prediction === null || !!pending[`answer-${q.id}`]
                             }
                             className="w-full bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold py-3 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
                           >
@@ -644,7 +682,9 @@ export default function EventPredictionPage() {
               {leaderboard.length === 0 ? (
                 <div className="text-center py-10">
                   <div className="text-4xl mb-3">🎯</div>
-                  <p className="text-gray-400 text-sm font-medium">No points yet</p>
+                  <p className="text-gray-400 text-sm font-medium">
+                    No points yet
+                  </p>
                   <p className="text-gray-600 text-xs mt-1">
                     Claim points on a finalized question to appear here
                   </p>
@@ -653,7 +693,8 @@ export default function EventPredictionPage() {
                 <ul className="space-y-2">
                   {leaderboard.map((lb, idx) => {
                     const medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
-                    const isMe = userAddress?.toLowerCase() === lb.user.toLowerCase();
+                    const isMe =
+                      userAddress?.toLowerCase() === lb.user.toLowerCase();
                     return (
                       <li
                         key={`${lb.user}-${idx}`}
@@ -661,8 +702,8 @@ export default function EventPredictionPage() {
                           isMe
                             ? "bg-orange-500/10 border-orange-500/40 shadow-sm shadow-orange-500/10"
                             : idx === 0
-                            ? "bg-yellow-500/5 border-yellow-500/20"
-                            : "bg-gray-900/40 border-gray-700/30"
+                              ? "bg-yellow-500/5 border-yellow-500/20"
+                              : "bg-gray-900/40 border-gray-700/30"
                         }`}
                       >
                         <div className="flex items-center gap-3">
@@ -675,7 +716,9 @@ export default function EventPredictionPage() {
                             className="w-7 h-7 rounded-full opacity-90 border border-gray-600/50"
                           />
                           <div>
-                            <span className={`text-sm font-semibold ${isMe ? "text-orange-300" : "text-gray-200"}`}>
+                            <span
+                              className={`text-sm font-semibold ${isMe ? "text-orange-300" : "text-gray-200"}`}
+                            >
                               {lb.user.slice(0, 5)}…{lb.user.slice(-4)}
                             </span>
                             {isMe && (
@@ -686,10 +729,14 @@ export default function EventPredictionPage() {
                           </div>
                         </div>
                         <div className="text-right">
-                          <span className={`font-bold text-sm ${idx === 0 ? "text-yellow-400" : "text-orange-400"}`}>
+                          <span
+                            className={`font-bold text-sm ${idx === 0 ? "text-yellow-400" : "text-orange-400"}`}
+                          >
                             {lb.points}
                           </span>
-                          <span className="text-gray-500 text-xs ml-1">pts</span>
+                          <span className="text-gray-500 text-xs ml-1">
+                            pts
+                          </span>
                         </div>
                       </li>
                     );
@@ -705,4 +752,3 @@ export default function EventPredictionPage() {
     </div>
   );
 }
-

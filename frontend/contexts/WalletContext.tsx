@@ -6,9 +6,11 @@ const {
   connect,
   disconnect: stacksDisconnect,
   isConnected: stacksIsConnected,
+ 
 } = require("@stacks/connect") as any;
 
 interface WalletContextType {
+
   isConnected: boolean;
   stxAddress: string | null;
   btcAddress: string | null;
