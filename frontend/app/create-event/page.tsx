@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { openContractCall } from "@stacks/connect";
-import { HIRO_API, DEPLOYER } from "@/lib/contracts";
 import { useWallet } from "@/contexts/WalletContext";
+
+const { openContractCall } = require("@stacks/connect") as any;
 import {
   getAllEvents,
   getQuestionsForEvent,
@@ -21,7 +21,7 @@ import Footer from "@/components/Footer";
 
 export default function CreateEventPage() {
   const router = useRouter();
-  const { isConnected, connectWallet, userAddress } = useWallet();
+  const { isConnected, connectWallet, stxAddress: userAddress } = useWallet();
 
   // Admin Tabs
   const [activeTab, setActiveTab] = useState<
@@ -35,7 +35,10 @@ export default function CreateEventPage() {
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   // Stores live BTC price fetched from Hermes (used as fallback for finalize)
   const [pythPriceInfo, setPythPriceInfo] = useState<{
-    price: number; expo: number; conf: number; publishTime: number;
+    price: number;
+    expo: number;
+    conf: number;
+    publishTime: number;
   } | null>(null);
 
   // Form state - Create Event
@@ -84,7 +87,9 @@ export default function CreateEventPage() {
     // Only fetch initial Pyth price for display purposes
     if (isConnected) {
       const fetchPrice = () => {
-        fetch(`https://hermes.pyth.network/api/latest_price_feeds?ids[]=${BTC_FEED_ID_HEX}&binary=true`)
+        fetch(
+          `https://hermes.pyth.network/api/latest_price_feeds?ids[]=${BTC_FEED_ID_HEX}&binary=true`,
+        )
           .then((res) => res.json())
           .then((data) => {
             const feed = data?.[0]?.price ?? data?.[0]?.price_feed?.price;
@@ -132,7 +137,7 @@ export default function CreateEventPage() {
           title.trim().slice(0, 64),
           startBlock,
           endBlock,
-          entryFeeMicro
+          entryFeeMicro,
         ),
         appDetails: { name: "TrueCall", icon: "/favicon.ico" },
         onFinish: (data: any) => {
@@ -172,9 +177,11 @@ export default function CreateEventPage() {
       const resp = await fetch(`${HIRO_API}/v2/info`);
       const info = await resp.json();
       const currentBlock = info.burn_block_height ?? 0;
-      
+
       if (currentBlock >= event.endBlock) {
-        setError(`Event #${event.id} has already ended at block ${event.endBlock}.`);
+        setError(
+          `Event #${event.id} has already ended at block ${event.endBlock}.`,
+        );
         setCreating(false);
         return;
       }
@@ -182,16 +189,18 @@ export default function CreateEventPage() {
       // 1 Bitcoin block = ~10 minutes
       const blocksToAdd = Math.ceil(questionDurationMinutes / 10);
       const maxAllowedBlocks = event.endBlock - currentBlock;
-      
+
       if (blocksToAdd > maxAllowedBlocks) {
         const maxMins = maxAllowedBlocks * 10;
-        setError(`Question duration exceeds the event's remaining time. Max allowed is ${maxMins} minute(s).`);
+        setError(
+          `Question duration exceeds the event's remaining time. Max allowed is ${maxMins} minute(s).`,
+        );
         setCreating(false);
         return;
       }
-      
+
       const closeBlock = currentBlock + blocksToAdd;
-      
+
       // Ensure the string is strictly ASCII to prevent contract errors
       const asciiTrimmedQuestion = marketQuestion
         .replace(/[^\x00-\x7F]/g, "") // Remove non-ASCII characters like special symbols or emojis
@@ -203,7 +212,7 @@ export default function CreateEventPage() {
           selectedEventId,
           asciiTrimmedQuestion,
           marketTargetPrice,
-          closeBlock
+          closeBlock,
         ),
         appDetails: { name: "TrueCall", icon: "/favicon.ico" },
         onFinish: (data: any) => {
@@ -229,14 +238,16 @@ export default function CreateEventPage() {
     try {
       // Fetch live BTC/USD price from Hermes off-chain, then pass it directly to the contract.
       // The contract just compares this price vs target — no on-chain oracle calls at all.
-      const BTC_FEED_ID = "e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43";
+      const BTC_FEED_ID =
+        "e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43";
       let oraclePrice = 0;
       try {
         const hermesResp = await fetch(
-          `https://hermes.pyth.network/api/latest_price_feeds?ids[]=${BTC_FEED_ID}&binary=true`
+          `https://hermes.pyth.network/api/latest_price_feeds?ids[]=${BTC_FEED_ID}&binary=true`,
         );
         const hermesData = await hermesResp.json();
-        const feed = hermesData?.[0]?.price ?? hermesData?.[0]?.price_feed?.price;
+        const feed =
+          hermesData?.[0]?.price ?? hermesData?.[0]?.price_feed?.price;
         if (feed) {
           const rawPrice = Number(feed.price);
           const expo = Number(feed.expo);
@@ -246,12 +257,16 @@ export default function CreateEventPage() {
       } catch {
         // Fallback: use the displayed price from pythPriceInfo if Hermes fails
         if (pythPriceInfo?.price && pythPriceInfo?.expo) {
-          oraclePrice = Math.floor(pythPriceInfo.price / Math.pow(10, Math.abs(pythPriceInfo.expo)));
+          oraclePrice = Math.floor(
+            pythPriceInfo.price / Math.pow(10, Math.abs(pythPriceInfo.expo)),
+          );
         }
       }
 
       if (oraclePrice <= 0) {
-        throw new Error("Could not fetch a valid BTC price from Hermes. Please try again.");
+        throw new Error(
+          "Could not fetch a valid BTC price from Hermes. Please try again.",
+        );
       }
 
       await openContractCall({
@@ -259,11 +274,13 @@ export default function CreateEventPage() {
         appDetails: { name: "TrueCall", icon: "/favicon.ico" },
         onFinish: async () => {
           setPendingAction(null);
-          const allQuestions: Record<number, ChainQuestion[]> = { ...eventQuestions };
+          const allQuestions: Record<number, ChainQuestion[]> = {
+            ...eventQuestions,
+          };
           await Promise.all(
             events.map(async (ev) => {
               allQuestions[ev.id] = await getQuestionsForEvent(ev.id);
-            })
+            }),
           );
           setEventQuestions({ ...allQuestions });
           const refreshed = await getAllEvents();
@@ -499,7 +516,7 @@ export default function CreateEventPage() {
                           type="button"
                           onClick={() =>
                             setMarketQuestion(
-                              `Will BTC be at or above $${marketTargetPrice.toLocaleString()} when this question closes?`
+                              `Will BTC be at or above $${marketTargetPrice.toLocaleString()} when this question closes?`,
                             )
                           }
                           className="text-xs text-orange-400 hover:text-orange-300 underline"
@@ -514,7 +531,9 @@ export default function CreateEventPage() {
                         disabled={creating}
                         maxLength={128}
                         className={`w-full px-4 py-3 bg-gray-700/50 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 ${
-                          /\b(below|under|less than|drop|fall)\b/i.test(marketQuestion)
+                          /\b(below|under|less than|drop|fall)\b/i.test(
+                            marketQuestion,
+                          )
                             ? "border-red-500/70"
                             : "border-gray-600"
                         }`}
@@ -522,15 +541,22 @@ export default function CreateEventPage() {
                       />
                       {/* Contract logic reminder */}
                       <div className="mt-2 p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs text-blue-300">
-                        <strong>⚙️ Contract logic:</strong> YES = oracle price ≥ target. NO = oracle price &lt; target.
-                        Always phrase as <em>"Will [asset] be at or above $[target]?"</em>
+                        <strong>⚙️ Contract logic:</strong> YES = oracle price ≥
+                        target. NO = oracle price &lt; target. Always phrase as{" "}
+                        <em>"Will [asset] be at or above $[target]?"</em>
                       </div>
                       {/* Danger: wrong wording detected */}
-                      {/\b(below|under|less than|drop|fall)\b/i.test(marketQuestion) && (
+                      {/\b(below|under|less than|drop|fall)\b/i.test(
+                        marketQuestion,
+                      ) && (
                         <div className="mt-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-400">
-                          ⚠️ <strong>Wrong framing detected!</strong> Words like "below", "under", "less than" don't match
-                          the contract's <code>(&gt;= oracle-price target-price)</code> logic and will resolve incorrectly.
-                          Click <em>"Auto-fill from target"</em> above to get the correct phrasing.
+                          ⚠️ <strong>Wrong framing detected!</strong> Words like
+                          "below", "under", "less than" don't match the
+                          contract's{" "}
+                          <code>(&gt;= oracle-price target-price)</code> logic
+                          and will resolve incorrectly. Click{" "}
+                          <em>"Auto-fill from target"</em> above to get the
+                          correct phrasing.
                         </div>
                       )}
                     </div>
@@ -542,7 +568,9 @@ export default function CreateEventPage() {
                           Target Price (USD)
                         </label>
                         <div className="relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-medium">$</span>
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-medium">
+                            $
+                          </span>
                           <input
                             type="number"
                             value={marketTargetPrice}
@@ -584,10 +612,17 @@ export default function CreateEventPage() {
                           </span>
                         </div>
                         <p className="text-xs text-gray-500 mt-1">
-                          ≈ {Math.ceil(questionDurationMinutes / 10)} BTC block{Math.ceil(questionDurationMinutes / 10) !== 1 ? "s" : ""} from now
+                          ≈ {Math.ceil(questionDurationMinutes / 10)} BTC block
+                          {Math.ceil(questionDurationMinutes / 10) !== 1
+                            ? "s"
+                            : ""}{" "}
+                          from now
                           {currentBlock > 0 && (
                             <span className="text-orange-400/70 ml-1">
-                              (close block ~{currentBlock + Math.ceil(questionDurationMinutes / 10)})
+                              (close block ~
+                              {currentBlock +
+                                Math.ceil(questionDurationMinutes / 10)}
+                              )
                             </span>
                           )}
                         </p>
@@ -615,7 +650,9 @@ export default function CreateEventPage() {
                       }
                       className="w-full bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold py-3 px-6 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {creating ? "Waiting for wallet…" : "Add Question To Event"}
+                      {creating
+                        ? "Waiting for wallet…"
+                        : "Add Question To Event"}
                     </button>
                   </form>
                 ) : activeTab === "manage-questions" ? (
@@ -628,7 +665,9 @@ export default function CreateEventPage() {
                         {pythPriceInfo
                           ? `$${(pythPriceInfo.price / Math.pow(10, -pythPriceInfo.expo)).toFixed(2)}`
                           : "Fetching..."}
-                        {" — Click "}<strong>⚡ Finalize Question</strong> to automatically resolve questions using this price.
+                        {" — Click "}
+                        <strong>⚡ Finalize Question</strong> to automatically
+                        resolve questions using this price.
                       </div>
                     </div>
                     {events.length === 0 ? (
@@ -737,22 +776,28 @@ export default function CreateEventPage() {
                                                 : "🟢 Open"
                                               : "✅ Final"}
                                           </span>
-                                          <span>Close #{question.closeBlock}</span>
-                                          {question.status === "final" && question.oraclePrice > 0 && (
-                                            <span className="text-orange-400">
-                                              Oracle: ${question.oraclePrice.toLocaleString()}
-                                              {" · "}
-                                              <span
-                                                className={
-                                                  question.finalOutcome
-                                                    ? "text-green-400"
-                                                    : "text-red-400"
-                                                }
-                                              >
-                                                {question.finalOutcome ? "YES ✓" : "NO ✗"}
+                                          <span>
+                                            Close #{question.closeBlock}
+                                          </span>
+                                          {question.status === "final" &&
+                                            question.oraclePrice > 0 && (
+                                              <span className="text-orange-400">
+                                                Oracle: $
+                                                {question.oraclePrice.toLocaleString()}
+                                                {" · "}
+                                                <span
+                                                  className={
+                                                    question.finalOutcome
+                                                      ? "text-green-400"
+                                                      : "text-red-400"
+                                                  }
+                                                >
+                                                  {question.finalOutcome
+                                                    ? "YES ✓"
+                                                    : "NO ✗"}
+                                                </span>
                                               </span>
-                                            </span>
-                                          )}
+                                            )}
                                         </p>
                                       </div>
                                       <div className="flex flex-col gap-2 shrink-0 items-end">
@@ -760,19 +805,27 @@ export default function CreateEventPage() {
                                           <>
                                             <button
                                               disabled={isFinalizing}
-                                              onClick={() => handleFinalize(question.id)}
+                                              onClick={() =>
+                                                handleFinalize(question.id)
+                                              }
                                               className="text-xs px-3 py-1.5 rounded-md bg-orange-500/10 border border-orange-500/40 text-orange-400 hover:bg-orange-500/20 transition disabled:opacity-50"
                                             >
-                                              {isFinalizing ? "Finalizing…" : "⚡ Finalize Question"}
+                                              {isFinalizing
+                                                ? "Finalizing…"
+                                                : "⚡ Finalize Question"}
                                             </button>
                                             <span className="text-[10px] text-gray-500 italic text-right max-w-[120px]">
                                               Auto-fetches live BTC price
                                             </span>
                                           </>
                                         ) : question.status === "final" ? (
-                                          <span className="text-xs text-blue-400/70 italic">Finalized</span>
+                                          <span className="text-xs text-blue-400/70 italic">
+                                            Finalized
+                                          </span>
                                         ) : (
-                                          <span className="text-xs text-gray-500 italic">Awaiting close</span>
+                                          <span className="text-xs text-gray-500 italic">
+                                            Awaiting close
+                                          </span>
                                         )}
                                       </div>
                                     </li>
