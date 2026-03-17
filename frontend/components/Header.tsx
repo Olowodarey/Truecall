@@ -40,18 +40,7 @@ export default function Header() {
               >
                 Markets
               </Link>
-              <Link
-                href="/staking"
-                className="text-gray-300 hover:text-white transition-colors"
-              >
-                Staking
-              </Link>
-              <Link
-                href="/governance"
-                className="text-gray-300 hover:text-white transition-colors"
-              >
-                Governance
-              </Link>
+     
               <Link
                 href="/profile"
                 className="text-gray-300 hover:text-white transition-colors"
