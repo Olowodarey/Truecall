@@ -48,7 +48,14 @@ function parseUint(cv: ClarityValue | any): number {
 }
 
 function parseBool(cv: ClarityValue | any): boolean {
-  return cv.type === ClarityType.BoolTrue || cv === true;
+  if (cv === true) return true;
+  if (cv === false) return false;
+  if (cv?.type === ClarityType.BoolTrue) return true;
+  if (cv?.type === ClarityType.BoolFalse) return false;
+  // Hiro API sometimes returns { value: true/false }
+  if (cv?.value === true) return true;
+  if (cv?.value === false) return false;
+  return false;
 }
 
 function parseString(cv: ClarityValue | any): string {
@@ -60,23 +67,23 @@ function parseTuple(cv: ClarityValue | any): Record<string, any> {
 }
 
 function parseOptionalTuple(
-  cv: ClarityValue | any
+  cv: ClarityValue | any,
 ): Record<string, any> | null {
   if (!cv) return null;
   if (cv.type === ClarityType.OptionalNone) return null;
   if (cv.type === ClarityType.ResponseErr) return null;
-  
+
   let inner = cv;
   if (inner.type === ClarityType.ResponseOk) {
     inner = inner.value;
   }
-  
+
   if (inner.type === ClarityType.OptionalNone) return null;
-  
+
   if (inner.type === ClarityType.OptionalSome) {
     inner = inner.value;
   }
-  
+
   return parseTuple(inner);
 }
 
@@ -84,9 +91,11 @@ async function readOnly(
   contractAddress: string,
   contractName: string,
   functionName: string,
-  args: ClarityValue[]
+  args: ClarityValue[],
 ): Promise<ClarityValue> {
-  const argStr = args.map(a => String((a as any).value ?? (a as any).data ?? a.type)).join("-");
+  const argStr = args
+    .map((a) => String((a as any).value ?? (a as any).data ?? a.type))
+    .join("-");
   const cacheKey = `readOnly-${functionName}-${argStr}`;
 
   return withCache(cacheKey, async () => {
@@ -126,7 +135,7 @@ export async function getEvent(eventId: number): Promise<ChainEvent | null> {
 }
 
 export async function getQuestion(
-  questionId: number
+  questionId: number,
 ): Promise<ChainQuestion | null> {
   const res = await readOnly(pmAddr, pmName, "get-question", [
     uintCV(questionId),
@@ -145,6 +154,7 @@ export async function getQuestion(
     question: parseString(t.question),
     targetPrice: parseUint(t["target-price"]),
     closeBlock: parseUint(t["close-block"]),
+    resolveBlock: parseUint(t["resolve-block"]),
     status: parseString(t.status) as "open" | "final",
     oraclePrice: parseUint(t["oracle-price"]),
     finalOutcome,
@@ -153,12 +163,17 @@ export async function getQuestion(
 
 export async function getParticipant(
   eventId: number,
-  user: string
+  user: string,
 ): Promise<ChainParticipant | null> {
-  const res = await readOnly(pmAddr, pmName, "get-participant", [
-    uintCV(eventId),
-    principalCV(user),
-  ]);
+  // Bypass cache — participant state changes after join/refund tx
+  const res = await fetchCallReadOnlyFunction({
+    contractAddress: pmAddr,
+    contractName: pmName,
+    functionName: "get-participant",
+    functionArgs: [uintCV(eventId), principalCV(user)],
+    senderAddress: pmAddr,
+    network: STACKS_TESTNET,
+  });
   const t = parseOptionalTuple(res);
   if (!t) return null;
 
@@ -170,24 +185,42 @@ export async function getParticipant(
 
 export async function getAnswer(
   questionId: number,
-  user: string
+  user: string,
 ): Promise<ChainAnswer | null> {
-  const res = await readOnly(pmAddr, pmName, "get-answer", [
-    uintCV(questionId),
-    principalCV(user),
-  ]);
-  const t = parseOptionalTuple(res);
-  if (!t) return null;
+  // Bypass cache — answers change after tx confirmation and must always be fresh
+  const res = await fetchCallReadOnlyFunction({
+    contractAddress: pmAddr,
+    contractName: pmName,
+    functionName: "get-answer",
+    functionArgs: [uintCV(questionId), principalCV(user)],
+    senderAddress: pmAddr,
+    network: STACKS_TESTNET,
+  });
+
+  // The Hiro API can return the tuple wrapped in ResponseOk → OptionalSome → Tuple
+  // or just OptionalSome → Tuple. Walk through all layers manually.
+  let inner: any = res;
+
+  // Unwrap ResponseOk
+  if (inner?.type === ClarityType.ResponseOk) inner = inner.value;
+  // Unwrap OptionalNone
+  if (!inner || inner?.type === ClarityType.OptionalNone) return null;
+  // Unwrap OptionalSome
+  if (inner?.type === ClarityType.OptionalSome) inner = inner.value;
+
+  // Now inner should be the tuple
+  const data: Record<string, any> = inner?.data ?? inner?.value ?? inner ?? {};
+  if (!data || Object.keys(data).length === 0) return null;
 
   return {
-    prediction: parseBool(t.prediction),
-    pointsClaimed: parseBool(t["points-claimed"]),
+    prediction: parseBool(data.prediction),
+    pointsClaimed: parseBool(data["points-claimed"]),
   };
 }
 
 export async function getUserPoints(
   eventId: number,
-  user: string
+  user: string,
 ): Promise<number> {
   const res = await readOnly(pmAddr, pmName, "get-user-points", [
     uintCV(eventId),
@@ -196,9 +229,13 @@ export async function getUserPoints(
   return parseUint(res);
 }
 
-export async function getLeaderboard(eventId: number): Promise<LeaderboardEntry[]> {
+export async function getLeaderboard(
+  eventId: number,
+): Promise<LeaderboardEntry[]> {
   try {
-    const res = await readOnly(pmAddr, pmName, "get-leaderboard", [uintCV(eventId)]);
+    const res = await readOnly(pmAddr, pmName, "get-leaderboard", [
+      uintCV(eventId),
+    ]);
     const t = parseOptionalTuple(res);
     if (!t) return [];
 
@@ -232,7 +269,7 @@ export function createEventTxOptions(
   title: string,
   startBlock: number,
   endBlock: number,
-  entryFee: number
+  entryFee: number,
 ) {
   return {
     contractAddress: pmAddr,
@@ -268,7 +305,8 @@ export function addQuestionTxOptions(
   eventId: number,
   question: string,
   targetPrice: number,
-  closeBlock: number
+  closeBlock: number,
+  resolveBlock: number,
 ) {
   return {
     contractAddress: pmAddr,
@@ -279,6 +317,7 @@ export function addQuestionTxOptions(
       stringAsciiCV(question),
       uintCV(targetPrice),
       uintCV(closeBlock),
+      uintCV(resolveBlock),
     ],
     network: STACKS_TESTNET,
     anchorMode: AnchorMode.Any,
@@ -287,7 +326,10 @@ export function addQuestionTxOptions(
   };
 }
 
-export function answerQuestionTxOptions(questionId: number, prediction: boolean) {
+export function answerQuestionTxOptions(
+  questionId: number,
+  prediction: boolean,
+) {
   return {
     contractAddress: pmAddr,
     contractName: pmName,
@@ -314,7 +356,7 @@ export async function getPythStoredPrice(): Promise<{
 } | null> {
   try {
     const feedIdBytes = Uint8Array.from(
-      BTC_FEED_ID_HEX.match(/.{1,2}/g)!.map((b) => parseInt(b, 16))
+      BTC_FEED_ID_HEX.match(/.{1,2}/g)!.map((b) => parseInt(b, 16)),
     );
     const res = await fetchCallReadOnlyFunction({
       contractAddress: PYTH_STORAGE,
@@ -326,20 +368,18 @@ export async function getPythStoredPrice(): Promise<{
     });
     if ((res as any).type === ClarityType.ResponseErr) return null;
     const inner =
-      (res as any).type === ClarityType.ResponseOk
-        ? (res as any).value
-        : res;
+      (res as any).type === ClarityType.ResponseOk ? (res as any).value : res;
     const d = (inner as any).data ?? (inner as any).value ?? {};
     const rawPrice = Number(
-      (d.price?.value ?? d.price ?? 0).toString().replace(/n$/, "")
+      (d.price?.value ?? d.price ?? 0).toString().replace(/n$/, ""),
     );
     const rawExpo = Number(
-      (d.expo?.value ?? d.expo ?? 0).toString().replace(/n$/, "")
+      (d.expo?.value ?? d.expo ?? 0).toString().replace(/n$/, ""),
     );
     const rawPublish = Number(
       (d["publish-time"]?.value ?? d["publish-time"] ?? 0)
         .toString()
-        .replace(/n$/, "")
+        .replace(/n$/, ""),
     );
     if (rawPrice === 0) return null;
     return { price: rawPrice, expo: rawExpo, publishTime: rawPublish };
@@ -353,13 +393,13 @@ export async function getPythStoredPrice(): Promise<{
 // Fetches the live BTC price from Hermes REST (JSON only, no bytes needed)
 // and writes it straight to on-chain Pyth storage.
 export function setPriceTestnetTxOptions(
-  priceInt: number,   // e.g. 8368745000000 (raw Pyth integer)
-  expo: number,       // e.g. -8
-  conf: number,       // confidence interval
-  publishTime: number // unix timestamp
+  priceInt: number, // e.g. 8368745000000 (raw Pyth integer)
+  expo: number, // e.g. -8
+  conf: number, // confidence interval
+  publishTime: number, // unix timestamp
 ) {
   const feedIdBytes = Uint8Array.from(
-    BTC_FEED_ID_HEX.match(/.{1,2}/g)!.map((b) => parseInt(b, 16))
+    BTC_FEED_ID_HEX.match(/.{1,2}/g)!.map((b) => parseInt(b, 16)),
   );
   return {
     contractAddress: PYTH_STORAGE,
@@ -368,12 +408,12 @@ export function setPriceTestnetTxOptions(
     functionArgs: [
       tupleCV({
         "price-identifier": bufferCV(feedIdBytes),
-        price:              intCV(priceInt),
-        conf:               uintCV(conf),
-        expo:               intCV(expo),
-        "ema-price":        intCV(priceInt),   // use same as price for simplicity
-        "ema-conf":         uintCV(conf),
-        "publish-time":     uintCV(publishTime),
+        price: intCV(priceInt),
+        conf: uintCV(conf),
+        expo: intCV(expo),
+        "ema-price": intCV(priceInt), // use same as price for simplicity
+        "ema-conf": uintCV(conf),
+        "publish-time": uintCV(publishTime),
         "prev-publish-time": uintCV(Math.max(0, publishTime - 1)),
       }),
     ],
@@ -388,14 +428,17 @@ export function setPriceTestnetTxOptions(
 // @deprecated — use setPriceTestnetTxOptions instead
 export const pushPythPriceTxOptions = (_: Uint8Array) => {
   throw new Error(
-    "pushPythPriceTxOptions is deprecated. Use setPriceTestnetTxOptions."
+    "pushPythPriceTxOptions is deprecated. Use setPriceTestnetTxOptions.",
   );
 };
 
 // Step B: Pass the live BTC/USD price (whole dollars, e.g. 84500) directly to the contract.
 // The admin fetches price from Hermes API off-chain and passes it in.
 // No oracle calls in the contract anymore — zero Pyth dependency on-chain.
-export function finalizeQuestionTxOptions(questionId: number, oraclePrice: number) {
+export function finalizeQuestionTxOptions(
+  questionId: number,
+  oraclePrice: number,
+) {
   return {
     contractAddress: pmAddr,
     contractName: pmName,
@@ -407,7 +450,6 @@ export function finalizeQuestionTxOptions(questionId: number, oraclePrice: numbe
     postConditions: [],
   };
 }
-
 
 export function claimPointsTxOptions(questionId: number) {
   return {
@@ -473,7 +515,9 @@ export async function getAllEvents(): Promise<ChainEvent[]> {
   return events;
 }
 
-export async function getQuestionsForEvent(eventId: number): Promise<ChainQuestion[]> {
+export async function getQuestionsForEvent(
+  eventId: number,
+): Promise<ChainQuestion[]> {
   try {
     const ev = await getEvent(eventId);
     if (!ev || ev.questionCount === 0) return [];
@@ -485,8 +529,8 @@ export async function getQuestionsForEvent(eventId: number): Promise<ChainQuesti
         readOnly(pmAddr, pmName, "get-question-id-for-event", [
           uintCV(eventId),
           uintCV(i),
-        ]).catch(() => null)
-      )
+        ]).catch(() => null),
+      ),
     );
 
     // 2) Collect valid question IDs
@@ -500,7 +544,7 @@ export async function getQuestionsForEvent(eventId: number): Promise<ChainQuesti
 
     // 3) Fetch all question details in parallel
     const questions = await Promise.all(
-      questionIds.map((qId) => getQuestion(qId).catch(() => null))
+      questionIds.map((qId) => getQuestion(qId).catch(() => null)),
     );
 
     return questions.filter(Boolean) as ChainQuestion[];

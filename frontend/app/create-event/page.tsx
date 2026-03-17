@@ -230,6 +230,7 @@ export default function CreateEventPage() {
           asciiTrimmedQuestion,
           marketTargetPrice,
           closeBlock,
+          resolutionBlock,
         ),
         appDetails: { name: "TrueCall", icon: "/favicon.ico" },
         onFinish: (data: any) => {

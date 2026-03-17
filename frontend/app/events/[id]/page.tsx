@@ -164,29 +164,39 @@ export default function EventPredictionPage() {
 
   const handlePredict = async () => {
     if (!selectedQuestion || prediction === null) return;
-    setBusy(`answer-${selectedQuestion.id}`, true);
+    const questionId = selectedQuestion.id;
+    const lockedPrediction = prediction;
+    setBusy(`answer-${questionId}`, true);
     setPredictError(null);
     try {
       await openContractCall({
-        ...answerQuestionTxOptions(selectedQuestion.id, prediction),
+        ...answerQuestionTxOptions(questionId, lockedPrediction),
         onFinish: () => {
           clearCache();
+          // Optimistically lock the answer in local state immediately —
+          // the tx won't confirm for ~10 min so we can't rely on fetchData
+          setAnswers((prev) => ({
+            ...prev,
+            [questionId]: {
+              prediction: lockedPrediction,
+              pointsClaimed: false,
+            },
+          }));
           setPredictSuccess(true);
           setTimeout(() => {
             setPredictSuccess(false);
             setSelectedQuestion(null);
             setPrediction(null);
-            setBusy(`answer-${selectedQuestion.id}`, false);
-            fetchData();
+            setBusy(`answer-${questionId}`, false);
           }, 3000);
         },
         onCancel: () => {
-          setBusy(`answer-${selectedQuestion.id}`, false);
+          setBusy(`answer-${questionId}`, false);
         },
       });
     } catch (err: any) {
       setPredictError(err?.message || "Prediction failed");
-      setBusy(`answer-${selectedQuestion.id}`, false);
+      setBusy(`answer-${questionId}`, false);
     }
   };
 
@@ -480,10 +490,10 @@ export default function EventPredictionPage() {
                             q.status,
                           )}
                         </span>
-                        {q.status === "open" && event && (
+                        {q.status === "open" && (
                           <span className="text-yellow-400/80">
-                            ⏳ Resolves by:{" "}
-                            {formatEstimatedTime(event.endBlock, currentBlock)}
+                            ⏳ Resolves:{" "}
+                            {formatEstimatedTime(q.resolveBlock, currentBlock)}
                           </span>
                         )}
                         {q.status === "final" && q.oraclePrice > 0 && (
@@ -509,8 +519,56 @@ export default function EventPredictionPage() {
                         </div>
                       )}
 
-                      {/* User's answer badge */}
-                      {alreadyAnswered && (
+                      {/* User's answer + result — shown on finalized questions */}
+                      {q.status === "final" &&
+                        q.finalOutcome !== null &&
+                        (alreadyAnswered ? (
+                          <div
+                            className={`flex items-center gap-3 mb-3 p-3 rounded-xl border ${
+                              userAnswer!.prediction === q.finalOutcome
+                                ? "bg-green-500/10 border-green-500/30"
+                                : "bg-red-500/10 border-red-500/30"
+                            }`}
+                          >
+                            <span className="text-lg">
+                              {userAnswer!.prediction === q.finalOutcome
+                                ? "✅"
+                                : "❌"}
+                            </span>
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-xs text-gray-400">
+                                Your prediction
+                              </span>
+                              <span
+                                className={`text-sm font-bold ${
+                                  userAnswer!.prediction === q.finalOutcome
+                                    ? "text-green-400"
+                                    : "text-red-400"
+                                }`}
+                              >
+                                {userAnswer!.prediction ? "YES" : "NO"} —{" "}
+                                {userAnswer!.prediction === q.finalOutcome
+                                  ? "Correct"
+                                  : "Wrong"}
+                              </span>
+                            </div>
+                          </div>
+                        ) : isJoined && userAddress ? (
+                          <div className="flex items-center gap-3 mb-3 p-3 rounded-xl border bg-gray-700/30 border-gray-600/30">
+                            <span className="text-lg">⚪</span>
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-xs text-gray-400">
+                                Your prediction
+                              </span>
+                              <span className="text-sm font-bold text-gray-500">
+                                No prediction made
+                              </span>
+                            </div>
+                          </div>
+                        ) : null)}
+
+                      {/* User's answer badge — shown on open questions */}
+                      {q.status === "open" && alreadyAnswered && (
                         <div className="text-xs text-gray-400 mb-3 flex items-center gap-2">
                           <span>Your answer:</span>
                           <span
@@ -553,17 +611,6 @@ export default function EventPredictionPage() {
                           ✅ Points claimed
                         </div>
                       )}
-
-                      {/* Wrong answer */}
-                      {q.status === "final" &&
-                        alreadyAnswered &&
-                        q.finalOutcome !== null &&
-                        !pointsClaimed &&
-                        userAnswer!.prediction !== q.finalOutcome && (
-                          <div className="mt-2 text-center text-xs text-red-400 font-semibold">
-                            ❌ Incorrect prediction — no points
-                          </div>
-                        )}
 
                       {/* ── Prediction expansion (open questions only) ── */}
                       {isSelected && isQuestionOpen && !alreadyAnswered && (
