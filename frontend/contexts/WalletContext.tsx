@@ -1,88 +1,86 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { AppConfig, UserSession, showConnect } from "@stacks/connect";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const {
+  connect,
+  disconnect: stacksDisconnect,
+  isConnected: stacksIsConnected,
+} = require("@stacks/connect") as any;
 
 interface WalletContextType {
-  userSession: UserSession;
   isConnected: boolean;
-  userAddress: string | null;
-  connectWallet: () => void;
-  disconnect: () => void;
+  stxAddress: string | null;
+  btcAddress: string | null;
+  connectWallet: () => Promise<void>;
+  disconnectWallet: () => void;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
-const appConfig = new AppConfig(["store_write", "publish_data"]);
-
 export function WalletProvider({ children }: { children: React.ReactNode }) {
-  const [userSession] = useState(() => new UserSession({ appConfig }));
-  const [isConnected, setIsConnected] = useState(false);
-  const [userAddress, setUserAddress] = useState<string | null>(null);
+  const [connected, setConnected] = useState(false);
+  const [stxAddress, setStxAddress] = useState<string | null>(null);
+  const [btcAddress, setBtcAddress] = useState<string | null>(null);
 
   useEffect(() => {
-    try {
-      if (userSession.isSignInPending()) {
-        userSession.handlePendingSignIn().then((userData) => {
-          setIsConnected(true);
-          setUserAddress(userData.profile.stxAddress.testnet);
-        });
-      } else if (userSession.isUserSignedIn()) {
-        const userData = userSession.loadUserData();
-        setIsConnected(true);
-        setUserAddress(userData.profile.stxAddress.testnet);
-      }
-    } catch (e) {
-      console.warn("Cleared corrupt wallet session data", e);
-      if (typeof window !== "undefined") {
-        window.localStorage.removeItem("blockstack-session");
-      }
-      setIsConnected(false);
-      setUserAddress(null);
+    if (stacksIsConnected()) {
+      const { getLocalStorage } = require("@stacks/connect") as any;
+      const cached = getLocalStorage();
+      const stx = cached?.addresses?.stx?.[0]?.address ?? null;
+      const btc = cached?.addresses?.btc?.[0]?.address ?? null;
+      setStxAddress(stx);
+      setBtcAddress(btc);
+      setConnected(true);
     }
-  }, [userSession]);
+  }, []);
 
-  const connectWallet = () => {
-    showConnect({
-      appDetails: {
-        name: "TrueCall",
-        icon:
-          typeof window !== "undefined"
-            ? `${window.location.origin}/favicon.ico`
-            : "",
-      },
-      userSession,
-      onFinish: () => {
-        try {
-          if (userSession.isUserSignedIn()) {
-            const userData = userSession.loadUserData();
-            setIsConnected(true);
-            setUserAddress(userData.profile.stxAddress.testnet);
-          }
-        } catch (e) {
-          console.error("Failed to load user data after connect", e);
-        }
-      },
-      onCancel: () => {
-        console.log("Wallet connection cancelled");
-      },
-    });
+  const connectWallet = async () => {
+    try {
+      const response = await connect({
+        appDetails: {
+          name: "TrueCall",
+          icon:
+            typeof window !== "undefined"
+              ? `${window.location.origin}/favicon.ico`
+              : "",
+        },
+      });
+
+      const stx =
+        response.addresses.find(
+          (a: { symbol?: string; address: string }) =>
+            a.symbol === "STX" || a.address?.startsWith("S"),
+        )?.address ?? null;
+      const btc =
+        response.addresses.find(
+          (a: { symbol?: string; address: string }) =>
+            a.symbol === "BTC" || (!a.address?.startsWith("S") && a.address),
+        )?.address ?? null;
+
+      setStxAddress(stx);
+      setBtcAddress(btc);
+      setConnected(true);
+    } catch (e) {
+      console.error("Wallet connection failed", e);
+    }
   };
 
-  const disconnect = () => {
-    userSession.signUserOut();
-    setIsConnected(false);
-    setUserAddress(null);
+  const disconnectWallet = () => {
+    stacksDisconnect();
+    setConnected(false);
+    setStxAddress(null);
+    setBtcAddress(null);
   };
 
   return (
     <WalletContext.Provider
       value={{
-        userSession,
-        isConnected,
-        userAddress,
+        isConnected: connected,
+        stxAddress,
+        btcAddress,
         connectWallet,
-        disconnect,
+        disconnectWallet,
       }}
     >
       {children}
