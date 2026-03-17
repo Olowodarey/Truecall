@@ -40,17 +40,19 @@ export default function Header() {
               >
                 Markets
               </Link>
-     
-              <Link
-                href="/profile"
-                className="text-gray-300 hover:text-white transition-colors"
-              >
-                Profile
-              </Link>
             </div>
           </div>
+      <div className="flex items-center">
+           <Link
+            href="/profile"
+            className="text-gray-300 hover:text-white transition-colors"
+          >
+            Profile
+          </Link>
 
           <WalletButton />
+      </div>
+       
         </nav>
       </div>
     </header>
