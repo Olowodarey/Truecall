@@ -2,27 +2,27 @@ export default function HowItWorksSection() {
   const steps = [
     {
       number: "01",
-      title: "Create an Event",
+      title: "Join a Season",
       description:
-        "Creators set up prediction or giveaway events by choosing a topic, defining the question, and selecting at least 3 possible outcomes. Optional rewards can be locked upfront.",
+        "Enter a public season or private league. Each season is a competitive cycle where players answer a stream of Bitcoin prediction questions — price action, dominance, ETF flows, and on-chain signals.",
     },
     {
       number: "02",
-      title: "Play for Free",
+      title: "Make Your Bitcoin Calls",
       description:
-        "Users join events and submit predictions with zero entry fees. All predictions are recorded on-chain with timestamps for fairness.",
+        "Stake STX when submitting predictions. Every call is recorded on-chain with a timestamp. No deleting wrong calls. No faking it after the fact. Just conviction, on the record.",
     },
     {
       number: "03",
-      title: "Results Are Verified",
+      title: "Oracle-Verified Results",
       description:
-        "When the event ends: Numeric results are resolved using trusted oracles. For major events, the creator submits the correct outcome and an admin only verifies that submission. No manual winner selection. No disputes.",
+        "Outcomes are resolved using Pyth Network oracle data — no manual winner selection, no disputes. Numeric results settle automatically. Your score updates in real time.",
     },
     {
       number: "04",
-      title: "Climb the Leaderboard",
+      title: "Win the Pool. Earn Your Badge.",
       description:
-        "Scores update automatically, rewards are distributed, NFT badges are minted, and users climb event and monthly leaderboards.",
+        "Top-ranked players share the reward pool based on final leaderboard position. The best performers also unlock soulbound NFT badges — portable, on-chain proof of forecasting skill that can't be transferred or faked.",
     },
   ];
 
@@ -39,8 +39,9 @@ export default function HowItWorksSection() {
               </span>
             </h2>
             <p className="text-xl text-gray-300 mb-12 max-w-lg mx-auto lg:mx-0">
-              TrueCall facilitates seamless blockchain-based predictions,
-              enhancing transparency in the gaming process.
+              Think Fantasy Premier League — but instead of picking players, you
+              predict Bitcoin price action, dominance, ETF flows, and on-chain
+              metrics. The best forecasters win the pool.
             </p>
           </div>
 

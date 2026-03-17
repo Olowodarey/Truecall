@@ -22,25 +22,25 @@ export default function HeroSection() {
           <div className="space-y-8 text-center lg:text-left">
             <div className="space-y-4">
               <h1 className="text-5xl lg:text-6xl font-bold text-white leading-tight">
-                Provably Fair.
+                The Fantasy League
                 <br />
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-yellow-400">
-                  Fully On-Chain.
+                  for Bitcoin Traders.
                 </span>
               </h1>
 
               <p className="text-xl text-gray-300 max-w-lg mx-auto lg:mx-0">
-                A transparent, on-chain platform for giveaways and skill-based
-                prediction competitions with verifiable results.
+                Make Bitcoin calls. Back them on-chain. Climb the leaderboard.
+                Win the pool. Build a reputation that can't be faked.
               </p>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
               <button className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-lg font-semibold transition-colors">
-                Launch App
+                Join a Season
               </button>
               <button className="border border-gray-600 hover:border-gray-500 text-white px-8 py-3 rounded-lg font-semibold transition-colors">
-                View Tournaments
+                View Leaderboard
               </button>
             </div>
           </div>
