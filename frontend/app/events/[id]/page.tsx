@@ -473,13 +473,19 @@ export default function EventPredictionPage() {
                           ⚡ Target: ${q.targetPrice.toLocaleString()}
                         </span>
                         <span>
-                          🕒 Closes{" "}
+                          🔒 Predictions close:{" "}
                           {formatEstimatedTime(
                             q.closeBlock,
                             currentBlock,
                             q.status,
                           )}
                         </span>
+                        {q.status === "open" && event && (
+                          <span className="text-yellow-400/80">
+                            ⏳ Resolves by:{" "}
+                            {formatEstimatedTime(event.endBlock, currentBlock)}
+                          </span>
+                        )}
                         {q.status === "final" && q.oraclePrice > 0 && (
                           <span className="text-green-400">
                             ✅ Oracle: ${q.oraclePrice.toLocaleString()}

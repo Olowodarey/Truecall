@@ -22,6 +22,7 @@ export interface ChainQuestion {
   question: string;
   targetPrice: number; // BTC price in whole dollars
   closeBlock: number;
+  resolveBlock: number;
   status: "open" | "final";
   oraclePrice: number;
   finalOutcome: boolean | null;

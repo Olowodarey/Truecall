@@ -125,6 +125,7 @@
     question:      (string-ascii 128),
     target-price:  uint,
     close-block:   uint,
+    resolve-block: uint,
     status:        (string-ascii 8),
     oracle-price:  uint,
     final-outcome: (optional bool)
@@ -410,6 +411,7 @@
   (question (string-ascii 128))
   (target-price uint)
   (close-block uint)
+  (resolve-block uint)
 )
   (let (
     (event (unwrap! (map-get? events { event-id: event-id }) err-event-not-found))
@@ -423,7 +425,8 @@
       (asserts! (>= burn-block-height (get start-block event)) err-event-closed)
       (asserts! (< burn-block-height (get end-block event)) err-event-closed)
       (asserts! (> close-block burn-block-height) err-invalid-question-window)
-      (asserts! (<= close-block (get end-block event)) err-invalid-question-window)
+      (asserts! (> resolve-block close-block) err-invalid-question-window)
+      (asserts! (<= resolve-block (get end-block event)) err-invalid-question-window)
       (var-set question-nonce question-id)
       (map-set questions { question-id: question-id }
         {
@@ -431,6 +434,7 @@
           question:      question,
           target-price:  target-price,
           close-block:   close-block,
+          resolve-block: resolve-block,
           status:        question-status-open,
           oracle-price:  u0,
           final-outcome: none
@@ -491,7 +495,7 @@
       ;; Gate checks
       (asserts! (is-keeper) err-unauthorized)
       (asserts! (is-eq (get status q) question-status-open) err-question-closed)
-      (asserts! (>= burn-block-height (get close-block q)) err-question-closed)
+      (asserts! (>= burn-block-height (get resolve-block q)) err-question-closed)
       (asserts! (> oracle-price u0) err-invalid-price)
 
       ;; Compare keeper-provided price against target and record outcome
