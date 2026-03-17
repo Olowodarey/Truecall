@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-
 import WalletButton from "./WalletButton";
+import { UserRound } from "lucide-react";
 
 export default function Header() {
   return (
@@ -28,31 +28,18 @@ export default function Header() {
               >
                 Create Event
               </Link>
-              <Link
-                href="/tournaments"
-                className="text-gray-300 hover:text-white transition-colors"
-              >
-                Tournaments
-              </Link>
-              <Link
-                href="/markets"
-                className="text-gray-300 hover:text-white transition-colors"
-              >
-                Markets
-              </Link>
             </div>
           </div>
-      <div className="flex items-center">
-           <Link
-            href="/profile"
-            className="text-gray-300 hover:text-white transition-colors"
-          >
-            Profile
-          </Link>
+          <div className="flex items-center space-x-2">
+            <Link
+              href="/profile"
+              className="text-gray-300 hover:text-white transition-colors"
+            >
+              <UserRound />
+            </Link>
 
-          <WalletButton />
-      </div>
-       
+            <WalletButton />
+          </div>
         </nav>
       </div>
     </header>
