@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useWallet } from "@/contexts/WalletContext";
 import { HIRO_API, DEPLOYER } from "@/lib/contracts";
 
-const { openContractCall } = require("@stacks/connect") as any;
 import {
   getAllEvents,
   getQuestionsForEvent,
@@ -136,6 +135,8 @@ export default function CreateEventPage() {
       const endBlock = currentBlock + blocksToAdd;
       const entryFeeMicro = Math.round(entryFeeStx * 1_000_000);
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { openContractCall } = require("@stacks/connect") as any;
       await openContractCall({
         ...createEventTxOptions(
           title.trim().slice(0, 64),
@@ -224,6 +225,8 @@ export default function CreateEventPage() {
         .trim()
         .slice(0, 128); // 128-byte limit
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { openContractCall } = require("@stacks/connect") as any;
       await openContractCall({
         ...addQuestionTxOptions(
           selectedEventId,
@@ -287,6 +290,8 @@ export default function CreateEventPage() {
         );
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { openContractCall } = require("@stacks/connect") as any;
       await openContractCall({
         ...finalizeQuestionTxOptions(questionId, oraclePrice),
         appDetails: { name: "TrueCall", icon: "/favicon.ico" },
@@ -781,6 +786,9 @@ export default function CreateEventPage() {
                                   }
                                   onClick={async () => {
                                     setPendingAction(`close-${event.id}`);
+                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                    const { openContractCall } =
+                                      require("@stacks/connect") as any;
                                     await openContractCall({
                                       ...closeEventTxOptions(event.id),
                                       onFinish: () => {

@@ -1,16 +1,8 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const {
-  connect,
-  disconnect: stacksDisconnect,
-  isConnected: stacksIsConnected,
- 
-} = require("@stacks/connect") as any;
 
 interface WalletContextType {
-
   isConnected: boolean;
   stxAddress: string | null;
   btcAddress: string | null;
@@ -26,8 +18,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [btcAddress, setBtcAddress] = useState<string | null>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { isConnected: stacksIsConnected, getLocalStorage } =
+      require("@stacks/connect") as any;
     if (stacksIsConnected()) {
-      const { getLocalStorage } = require("@stacks/connect") as any;
       const cached = getLocalStorage();
       const stx = cached?.addresses?.stx?.[0]?.address ?? null;
       const btc = cached?.addresses?.btc?.[0]?.address ?? null;
@@ -38,6 +32,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const connectWallet = async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { connect } = require("@stacks/connect") as any;
     try {
       const response = await connect({
         appDetails: {
@@ -69,6 +65,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   };
 
   const disconnectWallet = () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { disconnect: stacksDisconnect } = require("@stacks/connect") as any;
     stacksDisconnect();
     setConnected(false);
     setStxAddress(null);

@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useWallet } from "@/contexts/WalletContext";
-const { openContractCall } = require("@stacks/connect") as any;
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { HIRO_API } from "@/lib/contracts";
@@ -119,6 +118,8 @@ export default function EventPredictionPage() {
   const handleJoin = async () => {
     if (!userAddress) return;
     setBusy("join", true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { openContractCall } = require("@stacks/connect") as any;
     await openContractCall({
       ...joinEventTxOptions(eventId),
       onFinish: () => {
@@ -132,6 +133,8 @@ export default function EventPredictionPage() {
 
   const handleClaimWinnings = async () => {
     setBusy("winnings", true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { openContractCall } = require("@stacks/connect") as any;
     await openContractCall({
       ...claimWinningsTxOptions(eventId),
       onFinish: () => {
@@ -145,6 +148,8 @@ export default function EventPredictionPage() {
 
   const handleClaimRefund = async () => {
     setBusy("refund", true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { openContractCall } = require("@stacks/connect") as any;
     await openContractCall({
       ...claimRefundTxOptions(eventId),
       onFinish: () => {

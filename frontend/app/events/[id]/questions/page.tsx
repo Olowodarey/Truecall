@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useWallet } from "@/contexts/WalletContext";
-const { openContractCall } = require("@stacks/connect") as any;
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { HIRO_API } from "@/lib/contracts";
@@ -103,6 +102,8 @@ export default function EventQuestionsPage() {
     setBusy(`answer-${questionId}`, true);
     setPredictError(null);
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { openContractCall } = require("@stacks/connect") as any;
       await openContractCall({
         ...answerQuestionTxOptions(questionId, lockedPrediction),
         onFinish: () => {
@@ -132,6 +133,8 @@ export default function EventQuestionsPage() {
 
   const handleClaimPoints = async (questionId: number) => {
     setBusy(`points-${questionId}`, true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { openContractCall } = require("@stacks/connect") as any;
     await openContractCall({
       ...claimPointsTxOptions(questionId),
       onFinish: () => {
