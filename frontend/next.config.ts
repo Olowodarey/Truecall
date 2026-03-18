@@ -1,14 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: [
-    "@stacks/connect",
-    "@stacks/network",
-    "@stacks/transactions",
-    "@stacks/auth",
-    "@stacks/storage",
-    "@stacks/wallet-sdk",
-  ],
+  // Do NOT mark stacks packages as server-external — they run client-side
 };
 
 export default nextConfig;

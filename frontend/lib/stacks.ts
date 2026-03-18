@@ -6,13 +6,7 @@
 
 import {
   ClarityType,
-  cvToValue,
-  hexToCV,
   fetchCallReadOnlyFunction,
-  makeContractCall,
-  broadcastTransaction,
-  AnchorMode,
-  PostConditionMode,
   stringAsciiCV,
   uintCV,
   intCV,
@@ -24,7 +18,7 @@ import {
 } from "@stacks/transactions";
 import { STACKS_TESTNET } from "@stacks/network";
 import { CONTRACTS } from "./contracts";
-import { withCache, clearCache } from "./cache";
+import { withCache } from "./cache";
 import type {
   ChainEvent,
   ChainQuestion,
@@ -33,9 +27,18 @@ import type {
   LeaderboardEntry,
 } from "./types";
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Network (use Hiro API to avoid CORS issues on Vercel) ───────────────────
+
+const NETWORK = {
+  ...STACKS_TESTNET,
+  coreApiUrl: process.env.NEXT_PUBLIC_HIRO_API ?? "https://api.testnet.hiro.so",
+};
+
+// ─── Contract split ───────────────────────────────────────────────────────────
 
 const [pmAddr, pmName] = CONTRACTS.PREDICTION_MARKET.split(".");
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function parsePrincipal(cv: ClarityValue): string {
   return (cv as any).value ?? "";
@@ -52,10 +55,8 @@ function parseBool(cv: ClarityValue | any): boolean {
   if (cv === false) return false;
   if (cv?.type === ClarityType.BoolTrue) return true;
   if (cv?.type === ClarityType.BoolFalse) return false;
-  // Hiro API returns { type: "true" } or { type: "false" } as strings
   if (cv?.type === "true") return true;
   if (cv?.type === "false") return false;
-  // Hiro API sometimes returns { value: true/false }
   if (cv?.value === true) return true;
   if (cv?.value === false) return false;
   return false;
@@ -77,15 +78,9 @@ function parseOptionalTuple(
   if (cv.type === ClarityType.ResponseErr) return null;
 
   let inner = cv;
-  if (inner.type === ClarityType.ResponseOk) {
-    inner = inner.value;
-  }
-
+  if (inner.type === ClarityType.ResponseOk) inner = inner.value;
   if (inner.type === ClarityType.OptionalNone) return null;
-
-  if (inner.type === ClarityType.OptionalSome) {
-    inner = inner.value;
-  }
+  if (inner.type === ClarityType.OptionalSome) inner = inner.value;
 
   return parseTuple(inner);
 }
@@ -108,12 +103,12 @@ async function readOnly(
       functionName,
       functionArgs: args,
       senderAddress: contractAddress,
-      network: STACKS_TESTNET,
+      network: NETWORK,
     });
   });
 }
 
-// ─── Reads ───────────────────────────────────────────────────────────────────
+// ─── Reads ────────────────────────────────────────────────────────────────────
 
 export async function getEvent(eventId: number): Promise<ChainEvent | null> {
   const res = await readOnly(pmAddr, pmName, "get-event", [uintCV(eventId)]);
@@ -168,14 +163,13 @@ export async function getParticipant(
   eventId: number,
   user: string,
 ): Promise<ChainParticipant | null> {
-  // Bypass cache — participant state changes after join/refund tx
   const res = await fetchCallReadOnlyFunction({
     contractAddress: pmAddr,
     contractName: pmName,
     functionName: "get-participant",
     functionArgs: [uintCV(eventId), principalCV(user)],
     senderAddress: pmAddr,
-    network: STACKS_TESTNET,
+    network: NETWORK,
   });
   const t = parseOptionalTuple(res);
   if (!t) return null;
@@ -196,7 +190,7 @@ export async function getAnswer(
     functionName: "get-answer",
     functionArgs: [uintCV(questionId), principalCV(user)],
     senderAddress: pmAddr,
-    network: STACKS_TESTNET,
+    network: NETWORK,
   });
 
   let inner: any = res;
@@ -246,13 +240,9 @@ export async function getLeaderboard(
     for (const r of ranks) {
       const slot = t[r];
       if (!slot || slot.type !== ClarityType.OptionalSome) continue;
-
-      // The inner value can come as a TupleCV { data: {...} }
-      // or the Hiro API may unwrap it to { value: {...} } — handle both
       const inner = slot.value;
       const entryData: Record<string, any> =
         inner?.data ?? inner?.value ?? inner ?? {};
-
       const user = parsePrincipal(entryData.user);
       const points = parseUint(entryData.points);
       if (user) leaderboard.push({ user, points });
@@ -264,7 +254,53 @@ export async function getLeaderboard(
   }
 }
 
-// ─── Writes ──────────────────────────────────────────────────────────────────
+export async function getAllEvents(): Promise<ChainEvent[]> {
+  const events: ChainEvent[] = [];
+  let currentId = 1;
+  while (true) {
+    const ev = await getEvent(currentId);
+    if (!ev) break;
+    events.push(ev);
+    currentId++;
+  }
+  return events;
+}
+
+export async function getQuestionsForEvent(
+  eventId: number,
+): Promise<ChainQuestion[]> {
+  try {
+    const ev = await getEvent(eventId);
+    if (!ev || ev.questionCount === 0) return [];
+
+    const indices = Array.from({ length: ev.questionCount }, (_, i) => i);
+    const idResults = await Promise.all(
+      indices.map((i) =>
+        readOnly(pmAddr, pmName, "get-question-id-for-event", [
+          uintCV(eventId),
+          uintCV(i),
+        ]).catch(() => null),
+      ),
+    );
+
+    const questionIds: number[] = [];
+    for (const res of idResults) {
+      if (!res) continue;
+      const t = parseOptionalTuple(res);
+      if (!t) continue;
+      questionIds.push(parseUint(t["question-id"]));
+    }
+
+    const questions = await Promise.all(
+      questionIds.map((qId) => getQuestion(qId).catch(() => null)),
+    );
+
+    return questions.filter(Boolean) as ChainQuestion[];
+  } catch {
+    return [];
+  }
+}
+// ─── Tx builders ─────────────────────────────────────────────────────────────
 
 export function createEventTxOptions(
   title: string,
@@ -282,9 +318,9 @@ export function createEventTxOptions(
       uintCV(endBlock),
       uintCV(entryFee),
     ],
-    network: STACKS_TESTNET,
-    anchorMode: AnchorMode.Any,
-    postConditionMode: PostConditionMode.Deny,
+    network: NETWORK,
+    anchorMode: 3,
+    postConditionMode: 2,
     postConditions: [],
   };
 }
@@ -295,9 +331,9 @@ export function joinEventTxOptions(eventId: number) {
     contractName: pmName,
     functionName: "join-event",
     functionArgs: [uintCV(eventId)],
-    network: STACKS_TESTNET,
-    anchorMode: AnchorMode.Any,
-    postConditionMode: PostConditionMode.Allow, // Allows STX transfer
+    network: NETWORK,
+    anchorMode: 3,
+    postConditionMode: 1,
     postConditions: [],
   };
 }
@@ -320,9 +356,9 @@ export function addQuestionTxOptions(
       uintCV(closeBlock),
       uintCV(resolveBlock),
     ],
-    network: STACKS_TESTNET,
-    anchorMode: AnchorMode.Any,
-    postConditionMode: PostConditionMode.Deny,
+    network: NETWORK,
+    anchorMode: 3,
+    postConditionMode: 2,
     postConditions: [],
   };
 }
@@ -336,20 +372,87 @@ export function answerQuestionTxOptions(
     contractName: pmName,
     functionName: "answer-question",
     functionArgs: [uintCV(questionId), boolCV(prediction)],
-    network: STACKS_TESTNET,
-    anchorMode: AnchorMode.Any,
-    postConditionMode: PostConditionMode.Deny,
+    network: NETWORK,
+    anchorMode: 3,
+    postConditionMode: 2,
     postConditions: [],
   };
 }
 
-// ── Pyth storage constants ────────────────────────────────────────────────────
+export function finalizeQuestionTxOptions(
+  questionId: number,
+  oraclePrice: number,
+) {
+  return {
+    contractAddress: pmAddr,
+    contractName: pmName,
+    functionName: "finalize-question",
+    functionArgs: [uintCV(questionId), uintCV(oraclePrice)],
+    network: NETWORK,
+    anchorMode: 3,
+    postConditionMode: 2,
+    postConditions: [],
+  };
+}
+
+export function claimPointsTxOptions(questionId: number) {
+  return {
+    contractAddress: pmAddr,
+    contractName: pmName,
+    functionName: "claim-points",
+    functionArgs: [uintCV(questionId)],
+    network: NETWORK,
+    anchorMode: 3,
+    postConditionMode: 2,
+    postConditions: [],
+  };
+}
+
+export function closeEventTxOptions(eventId: number) {
+  return {
+    contractAddress: pmAddr,
+    contractName: pmName,
+    functionName: "close-event",
+    functionArgs: [uintCV(eventId)],
+    network: NETWORK,
+    anchorMode: 3,
+    postConditionMode: 2,
+    postConditions: [],
+  };
+}
+
+export function claimRefundTxOptions(eventId: number) {
+  return {
+    contractAddress: pmAddr,
+    contractName: pmName,
+    functionName: "claim-refund",
+    functionArgs: [uintCV(eventId)],
+    network: NETWORK,
+    anchorMode: 3,
+    postConditionMode: 1,
+    postConditions: [],
+  };
+}
+
+export function claimWinningsTxOptions(eventId: number) {
+  return {
+    contractAddress: pmAddr,
+    contractName: pmName,
+    functionName: "claim-winnings",
+    functionArgs: [uintCV(eventId)],
+    network: NETWORK,
+    anchorMode: 3,
+    postConditionMode: 1,
+    postConditions: [],
+  };
+}
+
+// ── Pyth storage helpers ──────────────────────────────────────────────────────
+
 const PYTH_STORAGE = "STR738QQX1PVTM6WTDF833Z18T8R0ZB791TCNEFM";
 const BTC_FEED_ID_HEX =
   "e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43";
 
-// Read the stored BTC price from pyth-storage-v4 (read-only, no wallet needed).
-// Returns null if no price is stored yet.
 export async function getPythStoredPrice(): Promise<{
   price: number;
   expo: number;
@@ -365,7 +468,7 @@ export async function getPythStoredPrice(): Promise<{
       functionName: "get-price",
       functionArgs: [bufferCV(feedIdBytes)],
       senderAddress: PYTH_STORAGE,
-      network: STACKS_TESTNET,
+      network: NETWORK,
     });
     if ((res as any).type === ClarityType.ResponseErr) return null;
     const inner =
@@ -389,15 +492,11 @@ export async function getPythStoredPrice(): Promise<{
   }
 }
 
-// Step A (TESTNET SHORTCUT): call pyth-storage-v4.set-price-testnet directly.
-// This bypasses Wormhole VAA validation — only works on testnet.
-// Fetches the live BTC price from Hermes REST (JSON only, no bytes needed)
-// and writes it straight to on-chain Pyth storage.
 export function setPriceTestnetTxOptions(
-  priceInt: number, // e.g. 8368745000000 (raw Pyth integer)
-  expo: number, // e.g. -8
-  conf: number, // confidence interval
-  publishTime: number, // unix timestamp
+  priceInt: number,
+  expo: number,
+  conf: number,
+  publishTime: number,
 ) {
   const feedIdBytes = Uint8Array.from(
     BTC_FEED_ID_HEX.match(/.{1,2}/g)!.map((b) => parseInt(b, 16)),
@@ -412,144 +511,15 @@ export function setPriceTestnetTxOptions(
         price: intCV(priceInt),
         conf: uintCV(conf),
         expo: intCV(expo),
-        "ema-price": intCV(priceInt), // use same as price for simplicity
+        "ema-price": intCV(priceInt),
         "ema-conf": uintCV(conf),
         "publish-time": uintCV(publishTime),
         "prev-publish-time": uintCV(Math.max(0, publishTime - 1)),
       }),
     ],
-    network: STACKS_TESTNET,
-    anchorMode: AnchorMode.Any,
-    postConditionMode: PostConditionMode.Deny,
+    network: NETWORK,
+    anchorMode: 3,
+    postConditionMode: 2,
     postConditions: [],
   };
-}
-
-// Keep old export name as an alias so existing imports don't break.
-// @deprecated — use setPriceTestnetTxOptions instead
-export const pushPythPriceTxOptions = (_: Uint8Array) => {
-  throw new Error(
-    "pushPythPriceTxOptions is deprecated. Use setPriceTestnetTxOptions.",
-  );
-};
-
-// Step B: Pass the live BTC/USD price (whole dollars, e.g. 84500) directly to the contract.
-// The admin fetches price from Hermes API off-chain and passes it in.
-// No oracle calls in the contract anymore — zero Pyth dependency on-chain.
-export function finalizeQuestionTxOptions(
-  questionId: number,
-  oraclePrice: number,
-) {
-  return {
-    contractAddress: pmAddr,
-    contractName: pmName,
-    functionName: "finalize-question",
-    functionArgs: [uintCV(questionId), uintCV(oraclePrice)],
-    network: STACKS_TESTNET,
-    anchorMode: AnchorMode.Any,
-    postConditionMode: PostConditionMode.Deny,
-    postConditions: [],
-  };
-}
-
-export function claimPointsTxOptions(questionId: number) {
-  return {
-    contractAddress: pmAddr,
-    contractName: pmName,
-    functionName: "claim-points",
-    functionArgs: [uintCV(questionId)],
-    network: STACKS_TESTNET,
-    anchorMode: AnchorMode.Any,
-    postConditionMode: PostConditionMode.Deny,
-    postConditions: [],
-  };
-}
-
-export function closeEventTxOptions(eventId: number) {
-  return {
-    contractAddress: pmAddr,
-    contractName: pmName,
-    functionName: "close-event",
-    functionArgs: [uintCV(eventId)],
-    network: STACKS_TESTNET,
-    anchorMode: AnchorMode.Any,
-    postConditionMode: PostConditionMode.Deny,
-    postConditions: [],
-  };
-}
-
-export function claimRefundTxOptions(eventId: number) {
-  return {
-    contractAddress: pmAddr,
-    contractName: pmName,
-    functionName: "claim-refund",
-    functionArgs: [uintCV(eventId)],
-    network: STACKS_TESTNET,
-    anchorMode: AnchorMode.Any,
-    postConditionMode: PostConditionMode.Allow,
-    postConditions: [],
-  };
-}
-
-export function claimWinningsTxOptions(eventId: number) {
-  return {
-    contractAddress: pmAddr,
-    contractName: pmName,
-    functionName: "claim-winnings",
-    functionArgs: [uintCV(eventId)],
-    network: STACKS_TESTNET,
-    anchorMode: AnchorMode.Any,
-    postConditionMode: PostConditionMode.Allow,
-    postConditions: [],
-  };
-}
-
-export async function getAllEvents(): Promise<ChainEvent[]> {
-  const events: ChainEvent[] = [];
-  let currentId = 1;
-  while (true) {
-    const ev = await getEvent(currentId);
-    if (!ev) break;
-    events.push(ev);
-    currentId++;
-  }
-  return events;
-}
-
-export async function getQuestionsForEvent(
-  eventId: number,
-): Promise<ChainQuestion[]> {
-  try {
-    const ev = await getEvent(eventId);
-    if (!ev || ev.questionCount === 0) return [];
-
-    // 1) Fetch all question-id lookups in parallel
-    const indices = Array.from({ length: ev.questionCount }, (_, i) => i);
-    const idResults = await Promise.all(
-      indices.map((i) =>
-        readOnly(pmAddr, pmName, "get-question-id-for-event", [
-          uintCV(eventId),
-          uintCV(i),
-        ]).catch(() => null),
-      ),
-    );
-
-    // 2) Collect valid question IDs
-    const questionIds: number[] = [];
-    for (const res of idResults) {
-      if (!res) continue;
-      const t = parseOptionalTuple(res);
-      if (!t) continue;
-      questionIds.push(parseUint(t["question-id"]));
-    }
-
-    // 3) Fetch all question details in parallel
-    const questions = await Promise.all(
-      questionIds.map((qId) => getQuestion(qId).catch(() => null)),
-    );
-
-    return questions.filter(Boolean) as ChainQuestion[];
-  } catch {
-    return [];
-  }
 }

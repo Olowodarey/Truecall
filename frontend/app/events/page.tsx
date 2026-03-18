@@ -120,7 +120,7 @@ export default function EventsPage() {
               Earn points for correct answers and win from the prize pool
             </p>
             <p className="text-xs text-orange-400/70 mt-2">
-              Live data from Stacks testnet
+              Live data from Stacks testnet 
             </p>
           </div>
 

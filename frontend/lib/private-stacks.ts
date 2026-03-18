@@ -15,6 +15,12 @@ import {
 } from "@stacks/transactions";
 import { STACKS_TESTNET } from "@stacks/network";
 import { CONTRACTS } from "./contracts";
+
+// Use Hiro API directly to avoid CORS issues on Vercel
+const NETWORK = {
+  ...STACKS_TESTNET,
+  coreApiUrl: process.env.NEXT_PUBLIC_HIRO_API ?? "https://api.testnet.hiro.so",
+};
 import type {
   ChainPrivateEvent,
   ChainRound,
@@ -83,7 +89,7 @@ async function readOnly(
     functionName: fn,
     functionArgs: args,
     senderAddress: peAddr,
-    network: STACKS_TESTNET,
+    network: NETWORK,
   });
 }
 // ─── Reads ────────────────────────────────────────────────────────────────────
@@ -178,7 +184,7 @@ export async function getPrivateParticipant(
     functionName: "get-private-participant",
     functionArgs: [uintCV(eventId), principalCV(user)],
     senderAddress: peAddr,
-    network: STACKS_TESTNET,
+    network: NETWORK,
   });
   const t = parseOptionalTuple(res);
   if (!t) return null;
@@ -201,7 +207,7 @@ export async function getRoundAnswer(
     functionName: "get-round-answer",
     functionArgs: [uintCV(eventId), uintCV(roundNumber), principalCV(user)],
     senderAddress: peAddr,
-    network: STACKS_TESTNET,
+    network: NETWORK,
   });
   const inner = parseOptional(res);
   if (!inner) return null;
@@ -270,7 +276,7 @@ export async function isEventMember(
 const BASE_TX = {
   contractAddress: peAddr,
   contractName: peName,
-  network: STACKS_TESTNET,
+  network: NETWORK,
   anchorMode: 3, // AnchorMode.Any
 };
 
