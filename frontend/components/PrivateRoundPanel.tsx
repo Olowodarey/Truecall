@@ -9,6 +9,8 @@ import type {
 import {
   deriveVisibleActions,
   deriveClaimState,
+  blockToRelativeTime,
+  blocksToTime,
 } from "@/lib/private-event-utils";
 import {
   submitRoundQuestionTxOptions,
@@ -59,6 +61,7 @@ export default function PrivateRoundPanel({
     submitter: round.submitter,
     wallet: userAddress,
     currentBlock,
+    submissionOpenBlock: round.submissionOpenBlock,
     submissionDeadline: round.submissionDeadline,
     answerCloseBlock: round.answerCloseBlock,
     hasAnswered: roundAnswer !== null,
@@ -134,6 +137,21 @@ export default function PrivateRoundPanel({
               {truncate(round.submitter)}
             </span>
           </p>
+          {round.status === "pending-sub" &&
+            currentBlock >= round.submissionOpenBlock &&
+            currentBlock <= round.submissionDeadline && (
+              <p className="text-yellow-400 text-xs mt-1">
+                ⏱ Submit closes{" "}
+                {blockToRelativeTime(round.submissionDeadline, currentBlock)}
+              </p>
+            )}
+          {round.status === "open-answer" &&
+            currentBlock <= round.answerCloseBlock && (
+              <p className="text-blue-400 text-xs mt-1">
+                ⏱ Answers close{" "}
+                {blockToRelativeTime(round.answerCloseBlock, currentBlock)}
+              </p>
+            )}
         </div>
         <span
           className={`px-3 py-1 rounded-full text-xs font-bold border ${
@@ -189,6 +207,17 @@ export default function PrivateRoundPanel({
           </button>
         </form>
       )}
+
+      {/* Waiting for submission window to open */}
+      {!actions.includes("submitQuestion") &&
+        round.status === "pending-sub" &&
+        userAddress === round.submitter &&
+        currentBlock < round.submissionOpenBlock && (
+          <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 text-blue-400 text-sm">
+            ⏳ You are the submitter — submission window opens{" "}
+            {blockToRelativeTime(round.submissionOpenBlock, currentBlock)}
+          </div>
+        )}
 
       {/* Submission window closed notice (submitter, window expired, no question yet) */}
       {!actions.includes("submitQuestion") &&

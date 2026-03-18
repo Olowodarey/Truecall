@@ -12,6 +12,8 @@ import {
   derivePayoutButtons,
   renderLeaderboard,
   encodeInviteCode,
+  blocksToTime,
+  blockToRelativeTime,
 } from "@/lib/private-event-utils";
 import {
   getPrivateEvent,
@@ -312,20 +314,28 @@ export default function PrivateEventDetailPage() {
               value={String(event.completedRounds)}
             />
             <Stat
-              label="Join Deadline Block"
-              value={`#${event.joinDeadline}`}
+              label="Join Deadline"
+              value={
+                currentBlock
+                  ? blockToRelativeTime(event.joinDeadline, currentBlock)
+                  : `#${event.joinDeadline}`
+              }
+              sub={`block #${event.joinDeadline}`}
             />
             <Stat
-              label="Interval Blocks"
-              value={String(event.intervalBlocks)}
+              label="Time Between Rounds"
+              value={blocksToTime(event.intervalBlocks)}
+              sub={`${event.intervalBlocks} blocks`}
             />
             <Stat
               label="Submission Window"
-              value={`${event.submissionWindow} blocks`}
+              value={blocksToTime(event.submissionWindow)}
+              sub={`${event.submissionWindow} blocks`}
             />
             <Stat
               label="Answer Window"
-              value={`${event.answerWindow} blocks`}
+              value={blocksToTime(event.answerWindow)}
+              sub={`${event.answerWindow} blocks`}
             />
           </div>
         </div>
@@ -583,11 +593,13 @@ function Stat({
   value,
   mono,
   highlight,
+  sub,
 }: {
   label: string;
   value: string;
   mono?: boolean;
   highlight?: boolean;
+  sub?: string;
 }) {
   return (
     <div className="bg-gray-900/50 rounded-xl p-4 border border-gray-700/30">
@@ -599,6 +611,7 @@ function Stat({
       >
         {value}
       </p>
+      {sub && <p className="text-gray-500 text-xs mt-0.5 font-mono">{sub}</p>}
     </div>
   );
 }

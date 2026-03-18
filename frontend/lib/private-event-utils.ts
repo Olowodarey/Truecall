@@ -1,5 +1,31 @@
 import type { ChainRoundAnswer, LeaderboardEntry } from "./types";
 
+// Stacks testnet averages ~2.5 min per block
+const MINS_PER_BLOCK = 2.5;
+
+// Convert a block count to a human-readable duration string
+export function blocksToTime(blocks: number): string {
+  const totalMins = Math.round(blocks * MINS_PER_BLOCK);
+  if (totalMins < 60) return `~${totalMins}m`;
+  const hours = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  if (mins === 0) return `~${hours}h`;
+  return `~${hours}h ${mins}m`;
+}
+
+// Convert a future block number to a relative time string ("in ~2h 30m" or "X blocks ago")
+export function blockToRelativeTime(
+  targetBlock: number,
+  currentBlock: number,
+): string {
+  const diff = targetBlock - currentBlock;
+  if (diff <= 0) {
+    const ago = Math.abs(diff);
+    return ago === 0 ? "now" : `${blocksToTime(ago)} ago`;
+  }
+  return `in ${blocksToTime(diff)}`;
+}
+
 // SHA-256 hash of an invite code via Web Crypto API
 export async function hashInviteCode(code: string): Promise<Uint8Array> {
   const encoded = new TextEncoder().encode(code);
@@ -73,25 +99,32 @@ export function deriveVisibleActions(s: {
   submitter: string;
   wallet: string | null;
   currentBlock: number;
+  submissionOpenBlock: number;
   submissionDeadline: number;
   answerCloseBlock: number;
   hasAnswered: boolean;
   pointsClaimed: boolean;
 }): string[] {
+  const submissionWindowOpen =
+    s.currentBlock >= s.submissionOpenBlock &&
+    s.currentBlock <= s.submissionDeadline;
+
+  // Submitter gets to post the question while the window is open
+  if (
+    s.status === "pending-sub" &&
+    s.isParticipant &&
+    s.wallet === s.submitter &&
+    submissionWindowOpen
+  ) {
+    return ["submitQuestion"];
+  }
+  // Creator can skip only after the submission deadline has passed
   if (
     s.status === "pending-sub" &&
     s.isCreator &&
     s.currentBlock > s.submissionDeadline
   ) {
     return ["skip"];
-  }
-  if (
-    s.status === "pending-sub" &&
-    s.isParticipant &&
-    s.wallet === s.submitter &&
-    s.currentBlock <= s.submissionDeadline
-  ) {
-    return ["submitQuestion"];
   }
   if (
     s.status === "open-answer" &&
