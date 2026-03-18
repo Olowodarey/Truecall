@@ -119,7 +119,7 @@ export default function EventPredictionPage() {
     if (!userAddress) return;
     setBusy("join", true);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { openContractCall } = require("@stacks/connect") as any;
+    const { openContractCall } = (await import("@stacks/connect")) as any;
     await openContractCall({
       ...joinEventTxOptions(eventId),
       onFinish: () => {
@@ -134,7 +134,7 @@ export default function EventPredictionPage() {
   const handleClaimWinnings = async () => {
     setBusy("winnings", true);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { openContractCall } = require("@stacks/connect") as any;
+    const { openContractCall } = (await import("@stacks/connect")) as any;
     await openContractCall({
       ...claimWinningsTxOptions(eventId),
       onFinish: () => {
@@ -149,7 +149,7 @@ export default function EventPredictionPage() {
   const handleClaimRefund = async () => {
     setBusy("refund", true);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { openContractCall } = require("@stacks/connect") as any;
+    const { openContractCall } = (await import("@stacks/connect")) as any;
     await openContractCall({
       ...claimRefundTxOptions(eventId),
       onFinish: () => {

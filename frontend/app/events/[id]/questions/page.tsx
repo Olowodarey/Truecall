@@ -103,7 +103,7 @@ export default function EventQuestionsPage() {
     setPredictError(null);
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { openContractCall } = require("@stacks/connect") as any;
+      const { openContractCall } = (await import("@stacks/connect")) as any;
       await openContractCall({
         ...answerQuestionTxOptions(questionId, lockedPrediction),
         onFinish: () => {
@@ -134,7 +134,7 @@ export default function EventQuestionsPage() {
   const handleClaimPoints = async (questionId: number) => {
     setBusy(`points-${questionId}`, true);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { openContractCall } = require("@stacks/connect") as any;
+    const { openContractCall } = (await import("@stacks/connect")) as any;
     await openContractCall({
       ...claimPointsTxOptions(questionId),
       onFinish: () => {

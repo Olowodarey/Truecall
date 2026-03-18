@@ -60,7 +60,7 @@ export default function EventCard({
   const handleJoin = async () => {
     if (!userAddress) return;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { openContractCall } = require("@stacks/connect") as any;
+    const { openContractCall } = (await import("@stacks/connect")) as any;
     const key = `join-${event.id}`;
     setBusy(key, true);
     await openContractCall({
@@ -76,7 +76,7 @@ export default function EventCard({
 
   const handleClaimPoints = async (questionId: number) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { openContractCall } = require("@stacks/connect") as any;
+    const { openContractCall } = (await import("@stacks/connect")) as any;
     const key = `points-${questionId}`;
     setBusy(key, true);
     await openContractCall({
@@ -92,7 +92,7 @@ export default function EventCard({
 
   const handleClaimWinnings = async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { openContractCall } = require("@stacks/connect") as any;
+    const { openContractCall } = (await import("@stacks/connect")) as any;
     const key = `winnings-${event.id}`;
     setBusy(key, true);
     await openContractCall({
