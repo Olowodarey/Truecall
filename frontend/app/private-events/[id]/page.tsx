@@ -241,8 +241,9 @@ export default function PrivateEventDetailPage() {
     ended: event.ended,
     currentBlock,
     joinDeadline: event.joinDeadline,
+    currentRound: event.currentRound,
   });
-  const deadlinePassed = currentBlock > event.joinDeadline;
+  const deadlinePassed = currentBlock >= event.joinDeadline;
   const payoutButton = derivePayoutButtons({
     ended: event.ended,
     refundMode: event.refundMode,
@@ -357,12 +358,20 @@ export default function PrivateEventDetailPage() {
 
                 {!isParticipant &&
                   deadlinePassed &&
+                  event.currentRound === 0 &&
                   !event.isActive &&
                   !event.ended && (
                     <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 text-yellow-400 text-sm text-center">
-                      ⏰ Join deadline passed
+                      ⏰ Join deadline passed — waiting for creator to start the
+                      event
                     </div>
                   )}
+
+                {!isParticipant && event.currentRound > 0 && !event.ended && (
+                  <div className="bg-gray-700/40 border border-gray-600/50 rounded-xl p-4 text-gray-400 text-sm text-center">
+                    🔒 This event has already started — joining is closed
+                  </div>
+                )}
 
                 {joinFormVisible && (
                   <div className="bg-gray-800/40 border border-gray-700/50 rounded-2xl p-6">

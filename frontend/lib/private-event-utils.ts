@@ -54,12 +54,14 @@ export function deriveJoinFormVisible(s: {
   ended: boolean;
   currentBlock: number;
   joinDeadline: number;
+  currentRound: number;
 }): boolean {
   return (
     !s.isParticipant &&
-    !s.isActive &&
+    s.isActive &&
     !s.ended &&
-    s.currentBlock <= s.joinDeadline
+    s.currentRound === 0 &&
+    s.currentBlock < s.joinDeadline
   );
 }
 

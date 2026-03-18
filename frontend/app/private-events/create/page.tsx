@@ -1,37 +1,40 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@/contexts/WalletContext";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import {
-  hashInviteCode,
-  minutesToAbsoluteBlock,
-  stxToMicroStx,
-} from "@/lib/private-event-utils";
+import { hashInviteCode, stxToMicroStx } from "@/lib/private-event-utils";
 import { createPrivateEventTxOptions } from "@/lib/private-stacks";
 import { HIRO_API } from "@/lib/contracts";
+
+// Stacks testnet averages ~2.5 min per block
+const MINS_PER_BLOCK = 2.5;
+
+function minsToBlocks(mins: number) {
+  return Math.max(1, Math.round(mins / MINS_PER_BLOCK));
+}
 
 interface FormState {
   title: string;
   entryFee: string;
-  joinDeadlineMinutes: string;
+  joinDeadlineMins: string; // how many minutes from now
   maxRounds: string;
-  intervalBlocks: string;
-  submissionWindow: string;
-  answerWindow: string;
+  intervalMins: string; // minutes between rounds
+  submissionMins: string; // minutes to submit question
+  answerMins: string; // minutes to answer
   inviteCode: string;
 }
 
 interface FormErrors {
   title?: string;
   entryFee?: string;
-  joinDeadlineMinutes?: string;
+  joinDeadlineMins?: string;
   maxRounds?: string;
-  intervalBlocks?: string;
-  submissionWindow?: string;
-  answerWindow?: string;
+  intervalMins?: string;
+  submissionMins?: string;
+  answerMins?: string;
   inviteCode?: string;
   general?: string;
 }
@@ -39,11 +42,11 @@ interface FormErrors {
 const INITIAL: FormState = {
   title: "",
   entryFee: "",
-  joinDeadlineMinutes: "",
+  joinDeadlineMins: "",
   maxRounds: "",
-  intervalBlocks: "",
-  submissionWindow: "",
-  answerWindow: "",
+  intervalMins: "",
+  submissionMins: "",
+  answerMins: "",
   inviteCode: "",
 };
 
@@ -55,12 +58,26 @@ export default function CreatePrivateEventPage() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [pending, setPending] = useState(false);
   const [cancelled, setCancelled] = useState(false);
+  const [currentBlock, setCurrentBlock] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch(`${HIRO_API}/v2/info`)
+      .then((r) => r.json())
+      .then((d) => setCurrentBlock(d.burn_block_height ?? null))
+      .catch(() => null);
+  }, []);
 
   function set(field: keyof FormState, value: string) {
     setForm((f) => ({ ...f, [field]: value }));
     setErrors((e) => ({ ...e, [field]: undefined }));
     setCancelled(false);
   }
+
+  // Live preview: deadline block
+  const deadlinePreview =
+    currentBlock && form.joinDeadlineMins
+      ? currentBlock + minsToBlocks(parseInt(form.joinDeadlineMins, 10) || 0)
+      : null;
 
   function validate(): FormErrors {
     const e: FormErrors = {};
@@ -69,34 +86,31 @@ export default function CreatePrivateEventPage() {
 
     const fee = parseFloat(form.entryFee);
     if (!form.entryFee) e.entryFee = "Entry fee is required";
-    else if (isNaN(fee) || fee < 0)
-      e.entryFee = "Must be a non-negative number";
+    else if (isNaN(fee) || fee <= 0) e.entryFee = "Must be greater than 0";
 
-    const mins = parseInt(form.joinDeadlineMinutes, 10);
-    if (!form.joinDeadlineMinutes)
-      e.joinDeadlineMinutes = "Join deadline is required";
-    else if (isNaN(mins) || mins < 1)
-      e.joinDeadlineMinutes = "Must be at least 1 minute";
+    const jMins = parseInt(form.joinDeadlineMins, 10);
+    if (!form.joinDeadlineMins)
+      e.joinDeadlineMins = "Join deadline is required";
+    else if (isNaN(jMins) || jMins < 5)
+      e.joinDeadlineMins = "Must be at least 5 minutes";
 
     const rounds = parseInt(form.maxRounds, 10);
     if (!form.maxRounds) e.maxRounds = "Max rounds is required";
     else if (isNaN(rounds) || rounds < 1) e.maxRounds = "Must be at least 1";
 
-    const interval = parseInt(form.intervalBlocks, 10);
-    if (!form.intervalBlocks) e.intervalBlocks = "Interval blocks is required";
-    else if (isNaN(interval) || interval < 1)
-      e.intervalBlocks = "Must be at least 1";
+    const iMins = parseInt(form.intervalMins, 10);
+    if (!form.intervalMins) e.intervalMins = "Required";
+    else if (isNaN(iMins) || iMins < 1)
+      e.intervalMins = "Must be at least 1 min";
 
-    const subWindow = parseInt(form.submissionWindow, 10);
-    if (!form.submissionWindow)
-      e.submissionWindow = "Submission window is required";
-    else if (isNaN(subWindow) || subWindow < 1)
-      e.submissionWindow = "Must be at least 1";
+    const sMins = parseInt(form.submissionMins, 10);
+    if (!form.submissionMins) e.submissionMins = "Required";
+    else if (isNaN(sMins) || sMins < 1)
+      e.submissionMins = "Must be at least 1 min";
 
-    const ansWindow = parseInt(form.answerWindow, 10);
-    if (!form.answerWindow) e.answerWindow = "Answer window is required";
-    else if (isNaN(ansWindow) || ansWindow < 1)
-      e.answerWindow = "Must be at least 1";
+    const aMins = parseInt(form.answerMins, 10);
+    if (!form.answerMins) e.answerMins = "Required";
+    else if (isNaN(aMins) || aMins < 1) e.answerMins = "Must be at least 1 min";
 
     if (!form.inviteCode.trim()) e.inviteCode = "Invite code is required";
 
@@ -115,7 +129,6 @@ export default function CreatePrivateEventPage() {
     setCancelled(false);
 
     try {
-      // Fetch current block height
       const info = await fetch(`${HIRO_API}/v2/info`)
         .then((r) => r.json())
         .catch(() => null);
@@ -127,11 +140,9 @@ export default function CreatePrivateEventPage() {
         return;
       }
 
-      const currentBlock: number = info.burn_block_height;
-      const joinDeadline = minutesToAbsoluteBlock(
-        parseInt(form.joinDeadlineMinutes, 10),
-        currentBlock,
-      );
+      const block: number = info.burn_block_height;
+      const joinDeadline =
+        block + minsToBlocks(parseInt(form.joinDeadlineMins, 10));
       const inviteHash = await hashInviteCode(form.inviteCode);
       const entryFee = stxToMicroStx(parseFloat(form.entryFee));
 
@@ -141,9 +152,9 @@ export default function CreatePrivateEventPage() {
         entryFee,
         joinDeadline,
         parseInt(form.maxRounds, 10),
-        parseInt(form.intervalBlocks, 10),
-        parseInt(form.submissionWindow, 10),
-        parseInt(form.answerWindow, 10),
+        minsToBlocks(parseInt(form.intervalMins, 10)),
+        minsToBlocks(parseInt(form.submissionMins, 10)),
+        minsToBlocks(parseInt(form.answerMins, 10)),
       );
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -209,6 +220,13 @@ export default function CreatePrivateEventPage() {
           Set up an invite-only prediction game for you and your friends.
         </p>
 
+        {currentBlock && (
+          <div className="mb-6 bg-gray-800/40 border border-gray-700/30 rounded-lg px-4 py-2.5 text-gray-400 text-xs">
+            Current block:{" "}
+            <span className="text-white font-mono">#{currentBlock}</span>
+          </div>
+        )}
+
         {cancelled && (
           <div className="mb-6 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 text-yellow-400 text-sm">
             Transaction cancelled. Your form is still filled in.
@@ -257,77 +275,109 @@ export default function CreatePrivateEventPage() {
           </Field>
 
           <Field
-            label="Join Deadline (minutes from now)"
-            error={errors.joinDeadlineMinutes}
-            hint="How long others have to join before the event starts"
+            label="Join Deadline"
+            error={errors.joinDeadlineMins}
+            hint={
+              deadlinePreview
+                ? `≈ block #${deadlinePreview} — others have this long to join before you start the event`
+                : "How long others have to join before you start the event"
+            }
+          >
+            <div className="flex gap-2">
+              <input
+                type="number"
+                min={5}
+                value={form.joinDeadlineMins}
+                onChange={(e) => set("joinDeadlineMins", e.target.value)}
+                placeholder="e.g. 60"
+                className={inputCls(!!errors.joinDeadlineMins) + " flex-1"}
+              />
+              <span className="flex items-center text-gray-400 text-sm px-3 bg-gray-900/60 border border-gray-600 rounded-lg">
+                min
+              </span>
+            </div>
+          </Field>
+
+          <Field
+            label="Max Rounds"
+            error={errors.maxRounds}
+            hint="Total number of prediction rounds"
           >
             <input
               type="number"
               min={1}
-              value={form.joinDeadlineMinutes}
-              onChange={(e) => set("joinDeadlineMinutes", e.target.value)}
-              placeholder="e.g. 60"
-              className={inputCls(!!errors.joinDeadlineMinutes)}
+              value={form.maxRounds}
+              onChange={(e) => set("maxRounds", e.target.value)}
+              placeholder="e.g. 5"
+              className={inputCls(!!errors.maxRounds)}
             />
           </Field>
 
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Max Rounds" error={errors.maxRounds}>
+          <Field
+            label="Time Between Rounds"
+            error={errors.intervalMins}
+            hint="How long to wait between each round starting"
+          >
+            <div className="flex gap-2">
               <input
                 type="number"
                 min={1}
-                value={form.maxRounds}
-                onChange={(e) => set("maxRounds", e.target.value)}
-                placeholder="e.g. 5"
-                className={inputCls(!!errors.maxRounds)}
+                value={form.intervalMins}
+                onChange={(e) => set("intervalMins", e.target.value)}
+                placeholder="e.g. 30"
+                className={inputCls(!!errors.intervalMins) + " flex-1"}
               />
-            </Field>
-            <Field
-              label="Interval Blocks"
-              error={errors.intervalBlocks}
-              hint="Blocks between rounds"
-            >
-              <input
-                type="number"
-                min={1}
-                value={form.intervalBlocks}
-                onChange={(e) => set("intervalBlocks", e.target.value)}
-                placeholder="e.g. 144"
-                className={inputCls(!!errors.intervalBlocks)}
-              />
-            </Field>
-          </div>
+              <span className="flex items-center text-gray-400 text-sm px-3 bg-gray-900/60 border border-gray-600 rounded-lg">
+                min
+              </span>
+            </div>
+          </Field>
 
           <div className="grid grid-cols-2 gap-4">
             <Field
-              label="Submission Window (blocks)"
-              error={errors.submissionWindow}
+              label="Question Window"
+              error={errors.submissionMins}
+              hint="Time to post the question"
             >
-              <input
-                type="number"
-                min={1}
-                value={form.submissionWindow}
-                onChange={(e) => set("submissionWindow", e.target.value)}
-                placeholder="e.g. 10"
-                className={inputCls(!!errors.submissionWindow)}
-              />
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  value={form.submissionMins}
+                  onChange={(e) => set("submissionMins", e.target.value)}
+                  placeholder="e.g. 30"
+                  className={inputCls(!!errors.submissionMins) + " flex-1"}
+                />
+                <span className="flex items-center text-gray-400 text-sm px-3 bg-gray-900/60 border border-gray-600 rounded-lg">
+                  min
+                </span>
+              </div>
             </Field>
-            <Field label="Answer Window (blocks)" error={errors.answerWindow}>
-              <input
-                type="number"
-                min={1}
-                value={form.answerWindow}
-                onChange={(e) => set("answerWindow", e.target.value)}
-                placeholder="e.g. 20"
-                className={inputCls(!!errors.answerWindow)}
-              />
+            <Field
+              label="Answer Window"
+              error={errors.answerMins}
+              hint="Time for players to answer"
+            >
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  value={form.answerMins}
+                  onChange={(e) => set("answerMins", e.target.value)}
+                  placeholder="e.g. 30"
+                  className={inputCls(!!errors.answerMins) + " flex-1"}
+                />
+                <span className="flex items-center text-gray-400 text-sm px-3 bg-gray-900/60 border border-gray-600 rounded-lg">
+                  min
+                </span>
+              </div>
             </Field>
           </div>
 
           <Field
             label="Invite Code"
             error={errors.inviteCode}
-            hint="Share this secret with friends — it will be hashed before going on-chain"
+            hint="Share this secret with friends — it's hashed before going on-chain"
           >
             <input
               type="text"

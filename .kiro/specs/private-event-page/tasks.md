@@ -21,7 +21,7 @@ Implement the private event feature as three Next.js App Router pages under `/pr
     - `renderLeaderboard(entries: LeaderboardEntry[], wallet: string | null): Array<LeaderboardEntry & { isMe: boolean }>`
   - _Requirements: 1.5, 1.10, 1.11, 2.4, 2.5, 2.6, 3.4, 3.5, 3.7, 4.1–4.3, 4.6, 5.1, 5.3, 5.5, 6.1, 6.3, 7.1, 7.3, 8.1–8.3, 9.2, 9.3_
 
-  - [~]\* 1.1 Write property tests for utility functions
+  - [ ]\* 1.1 Write property tests for utility functions
     - Install `fast-check` as a dev dependency
     - Create `frontend/lib/__tests__/private-event-utils.test.ts`
     - **Property 1: Invite code hash determinism** — Validates: Requirements 1.5
@@ -96,7 +96,7 @@ Implement the private event feature as three Next.js App Router pages under `/pr
   - Show inline validation errors per field; disable submit while pending
   - _Requirements: 1.1–1.11_
 
-  - [-]\* 5.1 Write unit tests for create form validation
+  - [ ]\* 5.1 Write unit tests for create form validation
     - Test that submitting with empty title shows an error
     - Test that submitting with negative entry fee shows an error
     - Test that submitting with zero max rounds shows an error
