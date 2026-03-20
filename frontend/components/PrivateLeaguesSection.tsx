@@ -64,9 +64,9 @@ export default function PrivateLeaguesSection() {
             </span>
           </h2>
           <p className="text-lg text-gray-300 max-w-2xl mx-auto leading-relaxed">
-            TrueCall Private Events let you create an invite-only prediction
+            TrueCall Private Events let you create an invite only prediction
             league with your friends, colleagues, or community. You set the
-            rules — entry fee, number of rounds, time windows — and the smart
+            rules  entry fee, number of rounds, time windows  and the smart
             contract handles everything else. No trust required. No admin. Just
             Bitcoin calls and on-chain proof.
           </p>
@@ -111,7 +111,7 @@ export default function PrivateLeaguesSection() {
         {/* Narrative callout */}
         <div className="bg-gradient-to-r from-purple-900/20 to-blue-900/20 border border-purple-500/20 rounded-2xl p-8 mb-12 text-center max-w-3xl mx-auto">
           <p className="text-gray-200 text-lg leading-relaxed">
-            Think of it like a private fantasy league — but instead of picking
+            Think of it like a private fantasy league  but instead of picking
             players, your group takes turns asking Bitcoin questions. Who called
             the top? Who predicted the dip? The leaderboard doesn't lie, and the
             prize pool goes to whoever had the sharpest eye.
