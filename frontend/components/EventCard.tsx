@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import type { ChainEvent, ChainQuestion, ChainParticipant } from "@/lib/types";
 import {
   claimPointsTxOptions,
-  claimWinningsTxOptions,
   joinEventTxOptions,
   getParticipant,
 } from "@/lib/stacks";
@@ -81,22 +80,6 @@ export default function EventCard({
     setBusy(key, true);
     await openContractCall({
       ...claimPointsTxOptions(questionId),
-      onFinish: () => {
-        clearCache();
-        setBusy(key, false);
-        onRefresh?.();
-      },
-      onCancel: () => setBusy(key, false),
-    });
-  };
-
-  const handleClaimWinnings = async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { openContractCall } = (await import("@stacks/connect")) as any;
-    const key = `winnings-${event.id}`;
-    setBusy(key, true);
-    await openContractCall({
-      ...claimWinningsTxOptions(event.id),
       onFinish: () => {
         clearCache();
         setBusy(key, false);
@@ -182,19 +165,18 @@ export default function EventCard({
           </button>
         ) : allFinalized && userAddress ? (
           <button
-            id={`claim-winnings-${event.id}`}
-            disabled={!!pending[`winnings-${event.id}`]}
-            onClick={handleClaimWinnings}
-            className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold py-3 px-6 rounded-lg transition-all disabled:opacity-50"
+            onClick={() => router.push(`/events/${event.id}`)}
+            className="w-full bg-gray-700/50 hover:bg-gray-600 text-white font-semibold py-3 px-6 rounded-lg transition"
           >
-            {pending[`winnings-${event.id}`]
-              ? "Waiting for wallet…"
-              : `🎉 Claim Winnings (STX)`}
+            View Event →
           </button>
         ) : allFinalized ? (
-          <div className="w-full bg-green-500/10 text-green-400 font-semibold py-3 px-6 rounded-lg text-center border border-green-500/30">
-            Event Settled ✓
-          </div>
+          <button
+            onClick={() => router.push(`/events/${event.id}`)}
+            className="w-full bg-gray-700/50 hover:bg-gray-600 text-white font-semibold py-3 px-6 rounded-lg transition"
+          >
+            View Event →
+          </button>
         ) : !isOpen ? (
           <button
             onClick={() => router.push(`/events/${event.id}`)}
