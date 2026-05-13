@@ -1,0 +1,10 @@
+# Foundry build output
+out/
+cache/
+
+# Environment
+.env
+
+# Coverage
+lcov.info
+coverage/
