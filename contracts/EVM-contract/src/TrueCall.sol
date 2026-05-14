@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 /// @title TrueCall
 /// @author TrueCall Team
@@ -10,24 +12,30 @@ import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 ///         Holds references to all sub-contracts and acts as the
 ///         single source of truth for contract addresses.
 ///         Does NOT hold funds — all funds are in EventManager.
-contract TrueCall is Ownable, Pausable {
+///         Upgradeable via UUPS proxy pattern.
+/// @custom:oz-upgrades-from TrueCall
+contract TrueCall is Initializable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable {
     // ─── Constants ────────────────────────────────────────────────────────────
 
     string public constant VERSION = "1.0.0";
 
     // ─── State ────────────────────────────────────────────────────────────────
 
-    /// @notice Address of the EventManager contract
+    /// @notice Address of the EventManager proxy
     address public eventManager;
 
-    /// @notice Address of the Leaderboard contract
+    /// @notice Address of the Leaderboard proxy
     address public leaderboard;
 
     /// @notice Address of the AI Oracle Agent (ERC-8004 registered)
     address public aiOracleAgent;
 
-    /// @notice Address of the cUSD token on Celo
-    address public immutable cUSD;
+    /// @notice cUSD token address on Celo (set once, never changes)
+    address public cUSD;
+
+    // ─── Storage gap for future upgrades ─────────────────────────────────────
+    // solhint-disable-next-line var-name-mixedcase
+    uint256[50] private __gap;
 
     // ─── Events ───────────────────────────────────────────────────────────────
 
@@ -40,14 +48,32 @@ contract TrueCall is Ownable, Pausable {
 
     error ZeroAddress();
 
-    // ─── Constructor ──────────────────────────────────────────────────────────
+    // ─── Constructor (disabled for proxy) ────────────────────────────────────
 
-    /// @param _cUSD cUSD token address on Celo Mainnet: 0x765DE816845861e75A25fCA122bb6898B8B1282a
-    constructor(address _cUSD) Ownable(msg.sender) {
-        if (_cUSD == address(0)) revert ZeroAddress();
-        cUSD = _cUSD;
-        emit ContractDeployed(msg.sender, block.timestamp);
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
     }
+
+    // ─── Initializer (replaces constructor) ──────────────────────────────────
+
+    /// @notice Initialize the root registry
+    /// @param _cUSD cUSD token address on Celo Mainnet: 0x765DE816845861e75A25fCA122bb6898B8B1282a
+    /// @param _owner Initial owner address
+    function initialize(address _cUSD, address _owner) external initializer {
+        if (_cUSD == address(0) || _owner == address(0)) revert ZeroAddress();
+        __Ownable_init(_owner);
+        __Pausable_init();
+        __UUPSUpgradeable_init();
+
+        cUSD = _cUSD;
+        emit ContractDeployed(_owner, block.timestamp);
+    }
+
+    // ─── UUPS Upgrade Authorization ───────────────────────────────────────────
+
+    /// @dev Only owner can authorize upgrades
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     // ─── Admin ────────────────────────────────────────────────────────────────
 
