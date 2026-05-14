@@ -59,8 +59,8 @@
 │  Job 3: Calculate Points                                        │
 │  - Reads all predictions for the event                          │
 │  - Applies scoring rules:                                       │
-│    • Exact score match = 3 points                               │
-│    • Correct outcome (W/D/L) = 1 point                          │
+│    • Exact score match = 5 points                               │
+│    • Correct outcome (W/D/L) = 3 point                          │
 │    • Wrong = 0 points                                           │
 │  - Generates points array for all users                         │
 │                                                                 │

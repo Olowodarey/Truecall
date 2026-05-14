@@ -168,26 +168,19 @@ contract EventManager is IEventManager, Ownable, ReentrancyGuard, Pausable {
         _validateEventParams(kickoffTime, predictionDeadline, entryFee);
 
         eventId = nextEventId++;
-        events[eventId] = Event({
-            eventId: eventId,
-            eventType: EventType.PUBLIC,
-            creator: msg.sender,
-            homeTeam: homeTeam,
-            awayTeam: awayTeam,
-            matchId: matchId,
-            kickoffTime: kickoffTime,
-            predictionDeadline: predictionDeadline,
-            entryFee: entryFee,
-            prizePool: 0,
-            maxParticipants: 0, // unlimited
-            status: EventStatus.OPEN,
-            scoringRule: scoringRule,
-            finalHomeScore: 0,
-            finalAwayScore: 0,
-            resultProof: bytes32(0),
-            verifiedAt: 0,
-            inviteCodeHash: bytes32(0)
-        });
+
+        Event storage ev = events[eventId];
+        ev.eventId = eventId;
+        ev.eventType = EventType.PUBLIC;
+        ev.creator = msg.sender;
+        ev.homeTeam = homeTeam;
+        ev.awayTeam = awayTeam;
+        ev.matchId = matchId;
+        ev.kickoffTime = kickoffTime;
+        ev.predictionDeadline = predictionDeadline;
+        ev.entryFee = entryFee;
+        ev.status = EventStatus.OPEN;
+        ev.scoringRule = scoringRule;
 
         emit PublicEventCreated(eventId, homeTeam, awayTeam, matchId, kickoffTime, entryFee);
     }
@@ -211,26 +204,21 @@ contract EventManager is IEventManager, Ownable, ReentrancyGuard, Pausable {
         require(inviteCodeHash != bytes32(0), "Invalid invite code hash");
 
         eventId = nextEventId++;
-        events[eventId] = Event({
-            eventId: eventId,
-            eventType: EventType.PRIVATE,
-            creator: msg.sender,
-            homeTeam: homeTeam,
-            awayTeam: awayTeam,
-            matchId: matchId,
-            kickoffTime: kickoffTime,
-            predictionDeadline: predictionDeadline,
-            entryFee: entryFee,
-            prizePool: 0,
-            maxParticipants: maxParticipants,
-            status: EventStatus.OPEN,
-            scoringRule: scoringRule,
-            finalHomeScore: 0,
-            finalAwayScore: 0,
-            resultProof: bytes32(0),
-            verifiedAt: 0,
-            inviteCodeHash: inviteCodeHash
-        });
+
+        Event storage ev = events[eventId];
+        ev.eventId = eventId;
+        ev.eventType = EventType.PRIVATE;
+        ev.creator = msg.sender;
+        ev.homeTeam = homeTeam;
+        ev.awayTeam = awayTeam;
+        ev.matchId = matchId;
+        ev.kickoffTime = kickoffTime;
+        ev.predictionDeadline = predictionDeadline;
+        ev.entryFee = entryFee;
+        ev.maxParticipants = maxParticipants;
+        ev.status = EventStatus.OPEN;
+        ev.scoringRule = scoringRule;
+        ev.inviteCodeHash = inviteCodeHash;
 
         // Creator gets free entry — record them as participant with no fee
         _hasJoined[eventId][msg.sender] = true;
