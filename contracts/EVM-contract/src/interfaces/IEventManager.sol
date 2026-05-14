@@ -7,10 +7,11 @@ interface IEventManager {
     // ─── Enums ────────────────────────────────────────────────────────────────
 
     enum EventStatus {
-        OPEN,      // Accepting joins and predictions
-        LOCKED,    // Prediction window closed, matches in progress
-        RESOLVED,  // All matches verified, prizes claimable
-        DISPUTED,  // At least one match result under admin review
+        OPEN,      // Accepting predictions
+        LOCKED,    // Deadline passed, awaiting result
+        VERIFIED,  // AI agent submitted result, dispute window open
+        RESOLVED,  // Prizes claimable
+        DISPUTED,  // Under admin review
         CANCELLED  // Cancelled, refunds available
     }
 
@@ -20,14 +21,6 @@ interface IEventManager {
         BOTH              // 3pts exact, 1pt outcome, 0 wrong
     }
 
-    enum MatchStatus {
-        PENDING,   // Not yet started
-        LOCKED,    // Kickoff passed, awaiting result
-        VERIFIED,  // AI agent submitted result, dispute window open
-        DISPUTED,  // Under admin review
-        RESOLVED   // Final — points distributed
-    }
-
     enum EventType {
         PUBLIC,  // Admin-created, open to all
         PRIVATE  // User-created, invite code required
@@ -35,107 +28,111 @@ interface IEventManager {
 
     // ─── Structs ──────────────────────────────────────────────────────────────
 
-    /// @notice Event = the container. Holds entry fee, window, participants, prize pool.
-    ///         Does NOT hold match details — matches are stored separately.
+    /// @notice Event = A competition/tournament that houses multiple matches
     struct Event {
         uint256 eventId;
         EventType eventType;
         address creator;
-        string name;                 // e.g. "Gameweek 32 Predictions"
-        uint256 startTime;           // when predictions open
-        uint256 predictionDeadline;  // last time to join and predict (before first kickoff)
-        uint256 entryFee;            // ONE-TIME fee in cUSD (18 decimals)
-        uint256 prizePool;           // accumulated entry fees
-        uint256 maxParticipants;     // 0 = unlimited (public events)
+        string eventName;        // e.g., "Premier League Week 10"
+        uint256 startDate;       // When event starts (users can join before this)
+        uint256 endDate;         // When event ends (all matches must finish before this)
+        uint256 entryFee;        // in cUSD (18 decimals) - ONE-TIME payment
+        uint256 prizePool;       // accumulated entry fees
+        uint256 maxParticipants; // 0 = unlimited (public events)
         EventStatus status;
-        uint256 matchCount;          // number of matches added to this event
-        uint256 resolvedMatchCount;  // incremented as each match is verified
-        bytes32 inviteCodeHash;      // keccak256 of invite code (private events only)
+        ScoringRule scoringRule; // Applied to all matches in this event
+        bytes32 inviteCodeHash;  // keccak256 of invite code (private events only)
     }
 
-    /// @notice Match = a single football fixture inside an event.
-    ///         Each match has its own scoring rule and kickoff time.
+    /// @notice Match = Individual fixture within an event
     struct Match {
-        uint256 matchId;        // auto-incremented within the event
-        uint256 eventId;        // parent event
-        string apiMatchId;      // API-Football fixture ID (off-chain reference)
+        uint256 matchId;
+        uint256 eventId;         // Parent event
         string homeTeam;
         string awayTeam;
-        uint256 kickoffTime;    // unix timestamp
-        ScoringRule scoringRule;
+        string apiMatchId;       // API-Football match ID
+        uint256 kickoffTime;
+        uint256 predictionDeadline;
         MatchStatus status;
         uint8 finalHomeScore;
         uint8 finalAwayScore;
-        bytes32 resultProof;    // keccak256(eventId, matchId, home, away, timestamp, agent)
+        bytes32 resultProof;     // keccak256(matchId, home, away, timestamp, agent)
         uint256 verifiedAt;
     }
 
-    /// @notice Prediction = a user's score guess for a specific match.
-    ///         Timestamped at submission — immutable anti-cheat proof.
-    struct MatchPrediction {
+    enum MatchStatus {
+        OPEN,      // Accepting predictions
+        LOCKED,    // Deadline passed, awaiting result
+        VERIFIED,  // AI agent submitted result
+        DISPUTED   // Under admin review
+    }
+
+    struct Prediction {
         uint8 homeScore;
         uint8 awayScore;
-        uint256 submittedAt;   // block.timestamp — cannot be altered after submission
+        uint256 submittedAt;  // block.timestamp — immutable anti-cheat proof
         bool exists;
-        uint256 pointsEarned;  // set by AI oracle after match verification
+        uint256 pointsEarned; // set by AI oracle after verification
     }
 
     // ─── Events ───────────────────────────────────────────────────────────────
 
     event PublicEventCreated(
         uint256 indexed eventId,
-        string name,
-        uint256 predictionDeadline,
+        string eventName,
+        uint256 startDate,
+        uint256 endDate,
         uint256 entryFee
     );
 
     event PrivateEventCreated(
         uint256 indexed eventId,
         address indexed creator,
-        string name,
-        uint256 predictionDeadline,
+        string eventName,
+        uint256 startDate,
+        uint256 endDate,
         uint256 entryFee,
         uint256 maxParticipants
     );
 
-    event MatchAdded(
+    event UserJoinedEvent(
         uint256 indexed eventId,
+        address indexed user,
+        uint256 timestamp
+    );
+
+    event MatchAdded(
         uint256 indexed matchId,
-        string apiMatchId,
+        uint256 indexed eventId,
         string homeTeam,
         string awayTeam,
-        uint256 kickoffTime,
-        ScoringRule scoringRule
+        string apiMatchId,
+        uint256 kickoffTime
     );
 
     event PredictionSubmitted(
-        uint256 indexed eventId,
         uint256 indexed matchId,
+        uint256 indexed eventId,
         address indexed user,
         uint8 homeScore,
         uint8 awayScore,
         uint256 timestamp
     );
 
-    event UserJoinedEvent(
-        uint256 indexed eventId,
-        address indexed user,
-        uint256 entryFee
-    );
-
     event MatchResultVerified(
-        uint256 indexed eventId,
         uint256 indexed matchId,
+        uint256 indexed eventId,
         uint8 homeScore,
         uint8 awayScore,
         bytes32 proof,
-        address indexed agent
+        address indexed agent,
+        uint256 timestamp
     );
 
-    event MatchDisputed(uint256 indexed eventId, uint256 indexed matchId, address indexed disputer);
-    event MatchDisputeResolved(uint256 indexed eventId, uint256 indexed matchId, bool agentWasWrong);
     event EventResolved(uint256 indexed eventId, address[5] winners);
     event PrizeClaimed(uint256 indexed eventId, address indexed winner, uint256 amount);
+    event MatchResultDisputed(uint256 indexed matchId, address indexed disputer);
+    event DisputeResolved(uint256 indexed matchId, bool agentWasWrong);
     event EventCancelled(uint256 indexed eventId);
     event RefundClaimed(uint256 indexed eventId, address indexed user, uint256 amount);
 }

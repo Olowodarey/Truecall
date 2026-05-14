@@ -14,11 +14,13 @@ import {ILeaderboard} from "./interfaces/ILeaderboard.sol";
 /// @title EventManager
 /// @author TrueCall Team
 /// @notice Manages public and private prediction events on TrueCall.
-///         - Admin creates public events (open to all)
+///         - Admin creates public events (competitions/tournaments with start/end dates)
 ///         - Users create private events (invite-code gated)
-///         - Users pay a ONE-TIME entry fee per event (in cUSD)
-///         - AI Oracle Agent submits verified results + points
-///         - Top 5 point holders share 99% of prize pool
+///         - Users pay a ONE-TIME entry fee per event (in cUSD) before event starts
+///         - Admin adds matches to events after they start
+///         - Users submit predictions for each match
+///         - AI Oracle Agent submits verified results + points for each match
+///         - Top 5 point holders share 99% of prize pool after event ends
 ///         - Platform takes 1% fee
 ///         - Upgradeable via UUPS proxy pattern
 /// @custom:oz-upgrades-from EventManager
@@ -66,6 +68,9 @@ contract EventManager is
     /// @notice Auto-incrementing event ID
     uint256 public nextEventId;
 
+    /// @notice Auto-incrementing match ID
+    uint256 public nextMatchId;
+
     /// @notice Accumulated platform fees (withdrawn by admin)
     uint256 public pendingTreasuryFees;
 
@@ -75,7 +80,13 @@ contract EventManager is
     /// @notice eventId → Event
     mapping(uint256 => Event) public events;
 
-    /// @notice eventId → user → Prediction
+    /// @notice matchId → Match
+    mapping(uint256 => Match) public matches;
+
+    /// @notice eventId → matchId[] (all matches in an event)
+    mapping(uint256 => uint256[]) private _eventMatches;
+
+    /// @notice matchId → user → Prediction
     mapping(uint256 => mapping(address => Prediction)) public predictions;
 
     /// @notice eventId → ordered list of participants
@@ -104,14 +115,17 @@ contract EventManager is
 
     error OnlyAIAgent();
     error EventNotOpen();
+    error MatchNotOpen();
     error DeadlinePassed();
     error AlreadyJoined();
+    error NotJoined();
     error EventFull();
     error InvalidInviteCode();
-    error EventNotVerified();
+    error MatchNotVerified();
+    error EventNotResolved();
     error DisputeWindowOpen();
     error DisputeWindowClosed();
-    error EventNotDisputed();
+    error MatchNotDisputed();
     error NothingToClaim();
     error ClaimExpired();
     error NotParticipant();
@@ -119,10 +133,15 @@ contract EventManager is
     error ArrayLengthMismatch();
     error ZeroAddress();
     error FeeTooLow();
+    error StartDateInPast();
+    error EndDateBeforeStart();
     error KickoffInPast();
     error DeadlineAfterKickoff();
+    error MatchNotInEvent();
     error NotCreator();
     error EventHasParticipants();
+    error EventNotStarted();
+    error EventEnded();
 
     // ─── Modifiers ────────────────────────────────────────────────────────────
 
@@ -194,32 +213,33 @@ contract EventManager is
     // ─── Event Creation ───────────────────────────────────────────────────────
 
     /// @notice Admin creates a public event (open to all users)
+    /// @param eventName Name of the competition (e.g., "Premier League Week 10")
+    /// @param startDate When the event starts (users can join before this)
+    /// @param endDate When the event ends
+    /// @param entryFee ONE-TIME entry fee in cUSD
+    /// @param scoringRule Scoring rule applied to all matches in this event
     function createPublicEvent(
-        string calldata homeTeam,
-        string calldata awayTeam,
-        string calldata matchId,
-        uint256 kickoffTime,
-        uint256 predictionDeadline,
+        string calldata eventName,
+        uint256 startDate,
+        uint256 endDate,
         uint256 entryFee,
         ScoringRule scoringRule
     ) external onlyOwner whenNotPaused returns (uint256 eventId) {
-        _validateEventParams(kickoffTime, predictionDeadline, entryFee);
+        _validateEventDates(startDate, endDate, entryFee);
 
         eventId = nextEventId++;
         Event storage ev = events[eventId];
         ev.eventId = eventId;
         ev.eventType = EventType.PUBLIC;
         ev.creator = msg.sender;
-        ev.homeTeam = homeTeam;
-        ev.awayTeam = awayTeam;
-        ev.matchId = matchId;
-        ev.kickoffTime = kickoffTime;
-        ev.predictionDeadline = predictionDeadline;
+        ev.eventName = eventName;
+        ev.startDate = startDate;
+        ev.endDate = endDate;
         ev.entryFee = entryFee;
         ev.status = EventStatus.OPEN;
         ev.scoringRule = scoringRule;
 
-        emit PublicEventCreated(eventId, homeTeam, awayTeam, matchId, kickoffTime, entryFee);
+        emit PublicEventCreated(eventId, eventName, startDate, endDate, entryFee);
     }
 
     /// @notice Any user creates a private event with an invite code.
@@ -227,17 +247,15 @@ contract EventManager is
     /// @param inviteCodeHash keccak256 of the plain-text invite code (stored off-chain)
     /// @param maxParticipants 2–100 participants
     function createPrivateEvent(
-        string calldata homeTeam,
-        string calldata awayTeam,
-        string calldata matchId,
-        uint256 kickoffTime,
-        uint256 predictionDeadline,
+        string calldata eventName,
+        uint256 startDate,
+        uint256 endDate,
         uint256 entryFee,
         ScoringRule scoringRule,
         uint256 maxParticipants,
         bytes32 inviteCodeHash
     ) external whenNotPaused returns (uint256 eventId) {
-        _validateEventParams(kickoffTime, predictionDeadline, entryFee);
+        _validateEventDates(startDate, endDate, entryFee);
         require(maxParticipants >= 2 && maxParticipants <= 100, "maxParticipants: 2-100");
         require(inviteCodeHash != bytes32(0), "Invalid invite code hash");
 
@@ -246,11 +264,9 @@ contract EventManager is
         ev.eventId = eventId;
         ev.eventType = EventType.PRIVATE;
         ev.creator = msg.sender;
-        ev.homeTeam = homeTeam;
-        ev.awayTeam = awayTeam;
-        ev.matchId = matchId;
-        ev.kickoffTime = kickoffTime;
-        ev.predictionDeadline = predictionDeadline;
+        ev.eventName = eventName;
+        ev.startDate = startDate;
+        ev.endDate = endDate;
         ev.entryFee = entryFee;
         ev.maxParticipants = maxParticipants;
         ev.status = EventStatus.OPEN;
@@ -262,59 +278,118 @@ contract EventManager is
         _participants[eventId].push(msg.sender);
 
         emit PrivateEventCreated(
-            eventId, msg.sender, homeTeam, awayTeam, matchId, kickoffTime, entryFee, maxParticipants
+            eventId, msg.sender, eventName, startDate, endDate, entryFee, maxParticipants
         );
+    }
+
+    // ─── Match Management ─────────────────────────────────────────────────────
+
+    /// @notice Admin adds a match to an event (can only be done after event starts)
+    function addMatch(
+        uint256 eventId,
+        string calldata homeTeam,
+        string calldata awayTeam,
+        string calldata apiMatchId,
+        uint256 kickoffTime,
+        uint256 predictionDeadline
+    ) external onlyOwner whenNotPaused returns (uint256 matchId) {
+        Event storage ev = events[eventId];
+        
+        if (ev.status != EventStatus.OPEN) revert EventNotOpen();
+        if (block.timestamp < ev.startDate) revert EventNotStarted();
+        if (block.timestamp >= ev.endDate) revert EventEnded();
+        if (kickoffTime <= block.timestamp) revert KickoffInPast();
+        if (predictionDeadline > kickoffTime) revert DeadlineAfterKickoff();
+        if (kickoffTime > ev.endDate) revert EventEnded();
+
+        matchId = nextMatchId++;
+        Match storage m = matches[matchId];
+        m.matchId = matchId;
+        m.eventId = eventId;
+        m.homeTeam = homeTeam;
+        m.awayTeam = awayTeam;
+        m.apiMatchId = apiMatchId;
+        m.kickoffTime = kickoffTime;
+        m.predictionDeadline = predictionDeadline;
+        m.status = MatchStatus.OPEN;
+
+        _eventMatches[eventId].push(matchId);
+
+        emit MatchAdded(matchId, eventId, homeTeam, awayTeam, apiMatchId, kickoffTime);
     }
 
     // ─── Joining & Predicting ─────────────────────────────────────────────────
 
-    /// @notice Join a PUBLIC event and submit prediction.
-    ///         ONE-TIME entry fee paid here — no further charges.
-    function joinAndPredict(
-        uint256 eventId,
-        uint8 homeScore,
-        uint8 awayScore
-    ) external nonReentrant whenNotPaused {
+    /// @notice Join a PUBLIC event (pay ONE-TIME entry fee)
+    function joinEvent(uint256 eventId) external nonReentrant whenNotPaused {
         Event storage ev = events[eventId];
 
         if (ev.status != EventStatus.OPEN) revert EventNotOpen();
-        if (block.timestamp >= ev.predictionDeadline) revert DeadlinePassed();
         if (_hasJoined[eventId][msg.sender]) revert AlreadyJoined();
         if (ev.eventType != EventType.PUBLIC) revert InvalidInviteCode();
+        if (block.timestamp >= ev.startDate) revert EventNotOpen(); // Can only join before start
 
         _collectEntryFee(eventId, msg.sender);
-        _recordPrediction(eventId, msg.sender, homeScore, awayScore);
+        _hasJoined[eventId][msg.sender] = true;
+        _participants[eventId].push(msg.sender);
+
+        emit UserJoinedEvent(eventId, msg.sender, block.timestamp);
     }
 
-    /// @notice Join a PRIVATE event with invite code and submit prediction.
-    ///         ONE-TIME entry fee paid here — no further charges.
-    function joinPrivateAndPredict(
+    /// @notice Join a PRIVATE event with invite code (pay ONE-TIME entry fee)
+    function joinPrivateEvent(
         uint256 eventId,
-        string calldata inviteCode,
-        uint8 homeScore,
-        uint8 awayScore
+        string calldata inviteCode
     ) external nonReentrant whenNotPaused {
         Event storage ev = events[eventId];
 
         if (ev.status != EventStatus.OPEN) revert EventNotOpen();
-        if (block.timestamp >= ev.predictionDeadline) revert DeadlinePassed();
         if (_hasJoined[eventId][msg.sender]) revert AlreadyJoined();
         if (ev.eventType != EventType.PRIVATE) revert EventNotOpen();
         if (keccak256(abi.encodePacked(inviteCode)) != ev.inviteCodeHash) revert InvalidInviteCode();
         if (_participants[eventId].length >= ev.maxParticipants) revert EventFull();
+        if (block.timestamp >= ev.startDate) revert EventNotOpen(); // Can only join before start
 
         _collectEntryFee(eventId, msg.sender);
-        _recordPrediction(eventId, msg.sender, homeScore, awayScore);
+        _hasJoined[eventId][msg.sender] = true;
+        _participants[eventId].push(msg.sender);
+
+        emit UserJoinedEvent(eventId, msg.sender, block.timestamp);
+    }
+
+    /// @notice Submit prediction for a match (must have joined the event first)
+    function submitPrediction(
+        uint256 matchId,
+        uint8 homeScore,
+        uint8 awayScore
+    ) external nonReentrant whenNotPaused {
+        Match storage m = matches[matchId];
+        uint256 eventId = m.eventId;
+
+        if (!_hasJoined[eventId][msg.sender]) revert NotJoined();
+        if (m.status != MatchStatus.OPEN) revert MatchNotOpen();
+        if (block.timestamp >= m.predictionDeadline) revert DeadlinePassed();
+        if (predictions[matchId][msg.sender].exists) revert AlreadyJoined(); // Already predicted
+
+        predictions[matchId][msg.sender] = Prediction({
+            homeScore: homeScore,
+            awayScore: awayScore,
+            submittedAt: block.timestamp,
+            exists: true,
+            pointsEarned: 0
+        });
+
+        emit PredictionSubmitted(matchId, eventId, msg.sender, homeScore, awayScore, block.timestamp);
     }
 
     // ─── AI Oracle Agent ──────────────────────────────────────────────────────
 
-    /// @notice AI Oracle Agent submits verified result and calculated points.
+    /// @notice AI Oracle Agent submits verified result for a match and calculated points.
     ///         Called autonomously after match finishes (API-Football status = "FT").
-    /// @param resultProof keccak256(eventId, homeScore, awayScore, timestamp, agentAddress)
+    /// @param resultProof keccak256(matchId, homeScore, awayScore, timestamp, agentAddress)
     /// @param submissionTimestamps Original on-chain prediction timestamps (tiebreaker)
-    function submitVerifiedResult(
-        uint256 eventId,
+    function submitMatchResult(
+        uint256 matchId,
         uint8 homeScore,
         uint8 awayScore,
         bytes32 resultProof,
@@ -326,38 +401,48 @@ contract EventManager is
             revert ArrayLengthMismatch();
         }
 
-        Event storage ev = events[eventId];
-        require(
-            ev.status == EventStatus.OPEN || ev.status == EventStatus.LOCKED,
-            "Invalid event status"
-        );
-        require(block.timestamp >= ev.kickoffTime, "Match not started");
+        Match storage m = matches[matchId];
+        uint256 eventId = m.eventId;
 
-        ev.finalHomeScore = homeScore;
-        ev.finalAwayScore = awayScore;
-        ev.resultProof = resultProof;
-        ev.verifiedAt = block.timestamp;
-        ev.status = EventStatus.VERIFIED;
+        require(
+            m.status == MatchStatus.OPEN || m.status == MatchStatus.LOCKED,
+            "Invalid match status"
+        );
+        require(block.timestamp >= m.kickoffTime, "Match not started");
+
+        m.finalHomeScore = homeScore;
+        m.finalAwayScore = awayScore;
+        m.resultProof = resultProof;
+        m.verifiedAt = block.timestamp;
+        m.status = MatchStatus.VERIFIED;
 
         for (uint256 i = 0; i < users.length; i++) {
-            predictions[eventId][users[i]].pointsEarned = points[i];
+            predictions[matchId][users[i]].pointsEarned = points[i];
         }
 
-        emit ResultVerified(eventId, homeScore, awayScore, resultProof, msg.sender, block.timestamp);
+        emit MatchResultVerified(matchId, eventId, homeScore, awayScore, resultProof, msg.sender, block.timestamp);
 
         leaderboard.updatePoints(eventId, users, points, submissionTimestamps);
     }
 
     // ─── Resolution & Prize Distribution ─────────────────────────────────────
 
-    /// @notice Resolve event after dispute window closes.
+    /// @notice Resolve event after all matches are verified and event has ended.
     ///         Calculates prize amounts for top 5 and marks them claimable.
-    ///         Anyone can call this once the dispute window has passed.
+    ///         Anyone can call this once the event has ended.
     function resolveEvent(uint256 eventId) external nonReentrant {
         Event storage ev = events[eventId];
 
-        if (ev.status != EventStatus.VERIFIED) revert EventNotVerified();
-        if (block.timestamp < ev.verifiedAt + DISPUTE_WINDOW) revert DisputeWindowOpen();
+        if (ev.status != EventStatus.OPEN) revert EventNotOpen();
+        if (block.timestamp < ev.endDate) revert EventNotOpen();
+
+        // Verify all matches in the event are verified
+        uint256[] memory matchIds = _eventMatches[eventId];
+        for (uint256 i = 0; i < matchIds.length; i++) {
+            if (matches[matchIds[i]].status != MatchStatus.VERIFIED) {
+                revert MatchNotVerified();
+            }
+        }
 
         ev.status = EventStatus.RESOLVED;
 
@@ -387,9 +472,9 @@ contract EventManager is
     function claimPrize(uint256 eventId) external nonReentrant {
         Event storage ev = events[eventId];
 
-        if (ev.status != EventStatus.RESOLVED) revert EventNotVerified();
+        if (ev.status != EventStatus.RESOLVED) revert EventNotResolved();
         if (hasClaimed[eventId][msg.sender]) revert NothingToClaim();
-        if (block.timestamp > ev.verifiedAt + DISPUTE_WINDOW + CLAIM_EXPIRY) revert ClaimExpired();
+        if (block.timestamp > ev.endDate + CLAIM_EXPIRY) revert ClaimExpired();
 
         uint256 amount = claimable[eventId][msg.sender];
         if (amount == 0) revert NothingToClaim();
@@ -411,38 +496,39 @@ contract EventManager is
 
     // ─── Dispute Mechanism ────────────────────────────────────────────────────
 
-    /// @notice Any participant can dispute a result within the 2-hour window
-    function disputeResult(uint256 eventId) external {
-        Event storage ev = events[eventId];
+    /// @notice Any participant can dispute a match result within the 2-hour window
+    function disputeMatchResult(uint256 matchId) external {
+        Match storage m = matches[matchId];
+        uint256 eventId = m.eventId;
 
-        if (ev.status != EventStatus.VERIFIED) revert EventNotVerified();
-        if (block.timestamp > ev.verifiedAt + DISPUTE_WINDOW) revert DisputeWindowClosed();
+        if (m.status != MatchStatus.VERIFIED) revert MatchNotVerified();
+        if (block.timestamp > m.verifiedAt + DISPUTE_WINDOW) revert DisputeWindowClosed();
         if (!_hasJoined[eventId][msg.sender]) revert NotParticipant();
 
-        ev.status = EventStatus.DISPUTED;
-        emit ResultDisputed(eventId, msg.sender);
+        m.status = MatchStatus.DISPUTED;
+        emit MatchResultDisputed(matchId, msg.sender);
     }
 
-    /// @notice Admin resolves a disputed event
+    /// @notice Admin resolves a disputed match
     function resolveDispute(
-        uint256 eventId,
+        uint256 matchId,
         uint8 correctedHomeScore,
         uint8 correctedAwayScore,
         bool agentWasWrong
     ) external onlyOwner {
-        Event storage ev = events[eventId];
-        if (ev.status != EventStatus.DISPUTED) revert EventNotDisputed();
+        Match storage m = matches[matchId];
+        if (m.status != MatchStatus.DISPUTED) revert MatchNotDisputed();
 
         if (agentWasWrong) {
-            ev.finalHomeScore = correctedHomeScore;
-            ev.finalAwayScore = correctedAwayScore;
-            ev.status = EventStatus.LOCKED; // AI agent resubmits
+            m.finalHomeScore = correctedHomeScore;
+            m.finalAwayScore = correctedAwayScore;
+            m.status = MatchStatus.OPEN; // AI agent resubmits
         } else {
-            ev.status = EventStatus.VERIFIED;
-            ev.verifiedAt = block.timestamp; // reset dispute window
+            m.status = MatchStatus.VERIFIED;
+            m.verifiedAt = block.timestamp; // reset dispute window
         }
 
-        emit DisputeResolved(eventId, agentWasWrong);
+        emit DisputeResolved(matchId, agentWasWrong);
     }
 
     // ─── Private Event Cancellation ───────────────────────────────────────────
@@ -484,12 +570,16 @@ contract EventManager is
         return _participants[eventId].length;
     }
 
-    function getPrediction(uint256 eventId, address user)
+    function getEventMatches(uint256 eventId) external view returns (uint256[] memory) {
+        return _eventMatches[eventId];
+    }
+
+    function getPrediction(uint256 matchId, address user)
         external
         view
         returns (uint8 homeScore, uint8 awayScore, uint256 submittedAt, uint256 pointsEarned)
     {
-        Prediction memory p = predictions[eventId][user];
+        Prediction memory p = predictions[matchId][user];
         return (p.homeScore, p.awayScore, p.submittedAt, p.pointsEarned);
     }
 
@@ -505,15 +595,19 @@ contract EventManager is
         return events[eventId];
     }
 
+    function getMatch(uint256 matchId) external view returns (Match memory) {
+        return matches[matchId];
+    }
+
     // ─── Internal Helpers ─────────────────────────────────────────────────────
 
-    function _validateEventParams(
-        uint256 kickoffTime,
-        uint256 predictionDeadline,
+    function _validateEventDates(
+        uint256 startDate,
+        uint256 endDate,
         uint256 entryFee
     ) internal view {
-        if (kickoffTime <= block.timestamp) revert KickoffInPast();
-        if (predictionDeadline > kickoffTime) revert DeadlineAfterKickoff();
+        if (startDate <= block.timestamp) revert StartDateInPast();
+        if (endDate <= startDate) revert EndDateBeforeStart();
         if (entryFee < MIN_ENTRY_FEE) revert FeeTooLow();
     }
 
@@ -521,26 +615,6 @@ contract EventManager is
         Event storage ev = events[eventId];
         cUSD.safeTransferFrom(user, address(this), ev.entryFee);
         ev.prizePool += ev.entryFee;
-    }
-
-    function _recordPrediction(
-        uint256 eventId,
-        address user,
-        uint8 homeScore,
-        uint8 awayScore
-    ) internal {
-        _hasJoined[eventId][user] = true;
-        _participants[eventId].push(user);
-
-        predictions[eventId][user] = Prediction({
-            homeScore: homeScore,
-            awayScore: awayScore,
-            submittedAt: block.timestamp,
-            exists: true,
-            pointsEarned: 0
-        });
-
-        emit PredictionSubmitted(eventId, user, homeScore, awayScore, block.timestamp);
     }
 
     function _getPrizeShares(uint256 count) internal view returns (uint256[5] memory shares) {

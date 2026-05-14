@@ -162,30 +162,31 @@ contract TrueCallTest is Test {
         vm.prank(user1);
         vm.expectRevert();
         eventManager.createPublicEvent(
-            "Arsenal", "Chelsea", "12345",
-            block.timestamp + 2 days, block.timestamp + 1 days,
+            "Premier League Week 10",
+            block.timestamp + 1 days,  // startDate
+            block.timestamp + 8 days,  // endDate
             1e18, IEventManager.ScoringRule.BOTH
         );
     }
 
-    function test_RevertWhen_KickoffInPast() public {
+    function test_RevertWhen_StartDateInPast() public {
         vm.prank(owner);
-        vm.expectRevert(EventManager.KickoffInPast.selector);
+        vm.expectRevert(EventManager.StartDateInPast.selector);
         eventManager.createPublicEvent(
-            "Arsenal", "Chelsea", "12345",
+            "Premier League Week 10",
             block.timestamp,           // not in future
-            block.timestamp - 1,
+            block.timestamp + 7 days,
             1e18, IEventManager.ScoringRule.BOTH
         );
     }
 
-    function test_RevertWhen_DeadlineAfterKickoff() public {
+    function test_RevertWhen_EndDateBeforeStart() public {
         vm.prank(owner);
-        vm.expectRevert(EventManager.DeadlineAfterKickoff.selector);
+        vm.expectRevert(EventManager.EndDateBeforeStart.selector);
         eventManager.createPublicEvent(
-            "Arsenal", "Chelsea", "12345",
-            block.timestamp + 1 days,
-            block.timestamp + 2 days,  // deadline AFTER kickoff
+            "Premier League Week 10",
+            block.timestamp + 7 days,
+            block.timestamp + 1 days,  // endDate BEFORE startDate
             1e18, IEventManager.ScoringRule.BOTH
         );
     }
@@ -193,15 +194,15 @@ contract TrueCallTest is Test {
     function test_CreatePublicEvent() public {
         vm.prank(owner);
         uint256 eventId = eventManager.createPublicEvent(
-            "Arsenal", "Chelsea", "12345",
-            block.timestamp + 2 days, block.timestamp + 1 days,
+            "Premier League Week 10",
+            block.timestamp + 1 days,  // startDate
+            block.timestamp + 8 days,  // endDate
             1e18, IEventManager.ScoringRule.BOTH
         );
 
         assertEq(eventId, 0);
         IEventManager.Event memory ev = eventManager.getEvent(0);
-        assertEq(ev.homeTeam, "Arsenal");
-        assertEq(ev.awayTeam, "Chelsea");
+        assertEq(ev.eventName, "Premier League Week 10");
         assertEq(ev.entryFee, 1e18);
         assertEq(uint8(ev.status),    uint8(IEventManager.EventStatus.OPEN));
         assertEq(uint8(ev.eventType), uint8(IEventManager.EventType.PUBLIC));
@@ -212,8 +213,9 @@ contract TrueCallTest is Test {
 
         vm.prank(user1);
         uint256 eventId = eventManager.createPrivateEvent(
-            "Man City", "Liverpool", "99999",
-            block.timestamp + 2 days, block.timestamp + 1 days,
+            "Champions League Predictions",
+            block.timestamp + 1 days,  // startDate
+            block.timestamp + 8 days,  // endDate
             2e18, IEventManager.ScoringRule.BOTH,
             10, codeHash
         );
@@ -278,8 +280,9 @@ contract TrueCallTest is Test {
         // Create an event before upgrade
         vm.prank(owner);
         uint256 eventId = eventManager.createPublicEvent(
-            "Arsenal", "Chelsea", "12345",
-            block.timestamp + 2 days, block.timestamp + 1 days,
+            "Premier League Week 10",
+            block.timestamp + 1 days,  // startDate
+            block.timestamp + 8 days,  // endDate
             1e18, IEventManager.ScoringRule.BOTH
         );
 
@@ -290,8 +293,7 @@ contract TrueCallTest is Test {
 
         // Event data still exists after upgrade
         IEventManager.Event memory ev = eventManager.getEvent(eventId);
-        assertEq(ev.homeTeam, "Arsenal");
-        assertEq(ev.awayTeam, "Chelsea");
+        assertEq(ev.eventName, "Premier League Week 10");
         assertEq(uint8(ev.status), uint8(IEventManager.EventStatus.OPEN));
     }
 }
