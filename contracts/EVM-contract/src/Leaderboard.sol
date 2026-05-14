@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {ILeaderboard} from "./interfaces/ILeaderboard.sol";
 
 /// @title Leaderboard
 /// @author TrueCall Team
 /// @notice Tracks per-event and global points for all users.
 ///         Only the EventManager contract can write points.
-///         Prize distribution is handled by EventManager — this contract
-///         is purely responsible for rankings.
-contract Leaderboard is ILeaderboard, Ownable {
+///         Upgradeable via UUPS proxy pattern.
+/// @custom:oz-upgrades-from Leaderboard
+contract Leaderboard is ILeaderboard, Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // ─── State ────────────────────────────────────────────────────────────────
 
     /// @notice Address of the EventManager — only caller allowed to update points
@@ -31,6 +33,10 @@ contract Leaderboard is ILeaderboard, Ownable {
     /// @notice user → total all-time points across all events
     mapping(address => uint256) public globalPoints;
 
+    // ─── Storage gap for future upgrades ─────────────────────────────────────
+    // solhint-disable-next-line var-name-mixedcase
+    uint256[50] private __gap;
+
     // ─── Errors ───────────────────────────────────────────────────────────────
 
     error OnlyEventManager();
@@ -44,13 +50,31 @@ contract Leaderboard is ILeaderboard, Ownable {
         _;
     }
 
-    // ─── Constructor ──────────────────────────────────────────────────────────
+    // ─── Constructor (disabled for proxy) ────────────────────────────────────
 
-    constructor() Ownable(msg.sender) {}
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    // ─── Initializer (replaces constructor) ──────────────────────────────────
+
+    /// @notice Initialize the contract (called once via proxy deployment)
+    /// @param _owner The initial owner address
+    function initialize(address _owner) external initializer {
+        if (_owner == address(0)) revert ZeroAddress();
+        __Ownable_init(_owner);
+        __UUPSUpgradeable_init();
+    }
+
+    // ─── UUPS Upgrade Authorization ───────────────────────────────────────────
+
+    /// @dev Only owner can authorize upgrades
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     // ─── Admin ────────────────────────────────────────────────────────────────
 
-    /// @notice Set the EventManager address (called once after deployment)
+    /// @notice Set the EventManager address
     function setEventManager(address _eventManager) external onlyOwner {
         if (_eventManager == address(0)) revert ZeroAddress();
         eventManager = _eventManager;
@@ -59,9 +83,6 @@ contract Leaderboard is ILeaderboard, Ownable {
     // ─── Write (EventManager only) ────────────────────────────────────────────
 
     /// @inheritdoc ILeaderboard
-    /// @dev Called by EventManager after AI oracle submits verified result.
-    ///      submissionTimestamps are the on-chain block.timestamp values stored
-    ///      when each user submitted their prediction — used as tiebreaker.
     function updatePoints(
         uint256 eventId,
         address[] calldata users,
@@ -76,7 +97,6 @@ contract Leaderboard is ILeaderboard, Ownable {
             address user = users[i];
             uint256 pts = points[i];
 
-            // Record participant once per event
             if (!_eventRecorded[eventId][user]) {
                 _eventRecorded[eventId][user] = true;
                 _eventParticipants[eventId].push(user);
@@ -84,8 +104,6 @@ contract Leaderboard is ILeaderboard, Ownable {
             }
 
             eventPoints[eventId][user] = pts;
-
-            // Accumulate global points
             globalPoints[user] += pts;
 
             emit PointsUpdated(eventId, user, pts);
@@ -96,8 +114,6 @@ contract Leaderboard is ILeaderboard, Ownable {
     // ─── Views ────────────────────────────────────────────────────────────────
 
     /// @inheritdoc ILeaderboard
-    /// @dev Returns top N entries sorted by points desc, tiebroken by earliest timestamp.
-    ///      Uses insertion sort — acceptable for typical event sizes (<500 participants).
     function getTopN(uint256 eventId, uint256 n) external view returns (RankEntry[] memory) {
         address[] memory participants = _eventParticipants[eventId];
         uint256 total = participants.length;
@@ -106,7 +122,6 @@ contract Leaderboard is ILeaderboard, Ownable {
 
         uint256 resultSize = n < total ? n : total;
 
-        // Build full sorted array via insertion sort
         RankEntry[] memory sorted = new RankEntry[](total);
         for (uint256 i = 0; i < total; i++) {
             sorted[i] = RankEntry({
@@ -116,7 +131,7 @@ contract Leaderboard is ILeaderboard, Ownable {
             });
         }
 
-        // Insertion sort descending by points, tiebreak by earliest submission
+        // Insertion sort: descending points, tiebreak by earliest submission
         for (uint256 i = 1; i < total; i++) {
             RankEntry memory key = sorted[i];
             int256 j = int256(i) - 1;
@@ -127,7 +142,6 @@ contract Leaderboard is ILeaderboard, Ownable {
             sorted[uint256(j + 1)] = key;
         }
 
-        // Return top N
         RankEntry[] memory result = new RankEntry[](resultSize);
         for (uint256 i = 0; i < resultSize; i++) {
             result[i] = sorted[i];
@@ -151,7 +165,6 @@ contract Leaderboard is ILeaderboard, Ownable {
             if (otherPts > points) {
                 rank++;
             } else if (otherPts == points) {
-                // Earlier submission = better rank
                 if (eventSubmissionTime[eventId][other] < eventSubmissionTime[eventId][user]) {
                     rank++;
                 }
@@ -165,13 +178,8 @@ contract Leaderboard is ILeaderboard, Ownable {
     }
 
     /// @inheritdoc ILeaderboard
-    /// @dev Global leaderboard across all events — sorted by all-time points.
-    ///      NOTE: This is a view-only function and iterates all known users.
-    ///      For large user bases, use off-chain indexing (backend cache).
-    function getGlobalTopN(uint256 n) external view returns (RankEntry[] memory) {
-        // This is intentionally left as a stub for on-chain use.
-        // The backend caches global rankings via event logs.
-        // Returning empty array here — frontend reads from backend cache.
+    function getGlobalTopN(uint256 n) external pure returns (RankEntry[] memory) {
+        // Stub — global rankings served from backend event-log cache
         return new RankEntry[](n);
     }
 
@@ -182,11 +190,8 @@ contract Leaderboard is ILeaderboard, Ownable {
 
     // ─── Internal ─────────────────────────────────────────────────────────────
 
-    /// @dev Returns true if `a` should come AFTER `b` in the sorted order
-    ///      (i.e., `a` is "lower ranked" than `b`)
     function _isLower(RankEntry memory a, RankEntry memory b) internal pure returns (bool) {
         if (a.points != b.points) return a.points < b.points;
-        // Same points: earlier submission is better (lower timestamp = higher rank)
         return a.firstSubmission > b.firstSubmission;
     }
 }
