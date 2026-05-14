@@ -64,7 +64,6 @@ contract Leaderboard is ILeaderboard, Initializable, OwnableUpgradeable, UUPSUpg
     function initialize(address _owner) external initializer {
         if (_owner == address(0)) revert ZeroAddress();
         __Ownable_init(_owner);
-        __UUPSUpgradeable_init();
     }
 
     // ─── UUPS Upgrade Authorization ───────────────────────────────────────────

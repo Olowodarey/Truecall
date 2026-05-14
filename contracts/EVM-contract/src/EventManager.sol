@@ -2,8 +2,6 @@
 pragma solidity ^0.8.24;
 
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import {ReentrancyGuardUpgradeable} from
-    "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
@@ -27,11 +25,22 @@ contract EventManager is
     IEventManager,
     Initializable,
     OwnableUpgradeable,
-    ReentrancyGuardUpgradeable,
     PausableUpgradeable,
     UUPSUpgradeable
 {
     using SafeERC20 for IERC20;
+
+    // ─── Reentrancy Guard (inline — OZ v5 upgradeable has no ReentrancyGuardUpgradeable) ──
+    uint256 private _reentrancyStatus;
+    uint256 private constant _NOT_ENTERED = 1;
+    uint256 private constant _ENTERED = 2;
+
+    modifier nonReentrant() {
+        require(_reentrancyStatus != _ENTERED, "ReentrancyGuard: reentrant call");
+        _reentrancyStatus = _ENTERED;
+        _;
+        _reentrancyStatus = _NOT_ENTERED;
+    }
 
     // ─── Constants ────────────────────────────────────────────────────────────
 
@@ -150,12 +159,11 @@ contract EventManager is
             revert ZeroAddress();
         }
         __Ownable_init(_owner);
-        __ReentrancyGuard_init();
         __Pausable_init();
-        __UUPSUpgradeable_init();
 
         cUSD = IERC20(_cUSD);
         treasury = _treasury;
+        _reentrancyStatus = _NOT_ENTERED;
 
         // Default prize shares: 40%, 25%, 15%, 10%, 5% (sum = 95%, platform 1%, remaining 4% to treasury)
         prizeShares = [uint256(4000), 2500, 1500, 1000, 500];

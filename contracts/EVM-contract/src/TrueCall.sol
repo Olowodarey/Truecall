@@ -64,7 +64,6 @@ contract TrueCall is Initializable, OwnableUpgradeable, PausableUpgradeable, UUP
         if (_cUSD == address(0) || _owner == address(0)) revert ZeroAddress();
         __Ownable_init(_owner);
         __Pausable_init();
-        __UUPSUpgradeable_init();
 
         cUSD = _cUSD;
         emit ContractDeployed(_owner, block.timestamp);

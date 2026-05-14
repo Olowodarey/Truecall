@@ -74,7 +74,7 @@ contract Deploy is Script {
 
         // ── 5. Print summary ──────────────────────────────────────────────────
         console.log("\n=== Deployment Complete ===");
-        console.log("Save these proxy addresses — they never change after upgrades:");
+        console.log("Save these proxy addresses - they never change after upgrades:");
         console.log("TRUECALL_PROXY=      ", address(truecallProxy));
         console.log("EVENT_MANAGER_PROXY= ", address(eventManagerProxy));
         console.log("LEADERBOARD_PROXY=   ", address(leaderboardProxy));

@@ -69,6 +69,6 @@ contract Upgrade is Script {
         vm.stopBroadcast();
 
         console.log("\n=== Upgrade Complete ===");
-        console.log("Proxy addresses are unchanged — no frontend updates needed.");
+        console.log("Proxy addresses are unchanged - no frontend updates needed.");
     }
 }
