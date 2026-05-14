@@ -51,6 +51,12 @@ contract EventManager is
     /// @notice Minimum entry fee (1 cUSD = 1e18)
     uint256 public constant MIN_ENTRY_FEE = 1e18;
 
+    /// @notice Points for correct score prediction
+    uint256 public constant SCORE_POINTS = 5;
+
+    /// @notice Points for correct outcome prediction
+    uint256 public constant OUTCOME_POINTS = 3;
+
     // ─── State ────────────────────────────────────────────────────────────────
 
     /// @notice cUSD token on Celo (set once in initializer, never changes)
@@ -284,14 +290,18 @@ contract EventManager is
 
     // ─── Match Management ─────────────────────────────────────────────────────
 
-    /// @notice Admin adds a match to an event (can only be done after event starts)
+    /// @notice Admin adds a match to an event with flexible prediction options
+    /// @param allowScorePrediction If true, users can predict exact score (5 points)
+    /// @param allowOutcomePrediction If true, users can predict outcome (3 points)
     function addMatch(
         uint256 eventId,
         string calldata homeTeam,
         string calldata awayTeam,
         string calldata apiMatchId,
         uint256 kickoffTime,
-        uint256 predictionDeadline
+        uint256 predictionDeadline,
+        bool allowScorePrediction,
+        bool allowOutcomePrediction
     ) external onlyOwner whenNotPaused returns (uint256 matchId) {
         Event storage ev = events[eventId];
         
@@ -301,6 +311,7 @@ contract EventManager is
         if (kickoffTime <= block.timestamp) revert KickoffInPast();
         if (predictionDeadline > kickoffTime) revert DeadlineAfterKickoff();
         if (kickoffTime > ev.endDate) revert EventEnded();
+        require(allowScorePrediction || allowOutcomePrediction, "Must allow at least one prediction type");
 
         matchId = nextMatchId++;
         Match storage m = matches[matchId];
@@ -312,10 +323,12 @@ contract EventManager is
         m.kickoffTime = kickoffTime;
         m.predictionDeadline = predictionDeadline;
         m.status = MatchStatus.OPEN;
+        m.allowScorePrediction = allowScorePrediction;
+        m.allowOutcomePrediction = allowOutcomePrediction;
 
         _eventMatches[eventId].push(matchId);
 
-        emit MatchAdded(matchId, eventId, homeTeam, awayTeam, apiMatchId, kickoffTime);
+        emit MatchAdded(matchId, eventId, homeTeam, awayTeam, apiMatchId, kickoffTime, allowScorePrediction, allowOutcomePrediction);
     }
 
     // ─── Joining & Predicting ─────────────────────────────────────────────────
@@ -357,8 +370,8 @@ contract EventManager is
         emit UserJoinedEvent(eventId, msg.sender, block.timestamp);
     }
 
-    /// @notice Submit prediction for a match (must have joined the event first)
-    function submitPrediction(
+    /// @notice Submit exact score prediction for a match (5 points if correct)
+    function submitScorePrediction(
         uint256 matchId,
         uint8 homeScore,
         uint8 awayScore
@@ -369,38 +382,59 @@ contract EventManager is
         if (!_hasJoined[eventId][msg.sender]) revert NotJoined();
         if (m.status != MatchStatus.OPEN) revert MatchNotOpen();
         if (block.timestamp >= m.predictionDeadline) revert DeadlinePassed();
-        if (predictions[matchId][msg.sender].exists) revert AlreadyJoined(); // Already predicted
+        if (!m.allowScorePrediction) revert MatchNotOpen();
+        
+        Prediction storage pred = predictions[matchId][msg.sender];
+        if (pred.hasScorePrediction) revert AlreadyJoined(); // Already predicted score
 
-        predictions[matchId][msg.sender] = Prediction({
-            homeScore: homeScore,
-            awayScore: awayScore,
-            submittedAt: block.timestamp,
-            exists: true,
-            pointsEarned: 0
-        });
+        pred.homeScore = homeScore;
+        pred.awayScore = awayScore;
+        pred.hasScorePrediction = true;
+        
+        if (pred.submittedAt == 0) {
+            pred.submittedAt = block.timestamp;
+        }
 
-        emit PredictionSubmitted(matchId, eventId, msg.sender, homeScore, awayScore, block.timestamp);
+        emit ScorePredictionSubmitted(matchId, eventId, msg.sender, homeScore, awayScore, block.timestamp);
+    }
+
+    /// @notice Submit outcome prediction for a match (3 points if correct)
+    function submitOutcomePrediction(
+        uint256 matchId,
+        Outcome outcome
+    ) external nonReentrant whenNotPaused {
+        Match storage m = matches[matchId];
+        uint256 eventId = m.eventId;
+
+        if (!_hasJoined[eventId][msg.sender]) revert NotJoined();
+        if (m.status != MatchStatus.OPEN) revert MatchNotOpen();
+        if (block.timestamp >= m.predictionDeadline) revert DeadlinePassed();
+        if (!m.allowOutcomePrediction) revert MatchNotOpen();
+        
+        Prediction storage pred = predictions[matchId][msg.sender];
+        if (pred.hasOutcomePrediction) revert AlreadyJoined(); // Already predicted outcome
+
+        pred.outcome = outcome;
+        pred.hasOutcomePrediction = true;
+        
+        if (pred.submittedAt == 0) {
+            pred.submittedAt = block.timestamp;
+        }
+
+        emit OutcomePredictionSubmitted(matchId, eventId, msg.sender, outcome, block.timestamp);
     }
 
     // ─── AI Oracle Agent ──────────────────────────────────────────────────────
 
-    /// @notice AI Oracle Agent submits verified result for a match and calculated points.
-    ///         Called autonomously after match finishes (API-Football status = "FT").
+    /// @notice AI Oracle Agent submits verified result for a match.
+    ///         Points are calculated on-chain based on predictions.
     /// @param resultProof keccak256(matchId, homeScore, awayScore, timestamp, agentAddress)
-    /// @param submissionTimestamps Original on-chain prediction timestamps (tiebreaker)
     function submitMatchResult(
         uint256 matchId,
         uint8 homeScore,
         uint8 awayScore,
-        bytes32 resultProof,
-        address[] calldata users,
-        uint256[] calldata points,
-        uint256[] calldata submissionTimestamps
+        bytes32 resultProof
     ) external onlyAIAgent nonReentrant {
-        if (users.length != points.length || users.length != submissionTimestamps.length) {
-            revert ArrayLengthMismatch();
-        }
-
         Match storage m = matches[matchId];
         uint256 eventId = m.eventId;
 
@@ -416,13 +450,67 @@ contract EventManager is
         m.verifiedAt = block.timestamp;
         m.status = MatchStatus.VERIFIED;
 
-        for (uint256 i = 0; i < users.length; i++) {
-            predictions[matchId][users[i]].pointsEarned = points[i];
+        // Calculate actual outcome
+        Outcome actualOutcome;
+        if (homeScore > awayScore) {
+            actualOutcome = Outcome.HOME_WIN;
+        } else if (homeScore < awayScore) {
+            actualOutcome = Outcome.AWAY_WIN;
+        } else {
+            actualOutcome = Outcome.DRAW;
+        }
+
+        // Calculate points for all participants
+        address[] memory participants = _participants[eventId];
+        address[] memory scorers = new address[](participants.length);
+        uint256[] memory totalPoints = new uint256[](participants.length);
+        uint256[] memory timestamps = new uint256[](participants.length);
+        uint256 count = 0;
+
+        for (uint256 i = 0; i < participants.length; i++) {
+            address user = participants[i];
+            Prediction storage pred = predictions[matchId][user];
+            
+            uint256 points = 0;
+
+            // Check score prediction (5 points)
+            if (pred.hasScorePrediction && pred.homeScore == homeScore && pred.awayScore == awayScore) {
+                pred.scorePointsEarned = SCORE_POINTS;
+                points += SCORE_POINTS;
+            }
+
+            // Check outcome prediction (3 points)
+            if (pred.hasOutcomePrediction && pred.outcome == actualOutcome) {
+                pred.outcomePointsEarned = OUTCOME_POINTS;
+                points += OUTCOME_POINTS;
+            }
+
+            // Only include users who made at least one prediction
+            if (pred.hasScorePrediction || pred.hasOutcomePrediction) {
+                scorers[count] = user;
+                totalPoints[count] = points;
+                timestamps[count] = pred.submittedAt;
+                count++;
+            }
+        }
+
+        // Trim arrays to actual size
+        address[] memory finalScorers = new address[](count);
+        uint256[] memory finalPoints = new uint256[](count);
+        uint256[] memory finalTimestamps = new uint256[](count);
+        
+        for (uint256 i = 0; i < count; i++) {
+            finalScorers[i] = scorers[i];
+            finalPoints[i] = totalPoints[i];
+            finalTimestamps[i] = timestamps[i];
         }
 
         emit MatchResultVerified(matchId, eventId, homeScore, awayScore, resultProof, msg.sender, block.timestamp);
 
-        leaderboard.updatePoints(eventId, users, points, submissionTimestamps);
+        // Update leaderboard with total points (score + outcome)
+        if (count > 0) {
+            leaderboard.updatePoints(eventId, finalScorers, finalPoints, finalTimestamps);
+        }
     }
 
     // ─── Resolution & Prize Distribution ─────────────────────────────────────
@@ -577,10 +665,28 @@ contract EventManager is
     function getPrediction(uint256 matchId, address user)
         external
         view
-        returns (uint8 homeScore, uint8 awayScore, uint256 submittedAt, uint256 pointsEarned)
+        returns (
+            uint8 homeScore,
+            uint8 awayScore,
+            bool hasScorePrediction,
+            Outcome outcome,
+            bool hasOutcomePrediction,
+            uint256 submittedAt,
+            uint256 scorePointsEarned,
+            uint256 outcomePointsEarned
+        )
     {
         Prediction memory p = predictions[matchId][user];
-        return (p.homeScore, p.awayScore, p.submittedAt, p.pointsEarned);
+        return (
+            p.homeScore,
+            p.awayScore,
+            p.hasScorePrediction,
+            p.outcome,
+            p.hasOutcomePrediction,
+            p.submittedAt,
+            p.scorePointsEarned,
+            p.outcomePointsEarned
+        );
     }
 
     function getWinners(uint256 eventId) external view returns (address[5] memory) {

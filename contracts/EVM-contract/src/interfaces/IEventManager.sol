@@ -58,6 +58,8 @@ interface IEventManager {
         uint8 finalAwayScore;
         bytes32 resultProof;     // keccak256(matchId, home, away, timestamp, agent)
         uint256 verifiedAt;
+        bool allowScorePrediction;   // If true, users can predict exact score (5 pts)
+        bool allowOutcomePrediction; // If true, users can predict outcome (3 pts)
     }
 
     enum MatchStatus {
@@ -67,12 +69,25 @@ interface IEventManager {
         DISPUTED   // Under admin review
     }
 
+    enum Outcome {
+        HOME_WIN,
+        DRAW,
+        AWAY_WIN
+    }
+
     struct Prediction {
+        // Correct Score Prediction (5 points if correct)
         uint8 homeScore;
         uint8 awayScore;
+        bool hasScorePrediction;
+        uint256 scorePointsEarned;
+        
+        // Outcome Prediction (3 points if correct)
+        Outcome outcome;
+        bool hasOutcomePrediction;
+        uint256 outcomePointsEarned;
+        
         uint256 submittedAt;  // block.timestamp — immutable anti-cheat proof
-        bool exists;
-        uint256 pointsEarned; // set by AI oracle after verification
     }
 
     // ─── Events ───────────────────────────────────────────────────────────────
@@ -107,15 +122,25 @@ interface IEventManager {
         string homeTeam,
         string awayTeam,
         string apiMatchId,
-        uint256 kickoffTime
+        uint256 kickoffTime,
+        bool allowScorePrediction,
+        bool allowOutcomePrediction
     );
 
-    event PredictionSubmitted(
+    event ScorePredictionSubmitted(
         uint256 indexed matchId,
         uint256 indexed eventId,
         address indexed user,
         uint8 homeScore,
         uint8 awayScore,
+        uint256 timestamp
+    );
+
+    event OutcomePredictionSubmitted(
+        uint256 indexed matchId,
+        uint256 indexed eventId,
+        address indexed user,
+        Outcome outcome,
         uint256 timestamp
     );
 
