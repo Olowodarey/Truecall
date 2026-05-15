@@ -25,10 +25,24 @@ export interface PendingMatch {
 
 // ─── Chain detection ──────────────────────────────────────────────────────────
 
+// Celo Sepolia testnet (chain ID 11142220) — replaces Alfajores
+const celoSepolia = {
+  ...celoAlfajores,
+  id: 11142220,
+  name: "Celo Sepolia",
+  rpcUrls: {
+    default: { http: ["https://forno.celo-sepolia.celo-testnet.org"] },
+    public: { http: ["https://forno.celo-sepolia.celo-testnet.org"] },
+  },
+  blockExplorers: {
+    default: { name: "Blockscout", url: "https://celo-sepolia.blockscout.com" },
+  },
+} as const;
+
 const isMainnet =
   config.celoRpcUrl.includes("forno.celo.org") &&
-  !config.celoRpcUrl.includes("testnet");
-const chain = isMainnet ? celo : celoAlfajores;
+  !config.celoRpcUrl.includes("sepolia");
+const chain = isMainnet ? celo : celoSepolia;
 
 // ─── Clients ──────────────────────────────────────────────────────────────────
 

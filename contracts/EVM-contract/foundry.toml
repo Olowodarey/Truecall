@@ -28,10 +28,10 @@ bracket_spacing = true
 # ─── Celo Networks ────────────────────────────────────────────────────────────
 
 [rpc_endpoints]
-alfajores = "https://alfajores-forno.celo-testnet.org"
-celo      = "https://forno.celo.org"
+celo-sepolia = "https://forno.celo-sepolia.celo-testnet.org"
+celo         = "https://forno.celo.org"
 
 # Celoscan API key — set CELOSCAN_API_KEY in your .env
 [etherscan]
-alfajores = { key = "${CELOSCAN_API_KEY}", url = "https://api-alfajores.celoscan.io/api" }
-celo      = { key = "${CELOSCAN_API_KEY}", url = "https://api.celoscan.io/api" }
+celo-sepolia = { key = "${CELOSCAN_API_KEY}", url = "https://celo-sepolia.blockscout.com/api" }
+celo         = { key = "${CELOSCAN_API_KEY}", url = "https://api.celoscan.io/api" }

@@ -9,7 +9,7 @@ import {Leaderboard} from "../src/Leaderboard.sol";
 
 /// @notice Deploys the full TrueCall system using UUPS proxies to Celo
 /// @dev Run with:
-///   Testnet:  forge script script/Deploy.s.sol --rpc-url alfajores --broadcast --verify
+///   Testnet:  forge script script/Deploy.s.sol --rpc-url celo-sepolia --broadcast --verify
 ///   Mainnet:  forge script script/Deploy.s.sol --rpc-url celo --broadcast --verify
 ///
 /// Upgrade flow (after deployment):
@@ -18,8 +18,8 @@ import {Leaderboard} from "../src/Leaderboard.sol";
 contract Deploy is Script {
     // ─── Celo Addresses ───────────────────────────────────────────────────────
 
-    address constant CUSD_MAINNET   = 0x765DE816845861e75A25fCA122bb6898B8B1282a;
-    address constant CUSD_ALFAJORES = 0x874069Fa1Eb16D44d622F2e0Ca25eeA172369bC1;
+    address constant CUSD_MAINNET      = 0x765DE816845861e75A25fCA122bb6898B8B1282a;
+    address constant CUSD_CELO_SEPOLIA = 0x874069Fa1Eb16D44d622F2e0Ca25eeA172369bC1; // testnet cUSD
 
     function run() external {
         uint256 deployerKey = vm.envUint("PRIVATE_KEY");
@@ -27,9 +27,11 @@ contract Deploy is Script {
         address treasury    = vm.envOr("TREASURY_ADDRESS", deployer);
         address aiAgent     = vm.envOr("AI_AGENT_ADDRESS", deployer);
 
-        address cusd = block.chainid == 42220 ? CUSD_MAINNET : CUSD_ALFAJORES;
+        // Chain ID 42220 = Celo Mainnet, 11142220 = Celo Sepolia testnet
+        address cusd = block.chainid == 42220 ? CUSD_MAINNET : CUSD_CELO_SEPOLIA;
 
         console.log("=== TrueCall UUPS Proxy Deployment ===");
+        console.log("Network:   ", block.chainid == 42220 ? "Celo Mainnet" : "Celo Sepolia Testnet");
         console.log("Deployer:  ", deployer);
         console.log("Treasury:  ", treasury);
         console.log("AI Agent:  ", aiAgent);
