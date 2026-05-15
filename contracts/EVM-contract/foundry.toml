@@ -24,3 +24,14 @@ fuzz = { runs = 1000 }
 line_length = 100
 tab_width = 4
 bracket_spacing = true
+
+# ─── Celo Networks ────────────────────────────────────────────────────────────
+
+[rpc_endpoints]
+alfajores = "https://alfajores-forno.celo-testnet.org"
+celo      = "https://forno.celo.org"
+
+# Celoscan API key — set CELOSCAN_API_KEY in your .env
+[etherscan]
+alfajores = { key = "${CELOSCAN_API_KEY}", url = "https://api-alfajores.celoscan.io/api" }
+celo      = { key = "${CELOSCAN_API_KEY}", url = "https://api.celoscan.io/api" }
