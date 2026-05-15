@@ -1,478 +1,388 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useWallet } from "@/contexts/WalletContext";
+import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { parseUnits } from "viem";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { HIRO_API } from "@/lib/contracts";
-
-import { formatEstimatedTime } from "@/lib/utils";
-import { clearCache } from "@/lib/cache";
-
 import {
-  getEvent,
-  getLeaderboard,
-  getParticipant,
-  joinEventTxOptions,
-  claimWinningsTxOptions,
-  claimRefundTxOptions,
-} from "@/lib/stacks";
-
+  fetchEvent,
+  fetchEventMatches,
+  fetchEventLeaderboard,
+  fetchHasJoined,
+  fetchClaimable,
+  fetchWinners,
+} from "@/lib/api";
+import { CONTRACTS, EVENT_MANAGER_ABI, CUSD_ABI } from "@/lib/contracts";
 import type {
-  ChainEvent,
+  TrueCallEvent,
+  TrueCallMatch,
   LeaderboardEntry,
-  ChainParticipant,
 } from "@/lib/types";
+import { formatDistanceToNow, format } from "date-fns";
 
-export default function EventPredictionPage() {
+const MEDALS = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
+
+export default function EventDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { isConnected, connectWallet, stxAddress: userAddress } = useWallet();
-
   const eventId = Number(params?.id);
+  const { isConnected, address, connectWallet } = useWallet();
 
-  const [event, setEvent] = useState<ChainEvent | null>(null);
+  const [event, setEvent] = useState<TrueCallEvent | null>(null);
+  const [matches, setMatches] = useState<TrueCallMatch[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
-  const [participant, setParticipant] = useState<ChainParticipant | null>(null);
-  const [currentBlock, setCurrentBlock] = useState(0);
-  const [lbLoading, setLbLoading] = useState(false);
-
+  const [hasJoined, setHasJoined] = useState(false);
+  const [claimable, setClaimable] = useState("0");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Per-action pending state keyed by action string
-  const [pending, setPending] = useState<Record<string, boolean>>({});
-  const setBusy = (key: string, v: boolean) =>
-    setPending((p) => ({ ...p, [key]: v }));
+  // wagmi write hooks
+  const { writeContract: approve, data: approveTx } = useWriteContract();
+  const { writeContract: join, data: joinTx } = useWriteContract();
+  const { writeContract: claim, data: claimTx } = useWriteContract();
 
-  // ── Data fetching ──────────────────────────────────────────────────────────
+  const { isLoading: approving } = useWaitForTransactionReceipt({
+    hash: approveTx,
+  });
+  const { isLoading: joining, isSuccess: joinDone } =
+    useWaitForTransactionReceipt({ hash: joinTx });
+  const { isLoading: claiming, isSuccess: claimDone } =
+    useWaitForTransactionReceipt({ hash: claimTx });
 
-  // Lightweight leaderboard-only refresh (no spinner, just silently updates)
-  const refreshLeaderboard = useCallback(async () => {
+  const load = useCallback(async () => {
     if (isNaN(eventId)) return;
-    setLbLoading(true);
-    try {
-      clearCache(`readOnly-get-leaderboard`);
-      const lb = await getLeaderboard(eventId);
-      setLeaderboard(lb);
-    } catch {
-      // fail silently — stale data is fine
-    } finally {
-      setLbLoading(false);
-    }
-  }, [eventId]);
-
-  const fetchData = async () => {
-    if (isNaN(eventId)) return;
-
     try {
       setLoading(true);
       setError(null);
-
-      // Fetch block height separately so a CORS/network hiccup never aborts
-      // loading the event itself.
-      fetch(`${HIRO_API}/v2/info`)
-        .then((r) => r.json())
-        .then((info) => setCurrentBlock(info.burn_block_height ?? 0))
-        .catch(() => {
-          /* ignore — currentBlock stays 0 */
-        });
-
-      const ev = await getEvent(eventId);
-
-      if (!ev) {
-        setError("Event not found");
-        return;
-      }
+      const [ev, ms, lb] = await Promise.all([
+        fetchEvent(eventId),
+        fetchEventMatches(eventId),
+        fetchEventLeaderboard(eventId),
+      ]);
       setEvent(ev);
+      setMatches(ms);
+      setLeaderboard(lb.leaderboard);
 
-      const lb = await getLeaderboard(eventId);
-      setLeaderboard(lb);
-
-      if (userAddress) {
-        const p = await getParticipant(eventId, userAddress);
-        setParticipant(p);
+      if (address) {
+        const [joined, claimRes] = await Promise.all([
+          fetchHasJoined(eventId, address),
+          fetchClaimable(eventId, address),
+        ]);
+        setHasJoined(joined.joined);
+        setClaimable(claimRes.claimable);
       }
-    } catch (err) {
-      console.error(err);
-      setError("Failed to load event data");
+    } catch {
+      setError("Failed to load event");
     } finally {
       setLoading(false);
     }
-  };
+  }, [eventId, address]);
 
   useEffect(() => {
-    fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eventId, userAddress]);
-
-  // Auto-poll leaderboard every 30 s
+    load();
+  }, [load]);
   useEffect(() => {
-    const id = setInterval(refreshLeaderboard, 30_000);
-    return () => clearInterval(id);
-  }, [refreshLeaderboard]);
-
-  // ── Actions ────────────────────────────────────────────────────────────────
+    if (joinDone || claimDone) load();
+  }, [joinDone, claimDone]);
 
   const handleJoin = async () => {
-    if (!userAddress) return;
-    setBusy("join", true);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { openContractCall } = (await import("@stacks/connect")) as any;
-    await openContractCall({
-      ...joinEventTxOptions(eventId),
-      onFinish: () => {
-        clearCache();
-        setBusy("join", false);
-        fetchData();
-      },
-      onCancel: () => setBusy("join", false),
+    if (!event) return;
+    const amount = parseUnits(event.entryFee, 18);
+    // Step 1: approve cUSD spend
+    approve({
+      address: CONTRACTS.CUSD,
+      abi: CUSD_ABI,
+      functionName: "approve",
+      args: [CONTRACTS.EVENT_MANAGER, amount],
     });
   };
 
-  const handleClaimWinnings = async () => {
-    setBusy("winnings", true);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { openContractCall } = (await import("@stacks/connect")) as any;
-    await openContractCall({
-      ...claimWinningsTxOptions(eventId),
-      onFinish: () => {
-        clearCache();
-        setBusy("winnings", false);
-        fetchData();
-      },
-      onCancel: () => setBusy("winnings", false),
+  // After approve confirms, join the event
+  useEffect(() => {
+    if (!approving && approveTx) {
+      join({
+        address: CONTRACTS.EVENT_MANAGER,
+        abi: EVENT_MANAGER_ABI,
+        functionName: "joinEvent",
+        args: [BigInt(eventId)],
+      });
+    }
+  }, [approving, approveTx]);
+
+  const handleClaim = () => {
+    claim({
+      address: CONTRACTS.EVENT_MANAGER,
+      abi: EVENT_MANAGER_ABI,
+      functionName: "claimPrize",
+      args: [BigInt(eventId)],
     });
   };
 
-  const handleClaimRefund = async () => {
-    setBusy("refund", true);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { openContractCall } = (await import("@stacks/connect")) as any;
-    await openContractCall({
-      ...claimRefundTxOptions(eventId),
-      onFinish: () => {
-        clearCache();
-        setBusy("refund", false);
-        fetchData();
-      },
-      onCancel: () => setBusy("refund", false),
-    });
-  };
-
-  // ── Derived state ──────────────────────────────────────────────────────────
-
-  const isJoined = !!participant?.joined;
-
-  // ── Loading / error screens ────────────────────────────────────────────────
-
-  if (loading) {
+  if (loading)
     return (
-      <div className="min-h-screen pt-20 bg-gradient-to-br from-gray-900 via-black to-gray-900 flex flex-col items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-500 mb-4" />
-        <p className="text-gray-400">Loading Event Data...</p>
+      <div className="min-h-screen pt-20 bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-500" />
       </div>
     );
-  }
 
-  if (error || !event) {
+  if (error || !event)
     return (
-      <div className="min-h-screen pt-20 bg-gradient-to-br from-gray-900 via-black to-gray-900 flex flex-col items-center justify-center p-4">
-        <div className="bg-red-500/10 border border-red-500/50 p-6 rounded-xl max-w-md w-full text-center">
-          <p className="text-red-400 font-semibold mb-4">
-            {error ?? "Event not found"}
-          </p>
+      <div className="min-h-screen pt-20 bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center p-4">
+        <div className="bg-red-500/10 border border-red-500/50 p-6 rounded-xl max-w-md text-center">
+          <p className="text-red-400 mb-4">{error ?? "Event not found"}</p>
           <button
             onClick={() => router.push("/events")}
-            className="px-6 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition"
+            className="px-6 py-2 bg-gray-800 text-white rounded-lg"
           >
             ← Back to Events
           </button>
         </div>
       </div>
     );
-  }
 
-  const feeLabel = `${(event.entryFee / 1_000_000).toFixed(2)} STX`;
-  const poolStx = (event.totalPool / 1_000_000).toFixed(2);
+  const isOpen = event.status === "OPEN";
+  const isResolved = event.status === "RESOLVED";
+  const now = Date.now() / 1000;
+  const started = now >= event.startDate;
+  const canJoin = isOpen && !started && !hasJoined;
 
   return (
     <div className="relative pt-20 min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 pb-20">
       <Header />
-
       <main className="container mx-auto px-4 max-w-5xl mt-8">
-        {/* Back */}
         <button
           onClick={() => router.push("/events")}
-          className="text-gray-400 hover:text-white mb-6 flex items-center gap-2 transition"
+          className="text-gray-400 hover:text-white mb-6 flex items-center gap-2"
         >
-          <span>←</span> Back
+          ← Back
         </button>
 
-        {/* ── Event Banner ── */}
-        <div className="bg-gray-800/40 border border-gray-700/50 rounded-2xl p-6 lg:p-10 mb-8 backdrop-blur-sm shadow-xl">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-            <h1 className="text-3xl lg:text-4xl font-bold text-white leading-tight">
-              {event.title}
+        {/* Event banner */}
+        <div className="bg-gray-800/40 border border-gray-700/50 rounded-2xl p-6 lg:p-10 mb-8">
+          <div className="flex flex-col md:flex-row justify-between items-start gap-4 mb-6">
+            <h1 className="text-3xl lg:text-4xl font-bold text-white">
+              {event.eventName}
             </h1>
             <span
-              className={`px-4 py-1.5 rounded-full text-sm font-bold border ${
-                event.isActive
+              className={`px-4 py-1.5 rounded-full text-sm font-bold border shrink-0 ${
+                isOpen
                   ? "bg-green-500/10 text-green-400 border-green-500/30"
                   : "bg-gray-500/10 text-gray-400 border-gray-500/30"
               }`}
             >
-              {event.isActive ? "🟢 EVENT ACTIVE" : "⚪ EVENT CLOSED"}
+              {event.status}
             </span>
           </div>
 
-          {/* Stats grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            <div className="bg-gray-900/50 rounded-xl p-4 border border-gray-700/30">
-              <p className="text-gray-400 text-xs mb-1 uppercase font-semibold">
-                Entry Fee
-              </p>
-              <p className="text-white font-medium text-lg">{feeLabel}</p>
-            </div>
-            <div className="bg-gray-900/50 rounded-xl p-4 border border-gray-700/30">
-              <p className="text-gray-400 text-xs mb-1 uppercase font-semibold">
-                Prize Pool
-              </p>
-              <p className="text-orange-400 font-bold text-lg">{poolStx} STX</p>
-            </div>
-            <div className="bg-gray-900/50 rounded-xl p-4 border border-gray-700/30">
-              <p className="text-gray-400 text-xs mb-1 uppercase font-semibold">
-                Participants
-              </p>
-              <p className="text-white font-medium text-lg">
-                {event.participantCount}
-              </p>
-            </div>
-            <div className="bg-gray-900/50 rounded-xl p-4 border border-gray-700/30">
-              <p className="text-gray-400 text-xs mb-1 uppercase font-semibold">
-                Ends At
-              </p>
-              <p className="text-white font-medium text-lg">
-                {formatEstimatedTime(event.endBlock, currentBlock)}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                Block #{event.endBlock}
-              </p>
-            </div>
+            {[
+              { label: "Entry Fee", value: `${event.entryFee} cUSD` },
+              {
+                label: "Prize Pool",
+                value: `${event.prizePool} cUSD`,
+                highlight: true,
+              },
+              { label: "Type", value: event.eventType },
+              {
+                label: "Ends",
+                value: formatDistanceToNow(new Date(event.endDate * 1000), {
+                  addSuffix: true,
+                }),
+              },
+            ].map(({ label, value, highlight }) => (
+              <div
+                key={label}
+                className="bg-gray-900/50 rounded-xl p-4 border border-gray-700/30"
+              >
+                <p className="text-gray-400 text-xs mb-1 uppercase font-semibold">
+                  {label}
+                </p>
+                <p
+                  className={`font-medium text-lg ${highlight ? "text-orange-400" : "text-white"}`}
+                >
+                  {value}
+                </p>
+              </div>
+            ))}
           </div>
 
-          {/* ── Join / Status CTA ── */}
+          {/* CTA */}
           {!isConnected ? (
             <div className="text-center p-6 bg-gray-900/80 rounded-xl border border-gray-700">
               <p className="text-gray-400 mb-4">
-                Connect your wallet to join and make predictions.
+                Connect your wallet to join and predict
               </p>
               <button
                 onClick={connectWallet}
-                className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2.5 px-6 rounded-lg transition"
+                className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2.5 px-6 rounded-lg"
               >
                 Connect Wallet
               </button>
             </div>
-          ) : event.isActive && !isJoined ? (
+          ) : canJoin ? (
             <div className="p-6 bg-blue-900/20 rounded-xl border border-blue-500/30 text-center">
               <h3 className="text-white font-bold text-xl mb-2">
-                Join Event to Forecast
+                Join this Event
               </h3>
               <p className="text-gray-400 text-sm mb-6">
-                Pay {feeLabel} to enter. Forecast on all questions and earn
-                points!
+                Pay {event.entryFee} cUSD once — predict all matches, earn
+                points
               </p>
               <button
                 onClick={handleJoin}
-                disabled={!!pending["join"]}
+                disabled={approving || joining}
                 className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-lg transition disabled:opacity-50"
               >
-                {pending["join"]
-                  ? "Waiting for wallet..."
-                  : `Join Event (${feeLabel})`}
+                {approving
+                  ? "Approving cUSD…"
+                  : joining
+                    ? "Joining…"
+                    : `Join (${event.entryFee} cUSD)`}
               </button>
             </div>
-          ) : event.isActive && isJoined ? (
-            <div className="bg-green-500/10 border border-green-500/30 text-green-400 p-4 rounded-xl text-center font-medium flex items-center justify-center gap-2">
-              ✅ You have joined this event! Choose a question below to
-              forecast.
+          ) : hasJoined && isOpen ? (
+            <div className="bg-green-500/10 border border-green-500/30 text-green-400 p-4 rounded-xl text-center font-medium">
+              ✅ You have joined — predict on matches below
             </div>
-          ) : /* Event closed */ !event.isActive &&
-            isJoined &&
-            event.refundMode ? (
-            /* Refund mode — under 5 participants */
-            <div className="p-5 bg-yellow-900/20 rounded-xl border border-yellow-500/30 text-center">
-              <p className="text-yellow-400 font-semibold mb-3">
-                ⚠️ Event ended with too few participants — refund available
-              </p>
-              <button
-                disabled={!!pending["refund"] || !!participant?.refundClaimed}
-                onClick={handleClaimRefund}
-                className="bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-3 px-8 rounded-lg transition disabled:opacity-50"
-              >
-                {participant?.refundClaimed
-                  ? "Refund Already Claimed"
-                  : pending["refund"]
-                    ? "Waiting for wallet..."
-                    : `Claim Refund (${feeLabel})`}
-              </button>
-            </div>
-          ) : !event.isActive &&
-            isJoined &&
-            event.questionCount > 0 &&
-            event.finalizedQuestionCount === event.questionCount ? (
-            /* Normal close — claim winnings */
+          ) : isResolved && parseFloat(claimable) > 0 ? (
             <div className="p-5 bg-green-900/20 rounded-xl border border-green-500/30 text-center">
               <p className="text-green-400 font-semibold mb-3">
-                🎉 Event settled! Top scorers can claim their winnings.
+                🎉 You have {claimable} cUSD to claim!
               </p>
               <button
-                disabled={!!pending["winnings"]}
-                onClick={handleClaimWinnings}
-                className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold py-3 px-8 rounded-lg transition disabled:opacity-50"
+                onClick={handleClaim}
+                disabled={claiming}
+                className="bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold py-3 px-8 rounded-lg disabled:opacity-50"
               >
-                {pending["winnings"]
-                  ? "Waiting for wallet..."
-                  : "🏆 Claim Winnings"}
+                {claiming ? "Claiming…" : "🏆 Claim Prize"}
               </button>
+            </div>
+          ) : started && !hasJoined ? (
+            <div className="bg-gray-700/40 border border-gray-600/50 rounded-xl p-4 text-gray-400 text-center">
+              🔒 Event has started — joining is closed
             </div>
           ) : null}
         </div>
 
-        {/* ── Leaderboard + Questions CTA ── */}
         <div className="grid lg:grid-cols-3 gap-8">
-          {/* Questions CTA */}
-          <div className="lg:col-span-2">
-            <div className="bg-gray-800/40 border border-gray-700/50 rounded-2xl p-8 flex flex-col items-center justify-center text-center gap-4 h-full min-h-[200px]">
-              <div className="text-4xl">🎯</div>
-              <div>
-                <h2 className="text-xl font-bold text-white mb-1">
-                  {event.questionCount} Question
-                  {event.questionCount !== 1 ? "s" : ""}
-                </h2>
-                <p className="text-gray-400 text-sm">
-                  {event.finalizedQuestionCount} of {event.questionCount}{" "}
-                  finalized
-                </p>
+          {/* Matches */}
+          <div className="lg:col-span-2 space-y-4">
+            <h2 className="text-2xl font-bold text-white mb-4">Matches</h2>
+            {matches.length === 0 ? (
+              <div className="bg-gray-800/30 border border-gray-700/50 rounded-xl p-8 text-center">
+                <p className="text-gray-500">No matches added yet</p>
+                {isOpen && started && (
+                  <p className="text-gray-600 text-sm mt-1">
+                    Admin will add matches after the event starts
+                  </p>
+                )}
               </div>
-              <button
-                onClick={() => router.push(`/events/${eventId}/questions`)}
-                className="bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold py-3 px-8 rounded-lg transition-all duration-300 transform hover:scale-105"
-              >
-                View Questions →
-              </button>
-            </div>
+            ) : (
+              matches.map((m) => (
+                <div
+                  key={m.matchId}
+                  onClick={() =>
+                    hasJoined &&
+                    router.push(`/predictions?matchId=${m.matchId}`)
+                  }
+                  className={`bg-gray-800/40 border border-gray-700/50 rounded-xl p-5 transition-all ${
+                    hasJoined ? "hover:border-orange-500/40 cursor-pointer" : ""
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-4">
+                      <span className="text-white font-bold">{m.homeTeam}</span>
+                      <span className="text-gray-500 text-sm">vs</span>
+                      <span className="text-white font-bold">{m.awayTeam}</span>
+                    </div>
+                    <span
+                      className={`px-2 py-1 rounded text-xs font-bold ${
+                        m.status === "OPEN"
+                          ? "bg-green-500/20 text-green-400"
+                          : m.status === "VERIFIED"
+                            ? "bg-blue-500/20 text-blue-400"
+                            : "bg-gray-500/20 text-gray-400"
+                      }`}
+                    >
+                      {m.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm text-gray-400">
+                    <span>
+                      ⏰{" "}
+                      {format(new Date(m.kickoffTime * 1000), "MMM d, HH:mm")}
+                    </span>
+                    <div className="flex gap-2">
+                      {m.allowScorePrediction && (
+                        <span className="bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded text-xs">
+                          Score 5pts
+                        </span>
+                      )}
+                      {m.allowOutcomePrediction && (
+                        <span className="bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded text-xs">
+                          Outcome 3pts
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {m.status === "VERIFIED" && (
+                    <div className="mt-2 text-center text-white font-bold">
+                      {m.finalHomeScore} – {m.finalAwayScore}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
           </div>
 
-          {/* Leaderboard column */}
+          {/* Leaderboard */}
           <div className="lg:col-span-1">
-            <div className="bg-gray-800/60 backdrop-blur-sm border border-orange-500/20 rounded-2xl p-6 sticky top-24">
-              {/* Header */}
-              <div className="flex items-center justify-between mb-1">
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  🏆 Leaderboard
-                </h2>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs bg-orange-500/10 text-orange-400 px-2 py-1 rounded font-semibold">
-                    Top 5
-                  </span>
-                  <button
-                    onClick={refreshLeaderboard}
-                    disabled={lbLoading}
-                    title="Refresh leaderboard"
-                    className="text-gray-400 hover:text-orange-400 transition disabled:opacity-40 p-1 rounded-md hover:bg-gray-700/50"
-                  >
-                    <svg
-                      className={`w-4 h-4 ${lbLoading ? "animate-spin" : ""}`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                      />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-              <p className="text-xs text-gray-500 mb-5">
-                Updates after claiming points · auto-refreshes every 30s
-              </p>
-
+            <div className="bg-gray-800/60 border border-orange-500/20 rounded-2xl p-6 sticky top-24">
+              <h2 className="text-xl font-bold text-white mb-4">
+                🏆 Leaderboard
+              </h2>
               {leaderboard.length === 0 ? (
-                <div className="text-center py-10">
-                  <div className="text-4xl mb-3">🎯</div>
-                  <p className="text-gray-400 text-sm font-medium">
-                    No points yet
-                  </p>
-                  <p className="text-gray-600 text-xs mt-1">
-                    Claim points on a finalized question to appear here
-                  </p>
+                <div className="text-center py-8">
+                  <p className="text-gray-400 text-sm">No points yet</p>
                 </div>
               ) : (
                 <ul className="space-y-2">
-                  {leaderboard.map((lb, idx) => {
-                    const medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
-                    const isMe =
-                      userAddress?.toLowerCase() === lb.user.toLowerCase();
-                    return (
-                      <li
-                        key={`${lb.user}-${idx}`}
-                        className={`rounded-xl p-3 flex justify-between items-center border transition-all ${
-                          isMe
-                            ? "bg-orange-500/10 border-orange-500/40 shadow-sm shadow-orange-500/10"
-                            : idx === 0
-                              ? "bg-yellow-500/5 border-yellow-500/20"
-                              : "bg-gray-900/40 border-gray-700/30"
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="text-lg leading-none w-6 text-center">
-                            {medals[idx] ?? idx + 1}
+                  {leaderboard.map((lb, i) => (
+                    <li
+                      key={lb.user}
+                      className={`rounded-xl p-3 flex justify-between items-center border ${
+                        address?.toLowerCase() === lb.user.toLowerCase()
+                          ? "bg-orange-500/10 border-orange-500/40"
+                          : "bg-gray-900/40 border-gray-700/30"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-lg w-6 text-center">
+                          {MEDALS[i] ?? i + 1}
+                        </span>
+                        <span className="text-sm font-mono text-gray-200">
+                          {lb.user.slice(0, 6)}…{lb.user.slice(-4)}
+                        </span>
+                        {address?.toLowerCase() === lb.user.toLowerCase() && (
+                          <span className="text-[10px] bg-orange-500/30 text-orange-400 px-1.5 py-0.5 rounded font-bold">
+                            YOU
                           </span>
-                          <img
-                            src={`https://api.dicebear.com/7.x/identicon/svg?seed=${lb.user}`}
-                            alt="avatar"
-                            className="w-7 h-7 rounded-full opacity-90 border border-gray-600/50"
-                          />
-                          <div>
-                            <span
-                              className={`text-sm font-semibold ${isMe ? "text-orange-300" : "text-gray-200"}`}
-                            >
-                              {lb.user.slice(0, 5)}…{lb.user.slice(-4)}
-                            </span>
-                            {isMe && (
-                              <span className="ml-2 text-[10px] bg-orange-500/30 text-orange-400 px-1.5 py-0.5 rounded font-bold">
-                                YOU
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <span
-                            className={`font-bold text-sm ${idx === 0 ? "text-yellow-400" : "text-orange-400"}`}
-                          >
-                            {lb.points}
-                          </span>
-                          <span className="text-gray-500 text-xs ml-1">
-                            pts
-                          </span>
-                        </div>
-                      </li>
-                    );
-                  })}
+                        )}
+                      </div>
+                      <span className="font-bold text-sm text-orange-400">
+                        {lb.points} pts
+                      </span>
+                    </li>
+                  ))}
                 </ul>
               )}
             </div>
           </div>
         </div>
       </main>
-
       <Footer />
     </div>
   );

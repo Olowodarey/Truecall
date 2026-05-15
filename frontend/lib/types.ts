@@ -1,96 +1,81 @@
-// On-chain types — fields map 1:1 to Clarity contract tuple keys
+// ─── EVM / TrueCall types — aligned with NestJS backend responses ─────────────
 
-export interface ChainEvent {
-  id: number;
-  title: string;
-  creator: string;
-  startBlock: number;
-  endBlock: number;
-  entryFee: number; // in microSTX
-  questionCount: number;
-  finalizedQuestionCount: number;
-  participantCount: number;
-  totalPool: number;
-  isActive: boolean;
-  feeBooked: boolean;
-  refundMode: boolean;
-}
+export type EventStatus = "OPEN" | "RESOLVED" | "CANCELLED";
+export type EventType = "PUBLIC" | "PRIVATE";
+export type MatchStatus = "OPEN" | "LOCKED" | "VERIFIED" | "DISPUTED";
+export type Outcome = "HOME_WIN" | "DRAW" | "AWAY_WIN";
+export type EventFilter = "all" | "open" | "resolved" | "cancelled";
 
-export interface ChainQuestion {
-  id: number;
+export interface TrueCallEvent {
   eventId: number;
-  question: string;
-  targetPrice: number; // BTC price in whole dollars
-  closeBlock: number;
-  resolveBlock: number;
-  status: "open" | "final";
-  oraclePrice: number;
-  finalOutcome: boolean | null;
-}
-
-export interface ChainAnswer {
-  prediction: boolean; // true = YES, false = NO
-  pointsClaimed: boolean;
-}
-
-export interface ChainParticipant {
-  joined: boolean;
-  refundClaimed: boolean;
-}
-
-// Private event types
-export interface ChainPrivateEvent {
-  id: number;
+  eventType: EventType;
   creator: string;
-  title: string;
-  inviteHash: string;
-  entryFee: number;
-  joinDeadline: number;
-  maxRounds: number;
-  intervalBlocks: number;
-  submissionWindow: number;
-  answerWindow: number;
-  participantCount: number;
-  totalPool: number;
-  currentRound: number;
-  completedRounds: number;
-  nextSubmitterIndex: number;
-  isActive: boolean;
-  ended: boolean;
-  feeBooked: boolean;
-  refundMode: boolean;
+  eventName: string;
+  startDate: number; // unix timestamp
+  endDate: number; // unix timestamp
+  entryFee: string; // cUSD formatted (e.g. "1.0")
+  prizePool: string; // cUSD formatted
+  maxParticipants: number; // 0 = unlimited
+  status: EventStatus;
 }
 
-export interface ChainRound {
+export interface TrueCallMatch {
+  matchId: number;
   eventId: number;
-  roundNumber: number;
-  submitter: string;
-  question: string | null;
-  targetPrice: number;
-  submissionOpenBlock: number;
-  submissionDeadline: number;
-  answerCloseBlock: number;
-  status: "pending-sub" | "open-answer" | "final" | "skipped";
-  oraclePrice: number;
-  finalOutcome: boolean | null;
+  homeTeam: string;
+  awayTeam: string;
+  apiMatchId: string;
+  kickoffTime: number; // unix timestamp
+  predictionDeadline: number; // unix timestamp
+  status: MatchStatus;
+  finalHomeScore: number;
+  finalAwayScore: number;
+  verifiedAt: number;
+  allowScorePrediction: boolean;
+  allowOutcomePrediction: boolean;
 }
 
-export interface ChainPrivateParticipant {
-  joined: boolean;
-  index: number;
-  refundClaimed: boolean;
+export interface TrueCallPrediction {
+  matchId: number;
+  user: string;
+  homeScore: number;
+  awayScore: number;
+  hasScorePrediction: boolean;
+  outcome: Outcome;
+  hasOutcomePrediction: boolean;
+  submittedAt: number;
+  scorePointsEarned: number;
+  outcomePointsEarned: number;
+  totalPoints: number;
 }
-
-export interface ChainRoundAnswer {
-  prediction: boolean;
-  pointsClaimed: boolean;
-}
-
-// UI helpers
-export type EventFilter = "all" | "open" | "closed" | "settled";
-export type QuestionStatus = ChainQuestion["status"];
 
 export interface LeaderboardEntry {
+  rank: number;
   user: string;
   points: number;
+  firstSubmission?: number;
+}
+
+export interface ParticipantsResponse {
+  eventId: number;
+  count: number;
+  participants: string[];
+}
+
+export interface WinnersResponse {
+  eventId: number;
+  winners: string[];
+}
+
+export interface JoinedResponse {
+  eventId: number;
+  user: string;
+  joined: boolean;
+}
+
+export interface ClaimableResponse {
+  eventId: number;
+  user: string;
+  claimable: string; // cUSD formatted
+  currency: string;
 }

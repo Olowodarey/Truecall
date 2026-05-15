@@ -1,923 +1,250 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@/contexts/WalletContext";
-import { HIRO_API, DEPLOYER } from "@/lib/contracts";
-
-import {
-  getAllEvents,
-  getQuestionsForEvent,
-  createEventTxOptions,
-  addQuestionTxOptions,
-  closeEventTxOptions,
-  finalizeQuestionTxOptions,
-  setPriceTestnetTxOptions,
-  getPythStoredPrice,
-} from "@/lib/stacks";
-import type { ChainEvent, ChainQuestion } from "@/lib/types";
+import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 
+// Admin-only: owner address on Celo Sepolia
+const ADMIN = "0xAB26c86b78DEDb488Bf0cb4FaCe11b048DDeFE5b";
+
+const EVENT_MANAGER = (process.env.NEXT_PUBLIC_EVENT_MANAGER ??
+  "0xc76C9f0Bb031245ce145c0b7B822E2d0A1267e89") as `0x${string}`;
+
+const ABI = [
+  {
+    type: "function",
+    name: "createPublicEvent",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "eventName", type: "string" },
+      { name: "startDate", type: "uint256" },
+      { name: "endDate", type: "uint256" },
+      { name: "entryFee", type: "uint256" },
+      { name: "scoringRule", type: "uint8" },
+    ],
+    outputs: [{ name: "eventId", type: "uint256" }],
+  },
+] as const;
+
 export default function CreateEventPage() {
   const router = useRouter();
-  const { isConnected, connectWallet, stxAddress: userAddress } = useWallet();
+  const { isConnected, address, connectWallet } = useWallet();
 
-  // Admin Tabs
-  const [activeTab, setActiveTab] = useState<
-    "create-event" | "add-question" | "manage-questions"
-  >("create-event");
-  const [events, setEvents] = useState<ChainEvent[]>([]);
-  const [eventQuestions, setEventQuestions] = useState<
-    Record<number, ChainQuestion[]>
-  >({});
-  const [currentBlock, setCurrentBlock] = useState(0);
-  const [pendingAction, setPendingAction] = useState<string | null>(null);
-  // Stores live BTC price fetched from Hermes (used as fallback for finalize)
-  const [pythPriceInfo, setPythPriceInfo] = useState<{
-    price: number;
-    expo: number;
-    conf: number;
-    publishTime: number;
-  } | null>(null);
-
-  // Form state - Create Event
-  const [title, setTitle] = useState("");
-  const [durationMinutes, setDurationMinutes] = useState(1440); // default 24 hours (1440 minutes)
-  const [entryFeeStx, setEntryFeeStx] = useState(1); // STX
-
-  // Form state - Add Question
-  const [selectedEventId, setSelectedEventId] = useState<number>(0);
-  const [marketQuestion, setMarketQuestion] = useState("");
-  const [marketTargetPrice, setMarketTargetPrice] = useState<number>(100000); // USD
-  const [questionDurationMinutes, setQuestionDurationMinutes] = useState(1440);
-  // How many minutes BEFORE resolution the prediction window closes (lock-in offset)
-  const [predictionLockOffsetMinutes, setPredictionLockOffsetMinutes] =
-    useState(1440); // default 24h before
-
-  const [creating, setCreating] = useState(false);
+  const [eventName, setEventName] = useState("");
+  const [startOffset, setStartOffset] = useState(60); // minutes from now
+  const [durationDays, setDurationDays] = useState(7);
+  const [entryFee, setEntryFee] = useState("1"); // cUSD
+  const [scoringRule, setScoringRule] = useState(2); // 0=EXACT, 1=OUTCOME, 2=BOTH
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
 
-  useEffect(() => {
-    if (isConnected && userAddress === DEPLOYER) {
-      // Fetch events + current block
-      getAllEvents()
-        .then((evs) => {
-          setEvents(evs);
-          // Also load markets per event for the Manage tab
-          const allQuestions: Record<number, ChainQuestion[]> = {};
-          Promise.all(
-            evs.map(async (ev) => {
-              allQuestions[ev.id] = await getQuestionsForEvent(ev.id);
-            }),
-          ).then(() => setEventQuestions({ ...allQuestions }));
-        })
-        .catch(console.error);
+  const { writeContract, data: txHash } = useWriteContract();
+  const { isLoading: pending, isSuccess } = useWaitForTransactionReceipt({
+    hash: txHash,
+  });
 
-      fetch(`${HIRO_API}/v2/info`)
-        .then((r) => r.json())
-        .then((info) => setCurrentBlock(info.burn_block_height ?? 0))
-        .catch(console.error);
-    }
-  }, [isConnected, userAddress]);
-
-  // BTC/USD price feed id on Pyth
-  const BTC_FEED_ID_HEX =
-    "e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43";
-
-  useEffect(() => {
-    // Only fetch initial Pyth price for display purposes
-    if (isConnected) {
-      const fetchPrice = () => {
-        fetch(
-          `https://hermes.pyth.network/api/latest_price_feeds?ids[]=${BTC_FEED_ID_HEX}&binary=true`,
-        )
-          .then((res) => res.json())
-          .then((data) => {
-            const feed = data?.[0]?.price ?? data?.[0]?.price_feed?.price;
-            if (feed) {
-              setPythPriceInfo({
-                price: Number(feed.price),
-                expo: Number(feed.expo),
-                conf: Number(feed.conf),
-                publishTime: Number(feed.publish_time),
-              });
-            }
-          })
-          .catch(console.error);
-      };
-
-      fetchPrice(); // fetch immediately
-      const interval = setInterval(fetchPrice, 10000); // 10s updates
-      return () => clearInterval(interval);
-    }
-  }, [isConnected]);
-
-  const handleCreateEvent = async (e: React.FormEvent) => {
+  const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) {
-      setError("Event title is required");
+    setError(null);
+
+    if (!eventName.trim()) {
+      setError("Event name is required");
+      return;
+    }
+    const fee = parseFloat(entryFee);
+    if (isNaN(fee) || fee < 1) {
+      setError("Entry fee must be at least 1 cUSD");
       return;
     }
 
-    setCreating(true);
-    setError(null);
+    const now = Math.floor(Date.now() / 1000);
+    const startDate = now + startOffset * 60;
+    const endDate = startDate + durationDays * 86400;
+    const feeBigInt = BigInt(Math.round(fee * 1e18));
 
-    try {
-      // Fetch current block height to compute blocks
-      const resp = await fetch(`${HIRO_API}/v2/info`);
-      const info = await resp.json();
-      const currentBlock = info.burn_block_height ?? 0;
-      const startBlock = currentBlock;
-      // 1 Bitcoin block = ~10 minutes
-      const blocksToAdd = Math.ceil(durationMinutes / 10);
-      const endBlock = currentBlock + blocksToAdd;
-      const entryFeeMicro = Math.round(entryFeeStx * 1_000_000);
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { openContractCall } = (await import("@stacks/connect")) as any;
-      await openContractCall({
-        ...createEventTxOptions(
-          title.trim().slice(0, 64),
-          startBlock,
-          endBlock,
-          entryFeeMicro,
-        ),
-        appDetails: { name: "TrueCall", icon: "/favicon.ico" },
-        onFinish: (data: any) => {
-          console.log("create-event tx:", data.txId);
-          setSuccess(true);
-          setTimeout(() => router.push("/events"), 2500);
-        },
-        onCancel: () => {
-          setCreating(false);
-          setError("Transaction cancelled");
-        },
-      });
-    } catch (err: any) {
-      setError(err?.message ?? "Failed to create event");
-      setCreating(false);
-    }
+    writeContract({
+      address: EVENT_MANAGER,
+      abi: ABI,
+      functionName: "createPublicEvent",
+      args: [
+        eventName.trim(),
+        BigInt(startDate),
+        BigInt(endDate),
+        feeBigInt,
+        scoringRule,
+      ],
+    });
   };
 
-  const handleAddQuestion = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!marketQuestion.trim() || selectedEventId === 0) {
-      setError("Event and question are required");
-      return;
-    }
-
-    setCreating(true);
-    setError(null);
-
-    try {
-      const event = events.find((e) => e.id === selectedEventId);
-      if (!event) {
-        setError("Selected event not found in current list.");
-        setCreating(false);
-        return;
-      }
-
-      const resp = await fetch(`${HIRO_API}/v2/info`);
-      const info = await resp.json();
-      const currentBlock = info.burn_block_height ?? 0;
-
-      if (currentBlock >= event.endBlock) {
-        setError(
-          `Event #${event.id} has already ended at block ${event.endBlock}.`,
-        );
-        setCreating(false);
-        return;
-      }
-
-      // 1 Bitcoin block = ~10 minutes
-      // questionDurationMinutes = total time from now until resolution
-      // predictionLockOffsetMinutes = how far before resolution predictions lock
-      const resolutionBlocks = Math.ceil(questionDurationMinutes / 10);
-      const lockOffsetBlocks = Math.ceil(predictionLockOffsetMinutes / 10);
-      const maxAllowedBlocks = event.endBlock - currentBlock;
-
-      if (resolutionBlocks > maxAllowedBlocks) {
-        const maxMins = maxAllowedBlocks * 10;
-        setError(
-          `Question duration exceeds the event's remaining time. Max allowed is ${maxMins} minute(s).`,
-        );
-        setCreating(false);
-        return;
-      }
-
-      if (lockOffsetBlocks >= resolutionBlocks) {
-        setError(
-          `Prediction lock offset must be less than the total question duration.`,
-        );
-        setCreating(false);
-        return;
-      }
-
-      // close-block = when predictions lock (resolution block minus the offset)
-      const resolutionBlock = currentBlock + resolutionBlocks;
-      const closeBlock = resolutionBlock - lockOffsetBlocks;
-
-      // Ensure the string is strictly ASCII to prevent contract errors
-      const asciiTrimmedQuestion = marketQuestion
-        .replace(/[^\x00-\x7F]/g, "") // Remove non-ASCII characters like special symbols or emojis
-        .trim()
-        .slice(0, 128); // 128-byte limit
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { openContractCall } = (await import("@stacks/connect")) as any;
-      await openContractCall({
-        ...addQuestionTxOptions(
-          selectedEventId,
-          asciiTrimmedQuestion,
-          marketTargetPrice,
-          closeBlock,
-          resolutionBlock,
-        ),
-        appDetails: { name: "TrueCall", icon: "/favicon.ico" },
-        onFinish: (data: any) => {
-          console.log("add-question tx:", data.txId);
-          setSuccess(true);
-          setTimeout(() => router.push("/events"), 2500);
-        },
-        onCancel: () => {
-          setCreating(false);
-          setError("Transaction cancelled");
-        },
-      });
-    } catch (err: any) {
-      setError(err?.message ?? "Failed to add question");
-      setCreating(false);
-    }
-  };
-
-  const handleFinalize = async (questionId: number) => {
-    const key = `finalize-${questionId}`;
-    setPendingAction(key);
-    setError(null);
-    try {
-      // Fetch live BTC/USD price from Hermes off-chain, then pass it directly to the contract.
-      // The contract just compares this price vs target — no on-chain oracle calls at all.
-      const BTC_FEED_ID =
-        "e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43";
-      let oraclePrice = 0;
-      try {
-        const hermesResp = await fetch(
-          `https://hermes.pyth.network/api/latest_price_feeds?ids[]=${BTC_FEED_ID}&binary=true`,
-        );
-        const hermesData = await hermesResp.json();
-        const feed =
-          hermesData?.[0]?.price ?? hermesData?.[0]?.price_feed?.price;
-        if (feed) {
-          const rawPrice = Number(feed.price);
-          const expo = Number(feed.expo);
-          // Normalise: price / 10^abs(expo) = whole-dollar value
-          oraclePrice = Math.floor(rawPrice / Math.pow(10, Math.abs(expo)));
-        }
-      } catch {
-        // Fallback: use the displayed price from pythPriceInfo if Hermes fails
-        if (pythPriceInfo?.price && pythPriceInfo?.expo) {
-          oraclePrice = Math.floor(
-            pythPriceInfo.price / Math.pow(10, Math.abs(pythPriceInfo.expo)),
-          );
-        }
-      }
-
-      if (oraclePrice <= 0) {
-        throw new Error(
-          "Could not fetch a valid BTC price from Hermes. Please try again.",
-        );
-      }
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { openContractCall } = (await import("@stacks/connect")) as any;
-      await openContractCall({
-        ...finalizeQuestionTxOptions(questionId, oraclePrice),
-        appDetails: { name: "TrueCall", icon: "/favicon.ico" },
-        onFinish: async () => {
-          setPendingAction(null);
-          const allQuestions: Record<number, ChainQuestion[]> = {
-            ...eventQuestions,
-          };
-          await Promise.all(
-            events.map(async (ev) => {
-              allQuestions[ev.id] = await getQuestionsForEvent(ev.id);
-            }),
-          );
-          setEventQuestions({ ...allQuestions });
-          const refreshed = await getAllEvents();
-          setEvents(refreshed);
-        },
-        onCancel: () => setPendingAction(null),
-      });
-    } catch (err: any) {
-      setError(err?.message ?? "Failed to finalize question");
-      setPendingAction(null);
-    }
-  };
-
-  return (
-    <div className="relative pt-20 min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
-      <div className="absolute inset-0 w-full h-full z-0 opacity-10">
-        <svg
-          className="w-full h-full"
-          viewBox="0 0 1000 1000"
-          preserveAspectRatio="xMidYMid slice"
-        >
-          <defs>
-            <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#f97316" stopOpacity="0.3" />
-              <stop offset="100%" stopColor="#eab308" stopOpacity="0.2" />
-            </linearGradient>
-          </defs>
-          <path
-            d="M100,200 Q300,100 500,200 T900,200"
-            stroke="url(#g)"
-            strokeWidth="2"
-            fill="none"
-          />
-          <path
-            d="M200,500 Q400,350 700,500 T1000,450"
-            stroke="url(#g)"
-            strokeWidth="2"
-            fill="none"
-          />
-        </svg>
-      </div>
-
-      <div className="relative z-10">
+  if (!isConnected)
+    return (
+      <div className="relative pt-20 min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
         <Header />
-        <main className="container mx-auto px-4 py-12 max-w-2xl">
-          <div className="text-center mb-10">
-            <h1 className="text-5xl font-bold text-white mb-3">
-              Create Prediction Event
-            </h1>
-            <p className="text-gray-300">
-              Admin-only · Calls{" "}
-              <code className="text-orange-400">create-event</code> on-chain
+        <main className="container mx-auto px-4 py-20 text-center">
+          <div className="max-w-md mx-auto bg-gray-800/40 border border-gray-700/50 rounded-2xl p-10">
+            <p className="text-gray-400 mb-6">
+              Connect your admin wallet to create events
             </p>
+            <button
+              onClick={connectWallet}
+              className="bg-gradient-to-r from-orange-500 to-yellow-500 text-white font-bold py-3 px-8 rounded-lg"
+            >
+              Connect Wallet
+            </button>
           </div>
-
-          {!isConnected ? (
-            <div className="text-center py-16 bg-gray-800/50 rounded-xl border border-gray-700">
-              <p className="text-gray-400 mb-4">
-                Connect your admin wallet to create events
-              </p>
-              <button
-                onClick={connectWallet}
-                className="bg-gradient-to-r from-orange-500 to-yellow-500 text-white font-bold py-3 px-8 rounded-lg"
-              >
-                Connect Wallet
-              </button>
-            </div>
-          ) : userAddress !== DEPLOYER ? (
-            <div className="text-center py-16 bg-red-900/20 rounded-xl border border-red-900/50">
-              <h2 className="text-red-400 font-bold text-xl mb-4">
-                Unauthorized Address
-              </h2>
-              <p className="text-gray-300 mb-6">
-                You are connected as{" "}
-                <code className="bg-black/30 px-2 py-1 rounded text-sm text-gray-400">
-                  {userAddress}
-                </code>
-                .
-                <br />
-                <br />
-                Only the contract deployer can create events on-chain:
-                <br />
-                <code className="bg-black/30 px-2 py-1 rounded text-orange-400 text-sm mt-2 inline-block">
-                  {DEPLOYER}
-                </code>
-              </p>
-              <button
-                onClick={connectWallet}
-                className="bg-gray-800 hover:bg-gray-700 text-white font-medium py-3 px-8 rounded-lg border border-gray-600 transistion-colors"
-              >
-                Switch Account in Wallet
-              </button>
-            </div>
-          ) : (
-            <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700 overflow-hidden">
-              <div className="flex border-b border-gray-700">
-                <button
-                  onClick={() => setActiveTab("create-event")}
-                  className={`flex-1 py-4 text-center font-semibold transition-colors ${
-                    activeTab === "create-event"
-                      ? "bg-gray-700/50 text-white border-b-2 border-orange-500"
-                      : "text-gray-400 hover:text-gray-300 hover:bg-gray-700/30"
-                  }`}
-                >
-                  Create Event
-                </button>
-                <button
-                  onClick={() => setActiveTab("add-question")}
-                  className={`flex-1 py-4 text-center font-semibold transition-colors ${
-                    activeTab === "add-question"
-                      ? "bg-gray-700/50 text-white border-b-2 border-orange-500"
-                      : "text-gray-400 hover:text-gray-300 hover:bg-gray-700/30"
-                  }`}
-                >
-                  Add Question
-                </button>
-                <button
-                  onClick={() => setActiveTab("manage-questions")}
-                  className={`flex-1 py-4 text-center font-semibold transition-colors ${
-                    activeTab === "manage-questions"
-                      ? "bg-gray-700/50 text-white border-b-2 border-orange-500"
-                      : "text-gray-400 hover:text-gray-300 hover:bg-gray-700/30"
-                  }`}
-                >
-                  Manage Questions
-                </button>
-              </div>
-
-              <div className="p-8">
-                {activeTab === "create-event" ? (
-                  <form onSubmit={handleCreateEvent} className="space-y-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Event Title *
-                      </label>
-                      <input
-                        type="text"
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        disabled={creating}
-                        maxLength={64}
-                        className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
-                        placeholder="e.g., BTC Q1 2025 Price Race"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Duration (Minutes)
-                      </label>
-                      <input
-                        type="number"
-                        value={durationMinutes}
-                        onChange={(e) =>
-                          setDurationMinutes(Number(e.target.value))
-                        }
-                        disabled={creating}
-                        min={0}
-                        max={3153600}
-                        className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Entry Fee (STX)
-                      </label>
-                      <input
-                        type="number"
-                        value={entryFeeStx}
-                        onChange={(e) => setEntryFeeStx(Number(e.target.value))}
-                        disabled={creating}
-                        min={0}
-                        step={0.1}
-                        className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
-                      />
-                    </div>
-
-                    {error && (
-                      <div className="p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-sm">
-                        {error}
-                      </div>
-                    )}
-                    {success && (
-                      <div className="p-3 bg-green-500/20 border border-green-500/50 rounded-lg text-green-400 text-sm">
-                        Event created on-chain! Redirecting to events page…
-                      </div>
-                    )}
-
-                    <button
-                      id="create-event-submit"
-                      type="submit"
-                      disabled={creating || !title.trim()}
-                      className="w-full bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold py-3 px-6 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {creating
-                        ? "Waiting for wallet…"
-                        : "Create Event On-Chain"}
-                    </button>
-                  </form>
-                ) : activeTab === "add-question" ? (
-                  <form onSubmit={handleAddQuestion} className="space-y-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Select Event *
-                      </label>
-                      <select
-                        value={selectedEventId}
-                        onChange={(e) =>
-                          setSelectedEventId(Number(e.target.value))
-                        }
-                        disabled={creating || events.length === 0}
-                        className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
-                      >
-                        <option value={0} disabled>
-                          -- Choose an Event --
-                        </option>
-                        {events.map((ev) => (
-                          <option key={ev.id} value={ev.id}>
-                            #{ev.id} | {ev.title} ({ev.finalizedQuestionCount}/
-                            {ev.questionCount} questions)
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <label className="block text-sm font-medium text-gray-300">
-                          Market Question * (Binary YES/NO)
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setMarketQuestion(
-                              `Will BTC be at or above $${marketTargetPrice.toLocaleString()} when this question closes?`,
-                            )
-                          }
-                          className="text-xs text-orange-400 hover:text-orange-300 underline"
-                        >
-                          Auto-fill from target ↓
-                        </button>
-                      </div>
-                      <input
-                        type="text"
-                        value={marketQuestion}
-                        onChange={(e) => setMarketQuestion(e.target.value)}
-                        disabled={creating}
-                        maxLength={128}
-                        className={`w-full px-4 py-3 bg-gray-700/50 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 ${
-                          /\b(below|under|less than|drop|fall)\b/i.test(
-                            marketQuestion,
-                          )
-                            ? "border-red-500/70"
-                            : "border-gray-600"
-                        }`}
-                        placeholder="Will BTC be at or above $100,000 when this question closes?"
-                      />
-                      {/* Contract logic reminder */}
-                      <div className="mt-2 p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs text-blue-300">
-                        <strong>⚙️ Contract logic:</strong> YES = oracle price ≥
-                        target. NO = oracle price &lt; target. Always phrase as{" "}
-                        <em>"Will [asset] be at or above $[target]?"</em>
-                      </div>
-                      {/* Danger: wrong wording detected */}
-                      {/\b(below|under|less than|drop|fall)\b/i.test(
-                        marketQuestion,
-                      ) && (
-                        <div className="mt-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-400">
-                          ⚠️ <strong>Wrong framing detected!</strong> Words like
-                          "below", "under", "less than" don't match the
-                          contract's{" "}
-                          <code>(&gt;= oracle-price target-price)</code> logic
-                          and will resolve incorrectly. Click{" "}
-                          <em>"Auto-fill from target"</em> above to get the
-                          correct phrasing.
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Target Price + Resolution Time + Lock Offset */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Target Price (USD)
-                        </label>
-                        <div className="relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-medium">
-                            $
-                          </span>
-                          <input
-                            type="number"
-                            value={marketTargetPrice}
-                            onChange={(e) =>
-                              setMarketTargetPrice(Number(e.target.value))
-                            }
-                            disabled={creating}
-                            min={0}
-                            step={1}
-                            className="w-full pl-7 pr-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
-                            placeholder="100000"
-                          />
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                          e.g. 100000 = $100,000
-                        </p>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Resolution In (Minutes)
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            value={questionDurationMinutes}
-                            onChange={(e) =>
-                              setQuestionDurationMinutes(Number(e.target.value))
-                            }
-                            disabled={creating}
-                            min={10}
-                            max={3153600}
-                            step={10}
-                            className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 pr-16"
-                            placeholder="2880"
-                          />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs pointer-events-none">
-                            min
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                          Admin finalizes ~
-                          {Math.ceil(questionDurationMinutes / 10)} blocks from
-                          now
-                          {currentBlock > 0 && (
-                            <span className="text-orange-400/70 ml-1">
-                              (block ~
-                              {currentBlock +
-                                Math.ceil(questionDurationMinutes / 10)}
-                              )
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Prediction Lock-in (Minutes before resolution)
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          value={predictionLockOffsetMinutes}
-                          onChange={(e) =>
-                            setPredictionLockOffsetMinutes(
-                              Number(e.target.value),
-                            )
-                          }
-                          disabled={creating}
-                          min={10}
-                          max={questionDurationMinutes - 10}
-                          step={10}
-                          className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 pr-16"
-                          placeholder="1440"
-                        />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs pointer-events-none">
-                          min
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Predictions lock ~
-                        {Math.ceil(predictionLockOffsetMinutes / 10)} blocks
-                        before resolution
-                        {currentBlock > 0 && (
-                          <span className="text-orange-400/70 ml-1">
-                            (close block ~
-                            {currentBlock +
-                              Math.ceil(questionDurationMinutes / 10) -
-                              Math.ceil(predictionLockOffsetMinutes / 10)}
-                            )
-                          </span>
-                        )}
-                      </p>
-                      <div className="mt-2 p-2.5 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-xs text-yellow-300">
-                        ⏱ Predictions close{" "}
-                        <strong>
-                          {predictionLockOffsetMinutes} min (~
-                          {Math.ceil(predictionLockOffsetMinutes / 10)} blocks)
-                        </strong>{" "}
-                        before the admin finalizes. Set to 1440 for a 24h
-                        lock-in window.
-                      </div>
-                    </div>
-
-                    {error && (
-                      <div className="p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-sm">
-                        {error}
-                      </div>
-                    )}
-                    {success && (
-                      <div className="p-3 bg-green-500/20 border border-green-500/50 rounded-lg text-green-400 text-sm">
-                        Question transaction sent! Redirecting…
-                      </div>
-                    )}
-
-                    <button
-                      id="add-question-submit"
-                      type="submit"
-                      disabled={
-                        creating ||
-                        !marketQuestion.trim() ||
-                        selectedEventId === 0
-                      }
-                      className="w-full bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold py-3 px-6 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {creating
-                        ? "Waiting for wallet…"
-                        : "Add Question To Event"}
-                    </button>
-                  </form>
-                ) : activeTab === "manage-questions" ? (
-                  <div className="space-y-6">
-                    {/* Helper Banner */}
-                    <div className="rounded-lg px-4 py-3 text-xs border flex items-start gap-2 bg-blue-500/10 border-blue-500/30 text-blue-300">
-                      <span className="text-base leading-none mt-0.5">ℹ️</span>
-                      <div>
-                        <span className="font-semibold">Live Price:</span>{" "}
-                        {pythPriceInfo
-                          ? `$${(pythPriceInfo.price / Math.pow(10, -pythPriceInfo.expo)).toFixed(2)}`
-                          : "Fetching..."}
-                        {" — Click "}
-                        <strong>⚡ Finalize Question</strong> to automatically
-                        resolve questions using this price.
-                      </div>
-                    </div>
-                    {events.length === 0 ? (
-                      <p className="text-gray-400 text-sm text-center py-8">
-                        No events on-chain yet.
-                      </p>
-                    ) : (
-                      events.map((event) => {
-                        const mks = eventQuestions[event.id] ?? [];
-                        const allFinal =
-                          event.questionCount > 0 &&
-                          event.finalizedQuestionCount === event.questionCount;
-                        return (
-                          <div
-                            key={event.id}
-                            className="border border-gray-700 rounded-xl p-4"
-                          >
-                            <div className="flex items-start justify-between mb-3">
-                              <div>
-                                <p className="font-semibold text-white">
-                                  {event.title}
-                                  <span className="text-gray-500 text-xs ml-2">
-                                    #{event.id}
-                                  </span>
-                                </p>
-                                <p className="text-xs text-gray-400">
-                                  {event.finalizedQuestionCount}/
-                                  {event.questionCount} finalized
-                                  {" · "}closes #{event.endBlock}
-                                  {" · "}
-                                  <span
-                                    className={
-                                      event.isActive
-                                        ? "text-green-400"
-                                        : "text-gray-500"
-                                    }
-                                  >
-                                    {event.isActive ? "OPEN" : "CLOSED"}
-                                  </span>
-                                </p>
-                              </div>
-                              {event.isActive && allFinal && (
-                                <button
-                                  disabled={
-                                    pendingAction === `close-${event.id}`
-                                  }
-                                  onClick={async () => {
-                                    setPendingAction(`close-${event.id}`);
-                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                    const { openContractCall } =
-                                      (await import("@stacks/connect")) as any;
-                                    await openContractCall({
-                                      ...closeEventTxOptions(event.id),
-                                      onFinish: () => {
-                                        setPendingAction(null);
-                                        getAllEvents()
-                                          .then((evs) => setEvents(evs))
-                                          .catch(console.error);
-                                      },
-                                      onCancel: () => setPendingAction(null),
-                                    });
-                                  }}
-                                  className="ml-3 text-xs px-3 py-1.5 rounded-md bg-red-500/10 border border-red-500/40 text-red-400 hover:bg-red-500/20 transition disabled:opacity-50 shrink-0"
-                                >
-                                  {pendingAction === `close-${event.id}`
-                                    ? "Wait…"
-                                    : "🔒 Close Event"}
-                                </button>
-                              )}
-                            </div>
-
-                            {mks.length === 0 ? (
-                              <p className="text-xs text-gray-500 pl-1">
-                                No questions yet.
-                              </p>
-                            ) : (
-                              <ul className="space-y-2">
-                                {mks.map((question) => {
-                                  const isPastClose =
-                                    currentBlock > 0 &&
-                                    currentBlock >= question.closeBlock;
-                                  const canFinalize =
-                                    question.status === "open" && isPastClose;
-                                  const isFinalizing =
-                                    pendingAction === `finalize-${question.id}`;
-
-                                  return (
-                                    <li
-                                      key={question.id}
-                                      className="flex items-start justify-between bg-gray-900/50 rounded-lg px-3 py-3 text-sm gap-3"
-                                    >
-                                      <div className="flex-1 min-w-0">
-                                        <p className="text-white truncate font-medium">
-                                          {question.question}
-                                        </p>
-                                        <p className="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-x-2">
-                                          <span
-                                            className={
-                                              question.status === "open"
-                                                ? canFinalize
-                                                  ? "text-yellow-400"
-                                                  : "text-green-400"
-                                                : "text-blue-400"
-                                            }
-                                          >
-                                            {question.status === "open"
-                                              ? canFinalize
-                                                ? "⏰ Ready to Finalize"
-                                                : "🟢 Open"
-                                              : "✅ Final"}
-                                          </span>
-                                          <span>
-                                            Close #{question.closeBlock}
-                                          </span>
-                                          {question.status === "final" &&
-                                            question.oraclePrice > 0 && (
-                                              <span className="text-orange-400">
-                                                Oracle: $
-                                                {question.oraclePrice.toLocaleString()}
-                                                {" · "}
-                                                <span
-                                                  className={
-                                                    question.finalOutcome
-                                                      ? "text-green-400"
-                                                      : "text-red-400"
-                                                  }
-                                                >
-                                                  {question.finalOutcome
-                                                    ? "YES ✓"
-                                                    : "NO ✗"}
-                                                </span>
-                                              </span>
-                                            )}
-                                        </p>
-                                      </div>
-                                      <div className="flex flex-col gap-2 shrink-0 items-end">
-                                        {canFinalize ? (
-                                          <>
-                                            <button
-                                              disabled={isFinalizing}
-                                              onClick={() =>
-                                                handleFinalize(question.id)
-                                              }
-                                              className="text-xs px-3 py-1.5 rounded-md bg-orange-500/10 border border-orange-500/40 text-orange-400 hover:bg-orange-500/20 transition disabled:opacity-50"
-                                            >
-                                              {isFinalizing
-                                                ? "Finalizing…"
-                                                : "⚡ Finalize Question"}
-                                            </button>
-                                            <span className="text-[10px] text-gray-500 italic text-right max-w-[120px]">
-                                              Auto-fetches live BTC price
-                                            </span>
-                                          </>
-                                        ) : question.status === "final" ? (
-                                          <span className="text-xs text-blue-400/70 italic">
-                                            Finalized
-                                          </span>
-                                        ) : (
-                                          <span className="text-xs text-gray-500 italic">
-                                            Awaiting close
-                                          </span>
-                                        )}
-                                      </div>
-                                    </li>
-                                  );
-                                })}
-                              </ul>
-                            )}
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          )}
         </main>
         <Footer />
       </div>
+    );
+
+  if (address?.toLowerCase() !== ADMIN.toLowerCase())
+    return (
+      <div className="relative pt-20 min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
+        <Header />
+        <main className="container mx-auto px-4 py-20 text-center">
+          <div className="max-w-md mx-auto bg-red-900/20 border border-red-900/50 rounded-2xl p-10">
+            <h2 className="text-red-400 font-bold text-xl mb-4">
+              Unauthorized
+            </h2>
+            <p className="text-gray-300 text-sm mb-2">Connected as:</p>
+            <code className="text-gray-400 text-xs break-all">{address}</code>
+            <p className="text-gray-500 text-sm mt-4">
+              Only the contract owner can create events.
+            </p>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+
+  return (
+    <div className="relative pt-20 min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
+      <Header />
+      <main className="container mx-auto px-4 py-12 max-w-xl">
+        <div className="text-center mb-10">
+          <h1 className="text-4xl font-bold text-white mb-3">
+            Create Public Event
+          </h1>
+          <p className="text-gray-400">
+            Admin only · Calls{" "}
+            <code className="text-orange-400">createPublicEvent</code> on Celo
+          </p>
+        </div>
+
+        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700 p-8">
+          {isSuccess ? (
+            <div className="text-center py-8">
+              <div className="text-5xl mb-4">🎉</div>
+              <p className="text-green-400 font-bold text-xl mb-2">
+                Event Created!
+              </p>
+              <p className="text-gray-400 text-sm mb-6">
+                Transaction confirmed on Celo Sepolia
+              </p>
+              <button
+                onClick={() => router.push("/events")}
+                className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-8 rounded-lg"
+              >
+                View Events →
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleCreate} className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Event Name *
+                </label>
+                <input
+                  type="text"
+                  value={eventName}
+                  onChange={(e) => setEventName(e.target.value)}
+                  maxLength={64}
+                  placeholder="e.g. Premier League Week 10"
+                  className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Starts in (minutes)
+                  </label>
+                  <input
+                    type="number"
+                    value={startOffset}
+                    onChange={(e) => setStartOffset(Number(e.target.value))}
+                    min={5}
+                    className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Users can join before this
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Duration (days)
+                  </label>
+                  <input
+                    type="number"
+                    value={durationDays}
+                    onChange={(e) => setDurationDays(Number(e.target.value))}
+                    min={1}
+                    className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Entry Fee (cUSD)
+                </label>
+                <input
+                  type="number"
+                  value={entryFee}
+                  onChange={(e) => setEntryFee(e.target.value)}
+                  min={1}
+                  step={0.5}
+                  className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Scoring Rule
+                </label>
+                <select
+                  value={scoringRule}
+                  onChange={(e) => setScoringRule(Number(e.target.value))}
+                  className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value={0}>Exact Score Only (5 pts)</option>
+                  <option value={1}>Outcome Only (3 pts)</option>
+                  <option value={2}>
+                    Both — Score + Outcome (up to 8 pts)
+                  </option>
+                </select>
+              </div>
+
+              {error && (
+                <div className="p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-sm">
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={pending}
+                className="w-full bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold py-3 px-6 rounded-lg transition-all disabled:opacity-50"
+              >
+                {pending ? "Waiting for wallet…" : "Create Event On-Chain"}
+              </button>
+            </form>
+          )}
+        </div>
+      </main>
+      <Footer />
     </div>
   );
 }

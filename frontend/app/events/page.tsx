@@ -1,132 +1,81 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getAllEvents, getQuestionsForEvent } from "@/lib/stacks";
-import type { ChainEvent, EventFilter, ChainQuestion } from "@/lib/types";
-import EventCard from "@/components/EventCard";
+import { useWallet } from "@/contexts/WalletContext";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { useWallet } from "@/contexts/WalletContext";
-import { HIRO_API } from "@/lib/contracts";
+import { fetchEvents } from "@/lib/api";
+import type { TrueCallEvent, EventFilter } from "@/lib/types";
+import { formatDistanceToNow } from "date-fns";
+import { useRouter } from "next/navigation";
+
+function statusColor(status: string) {
+  if (status === "OPEN")
+    return "bg-green-500/20 text-green-400 border-green-500/50";
+  if (status === "RESOLVED")
+    return "bg-blue-500/20 text-blue-400 border-blue-500/50";
+  return "bg-gray-500/20 text-gray-400 border-gray-500/50";
+}
 
 export default function EventsPage() {
-  const { stxAddress: userAddress } = useWallet();
-  const [events, setEvents] = useState<ChainEvent[]>([]);
-  const [questions, setQuestions] = useState<Record<number, ChainQuestion[]>>({});
+  const router = useRouter();
+  const { address } = useWallet();
+  const [events, setEvents] = useState<TrueCallEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<EventFilter>("all");
-  const [currentBlock, setCurrentBlock] = useState<number>(0);
 
   useEffect(() => {
-    loadEvents();
-    // Fetch current block height for dispute window calculations
-    fetch(`${HIRO_API}/v2/info`)
-      .then((r) => r.json())
-      .then((info) => setCurrentBlock(info.burn_block_height ?? 0))
-      .catch(console.error);
+    load();
   }, []);
 
-  const loadEvents = async () => {
+  const load = async () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await getAllEvents();
-      setEvents(data);
-
-      // Fetch markets for all events
-      const questionsData: Record<number, ChainQuestion[]> = {};
-      await Promise.all(
-        data.map(async (event) => {
-          const evQuestions = await getQuestionsForEvent(event.id);
-          questionsData[event.id] = evQuestions;
-        }),
-      );
-      setQuestions(questionsData);
-    } catch (err) {
-      console.error("Failed to load events:", err);
-      setError("Failed to load on-chain events. Please try again.");
+      setEvents(await fetchEvents());
+    } catch {
+      setError("Failed to load events. Is the backend running?");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleJoinEvent = (event: ChainEvent) => {
-    // Left empty since navigation is handled in EventCard directly via router
-  };
-
-  const filteredEvents = events.filter((e) => {
+  const filtered = events.filter((e) => {
     if (filter === "all") return true;
-    if (filter === "open") return e.isActive;
-    if (filter === "closed")
-      return !e.isActive && e.finalizedQuestionCount < e.questionCount;
-    if (filter === "settled")
-      return !e.isActive && e.finalizedQuestionCount === e.questionCount;
+    if (filter === "open") return e.status === "OPEN";
+    if (filter === "resolved") return e.status === "RESOLVED";
+    if (filter === "cancelled") return e.status === "CANCELLED";
     return true;
   });
 
-  const filterButtons: { key: EventFilter; label: string }[] = [
+  const filters: { key: EventFilter; label: string }[] = [
     { key: "all", label: "All Events" },
     { key: "open", label: "Open" },
-    { key: "closed", label: "Closed" },
-    { key: "settled", label: "Settled" },
+    { key: "resolved", label: "Resolved" },
+    { key: "cancelled", label: "Cancelled" },
   ];
 
   return (
     <div className="relative pt-20 min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
-      {/* Background */}
-      <div className="absolute inset-0 w-full h-full z-0 opacity-10">
-        <svg
-          className="w-full h-full"
-          viewBox="0 0 1000 1000"
-          preserveAspectRatio="xMidYMid slice"
-        >
-          <defs>
-            <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#f97316" stopOpacity="0.3" />
-              <stop offset="100%" stopColor="#eab308" stopOpacity="0.2" />
-            </linearGradient>
-          </defs>
-          <path
-            d="M100,200 Q300,100 500,200 T900,200"
-            stroke="url(#g)"
-            strokeWidth="2"
-            fill="none"
-          />
-          <path
-            d="M200,500 Q400,350 700,500 T1000,450"
-            stroke="url(#g)"
-            strokeWidth="2"
-            fill="none"
-          />
-          <path
-            d="M0,750 Q250,600 500,750 T1000,700"
-            stroke="url(#g)"
-            strokeWidth="2"
-            fill="none"
-          />
-        </svg>
-      </div>
-
       <div className="relative z-10">
         <Header />
         <main className="container mx-auto px-4 py-12">
-          {/* Page Header */}
           <div className="text-center mb-10">
             <h1 className="text-5xl font-bold text-white mb-3">
               Prediction Events
             </h1>
             <p className="text-gray-300 text-lg">
-              Earn points for correct answers and win from the prize pool
+              Join an event, predict match scores and outcomes, earn points
             </p>
             <p className="text-xs text-orange-400/70 mt-2">
-              Live data from Stacks testnet 
+              Live data from Celo Sepolia · powered by TrueCall backend
             </p>
           </div>
 
-          {/* Filter Tabs */}
+          {/* Filter tabs */}
           <div className="flex justify-center gap-3 mb-8 flex-wrap">
-            {filterButtons.map(({ key, label }) => (
+            {filters.map(({ key, label }) => (
               <button
                 key={key}
                 onClick={() => setFilter(key)}
@@ -141,11 +90,10 @@ export default function EventsPage() {
             ))}
           </div>
 
-          {/* States */}
           {loading && (
             <div className="text-center py-20">
               <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-500" />
-              <p className="text-gray-400 mt-4">Reading from blockchain…</p>
+              <p className="text-gray-400 mt-4">Loading from backend…</p>
             </div>
           )}
 
@@ -153,7 +101,7 @@ export default function EventsPage() {
             <div className="max-w-md mx-auto bg-red-500/20 border border-red-500/50 rounded-lg p-6 text-center">
               <p className="text-red-400">{error}</p>
               <button
-                onClick={loadEvents}
+                onClick={load}
                 className="mt-4 px-6 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg"
               >
                 Retry
@@ -161,38 +109,77 @@ export default function EventsPage() {
             </div>
           )}
 
-          {!loading &&
-            !error &&
-            (filteredEvents.length === 0 ? (
-              <div className="text-center py-20">
-                <p className="text-gray-400 text-lg">
-                  No events found on-chain yet
-                </p>
-                <p className="text-gray-500 text-sm mt-2">
-                  {filter !== "all"
-                    ? "Try a different filter"
-                    : "Admin can create the first event"}
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredEvents.map((event) => (
-                  <EventCard
-                    key={event.id}
-                    event={event}
-                    questions={questions[event.id] || []}
-                    currentBlock={currentBlock}
-                    userAddress={userAddress}
-                    onJoinEvent={handleJoinEvent}
-                    onRefresh={loadEvents}
-                  />
-                ))}
-              </div>
-            ))}
+          {!loading && !error && filtered.length === 0 && (
+            <div className="text-center py-20">
+              <p className="text-gray-400 text-lg">No events found</p>
+              <p className="text-gray-500 text-sm mt-2">
+                {filter !== "all"
+                  ? "Try a different filter"
+                  : "Admin can create the first event"}
+              </p>
+            </div>
+          )}
+
+          {!loading && !error && filtered.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filtered.map((ev) => (
+                <div
+                  key={ev.eventId}
+                  onClick={() => router.push(`/events/${ev.eventId}`)}
+                  className="bg-gradient-to-br from-gray-800/50 to-gray-900/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700/50 hover:border-orange-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-orange-500/10 cursor-pointer flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-start justify-between mb-4">
+                      <h3 className="text-xl font-bold text-white truncate flex-1 pr-2">
+                        {ev.eventName}
+                      </h3>
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-semibold border shrink-0 ${statusColor(ev.status)}`}
+                      >
+                        {ev.status}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 mb-5 text-sm">
+                      <div className="bg-gray-700/30 rounded-lg p-3">
+                        <p className="text-gray-400 text-xs mb-1">Entry Fee</p>
+                        <p className="text-white font-semibold">
+                          {ev.entryFee} cUSD
+                        </p>
+                      </div>
+                      <div className="bg-gray-700/30 rounded-lg p-3">
+                        <p className="text-gray-400 text-xs mb-1">Prize Pool</p>
+                        <p className="text-orange-400 font-semibold">
+                          {ev.prizePool} cUSD
+                        </p>
+                      </div>
+                      <div className="bg-gray-700/30 rounded-lg p-3">
+                        <p className="text-gray-400 text-xs mb-1">Type</p>
+                        <p className="text-white font-semibold">
+                          {ev.eventType}
+                        </p>
+                      </div>
+                      <div className="bg-gray-700/30 rounded-lg p-3">
+                        <p className="text-gray-400 text-xs mb-1">Ends</p>
+                        <p className="text-white font-semibold text-xs">
+                          {formatDistanceToNow(new Date(ev.endDate * 1000), {
+                            addSuffix: true,
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button className="w-full bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300">
+                    View Event →
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </main>
         <Footer />
       </div>
-
     </div>
   );
 }

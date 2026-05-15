@@ -3,18 +3,15 @@
 import { useWallet } from "@/contexts/WalletContext";
 
 export default function WalletButton() {
-  const { isConnected, stxAddress, connectWallet, disconnectWallet } =
-    useWallet();
+  const { isConnected, address, connectWallet, disconnectWallet } = useWallet();
 
-  const formatAddress = (address: string) => {
-    return `${address.slice(0, 6)}...${address.slice(-4)}`;
-  };
+  const fmt = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
-  if (isConnected && stxAddress) {
+  if (isConnected && address) {
     return (
       <div className="flex items-center gap-2">
-        <div className="hidden sm:block px-3 py-2 bg-gray-800 rounded-lg text-sm text-gray-300">
-          {formatAddress(stxAddress)}
+        <div className="hidden sm:block px-3 py-2 bg-gray-800 rounded-lg text-sm text-gray-300 font-mono">
+          {fmt(address)}
         </div>
         <button
           onClick={disconnectWallet}

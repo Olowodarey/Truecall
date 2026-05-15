@@ -1,28 +1,11 @@
-export function formatEstimatedTime(
-  targetBlock: number,
-  currentBlock: number,
-  questionStatus?: string,
-): string {
-  if (currentBlock <= 0) return "Loading...";
-  const blocksLeft = Math.max(0, targetBlock - currentBlock);
-  if (blocksLeft === 0) {
-    // If on-chain status is still open, the close block passed but admin hasn't finalized yet
-    if (questionStatus === "open") return "Awaiting Finalization";
-    return "Passed";
-  }
+import { formatDistanceToNow } from "date-fns";
 
-  // Stacks block time is ~10 minutes
-  const msLeft = blocksLeft * 10 * 60 * 1000;
-  const date = new Date(Date.now() + msLeft);
-  const formatted = date.toLocaleString("en-US", {
-    timeZone: "UTC",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
+/** Convert a unix timestamp to a human-readable relative time string */
+export function formatTimestamp(ts: number): string {
+  return formatDistanceToNow(new Date(ts * 1000), { addSuffix: true });
+}
 
-  // toLocaleString leaves a comma before the time, e.g. "Mar 11, 03:42 PM"
-  return `${formatted} UTC`;
+/** Shorten an EVM address */
+export function shortAddress(addr: string): string {
+  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
