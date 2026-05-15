@@ -10,7 +10,6 @@ import Footer from "@/components/Footer";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-// Contract owner address on Celo Sepolia (deployer wallet)
 const ADMIN = "0xAB26c86b78DEDb488Bf0cb4FaCe11b048DDeFE5b";
 
 const EVENT_MANAGER = (process.env.NEXT_PUBLIC_EVENT_MANAGER ??
@@ -32,8 +31,6 @@ const ABI = [
   },
 ] as const;
 
-// ─── Scoring rule options ─────────────────────────────────────────────────────
-
 const SCORING_RULES = [
   { value: 0, label: "Exact Score Only", desc: "5 pts for correct score" },
   { value: 1, label: "Outcome Only", desc: "3 pts for correct W/D/L" },
@@ -44,6 +41,30 @@ const SCORING_RULES = [
   },
 ] as const;
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Minimum datetime-local value — 5 minutes from now */
+function minDateTime(offsetMs = 5 * 60 * 1000): string {
+  return new Date(Date.now() + offsetMs).toISOString().slice(0, 16);
+}
+
+function parseWriteError(err: Error): string {
+  const msg = err.message ?? "";
+  if (msg.includes("User rejected") || msg.includes("user rejected"))
+    return "Transaction rejected in wallet";
+  if (msg.includes("insufficient funds"))
+    return "Insufficient CELO for gas fees";
+  if (msg.includes("OnlyOwner") || msg.includes("Ownable"))
+    return "Only the contract owner can create events";
+  if (msg.includes("StartDateInPast"))
+    return "Start date must be in the future";
+  if (msg.includes("EndDateBeforeStart"))
+    return "End date must be after start date";
+  if (msg.includes("FeeTooLow"))
+    return "Entry fee is too low — minimum is 1 cUSD";
+  return "Transaction failed — check your wallet and try again";
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function CreateEventPage() {
@@ -52,26 +73,22 @@ export default function CreateEventPage() {
 
   // Form state
   const [eventName, setEventName] = useState("");
-  const [startOffset, setStartOffset] = useState(60); // minutes from now
-  const [durationDays, setDurationDays] = useState(7);
-  const [entryFee, setEntryFee] = useState("1"); // cUSD
-  const [scoringRule, setScoringRule] = useState(2); // default: BOTH
+  const [startDate, setStartDate] = useState(""); // datetime-local value
+  const [endDate, setEndDate] = useState(""); // datetime-local value
+  const [entryFee, setEntryFee] = useState("1");
+  const [scoringRule, setScoringRule] = useState(2);
   const [formError, setFormError] = useState<string | null>(null);
-  const [txError, setTxError] = useState<string | null>(null);
 
-  // Wagmi hooks
+  // Wagmi
   const {
     writeContract,
     data: txHash,
-    isPending: signing, // wallet popup is open / user hasn't confirmed yet
+    isPending: signing,
     error: writeError,
   } = useWriteContract();
-
-  const {
-    isLoading: confirming, // tx sent, waiting for block confirmation
-    isSuccess,
-  } = useWaitForTransactionReceipt({ hash: txHash });
-
+  const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({
+    hash: txHash,
+  });
   const busy = signing || confirming;
 
   // ── Validation ──────────────────────────────────────────────────────────────
@@ -86,19 +103,34 @@ export default function CreateEventPage() {
       setFormError("Event name must be 64 characters or less");
       return false;
     }
+    if (!startDate) {
+      setFormError("Start date is required");
+      return false;
+    }
+    if (!endDate) {
+      setFormError("End date is required");
+      return false;
+    }
+
     const fee = parseFloat(entryFee);
     if (isNaN(fee) || fee < 1) {
       setFormError("Entry fee must be at least 1 cUSD");
       return false;
     }
-    if (startOffset < 5) {
-      setFormError("Event must start at least 5 minutes from now");
+
+    const startTs = Math.floor(new Date(startDate).getTime() / 1000);
+    const endTs = Math.floor(new Date(endDate).getTime() / 1000);
+    const now = Math.floor(Date.now() / 1000);
+
+    if (startTs <= now) {
+      setFormError("Start date must be in the future");
       return false;
     }
-    if (durationDays < 1) {
-      setFormError("Duration must be at least 1 day");
+    if (endTs <= startTs) {
+      setFormError("End date must be after the start date");
       return false;
     }
+
     return true;
   };
 
@@ -106,14 +138,11 @@ export default function CreateEventPage() {
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
-    setTxError(null);
-
     if (!validate()) return;
 
-    const now = Math.floor(Date.now() / 1000);
-    const startDate = now + startOffset * 60;
-    const endDate = startDate + durationDays * 86400;
-    const feeBigInt = parseUnits(entryFee, 18); // cUSD has 18 decimals
+    const startTs = Math.floor(new Date(startDate).getTime() / 1000);
+    const endTs = Math.floor(new Date(endDate).getTime() / 1000);
+    const feeBigInt = parseUnits(entryFee, 18);
 
     writeContract({
       address: EVENT_MANAGER,
@@ -121,25 +150,16 @@ export default function CreateEventPage() {
       functionName: "createPublicEvent",
       args: [
         eventName.trim(),
-        BigInt(startDate),
-        BigInt(endDate),
+        BigInt(startTs),
+        BigInt(endTs),
         feeBigInt,
         scoringRule,
       ],
     });
   };
 
-  // Show write errors (user rejected, insufficient gas, etc.)
   const displayError =
-    formError ?? txError ?? (writeError ? parseWriteError(writeError) : null);
-
-  // ── Preview ─────────────────────────────────────────────────────────────────
-
-  const now = Math.floor(Date.now() / 1000);
-  const startTs = now + startOffset * 60;
-  const endTs = startTs + durationDays * 86400;
-  const startStr = new Date(startTs * 1000).toLocaleString();
-  const endStr = new Date(endTs * 1000).toLocaleString();
+    formError ?? (writeError ? parseWriteError(writeError) : null);
 
   // ── Guards ──────────────────────────────────────────────────────────────────
 
@@ -192,8 +212,6 @@ export default function CreateEventPage() {
       </div>
     );
 
-  // ── Success screen ───────────────────────────────────────────────────────────
-
   if (isSuccess)
     return (
       <div className="relative pt-20 min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
@@ -227,8 +245,8 @@ export default function CreateEventPage() {
               <button
                 onClick={() => {
                   setEventName("");
-                  setStartOffset(60);
-                  setDurationDays(7);
+                  setStartDate("");
+                  setEndDate("");
                   setEntryFee("1");
                   setScoringRule(2);
                 }}
@@ -284,43 +302,52 @@ export default function CreateEventPage() {
               </p>
             </div>
 
-            {/* Start + Duration */}
-            <div className="grid grid-cols-2 gap-4">
+            {/* Date pickers */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Starts in (minutes)
+                  Start Date & Time <span className="text-red-400">*</span>
                 </label>
                 <input
-                  type="number"
-                  value={startOffset}
-                  onChange={(e) => setStartOffset(Number(e.target.value))}
-                  min={5}
+                  type="datetime-local"
+                  value={startDate}
+                  onChange={(e) => {
+                    setStartDate(e.target.value);
+                    setFormError(null);
+                  }}
+                  min={minDateTime()}
                   disabled={busy}
-                  className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
+                  className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 transition [color-scheme:dark]"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Users join before this
+                  Users can join before this
                 </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Duration (days)
+                  End Date & Time <span className="text-red-400">*</span>
                 </label>
                 <input
-                  type="number"
-                  value={durationDays}
-                  onChange={(e) => setDurationDays(Number(e.target.value))}
-                  min={1}
+                  type="datetime-local"
+                  value={endDate}
+                  onChange={(e) => {
+                    setEndDate(e.target.value);
+                    setFormError(null);
+                  }}
+                  min={startDate || minDateTime(10 * 60 * 1000)}
                   disabled={busy}
-                  className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
+                  className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 transition [color-scheme:dark]"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  All matches must finish before this
+                </p>
               </div>
             </div>
 
             {/* Entry Fee */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Entry Fee (cUSD)
+                Entry Fee (cUSD) <span className="text-red-400">*</span>
               </label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-medium">
@@ -385,11 +412,15 @@ export default function CreateEventPage() {
               </p>
               <div className="flex justify-between">
                 <span className="text-gray-500">Starts</span>
-                <span className="text-white">{startStr}</span>
+                <span className="text-white">
+                  {startDate ? new Date(startDate).toLocaleString() : "—"}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Ends</span>
-                <span className="text-white">{endStr}</span>
+                <span className="text-white">
+                  {endDate ? new Date(endDate).toLocaleString() : "—"}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Entry Fee</span>
@@ -417,7 +448,7 @@ export default function CreateEventPage() {
               </div>
             )}
 
-            {/* Status messages */}
+            {/* Status */}
             {signing && (
               <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg text-blue-400 text-sm text-center">
                 ⏳ Waiting for wallet confirmation…
@@ -447,7 +478,7 @@ export default function CreateEventPage() {
           </form>
         </div>
 
-        {/* Tx hash link while confirming */}
+        {/* Tx link while confirming */}
         {txHash && !isSuccess && (
           <p className="text-center mt-4 text-xs text-gray-500">
             Tx:{" "}
@@ -465,23 +496,4 @@ export default function CreateEventPage() {
       <Footer />
     </div>
   );
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function parseWriteError(err: Error): string {
-  const msg = err.message ?? "";
-  if (msg.includes("User rejected") || msg.includes("user rejected"))
-    return "Transaction rejected in wallet";
-  if (msg.includes("insufficient funds"))
-    return "Insufficient CELO for gas fees";
-  if (msg.includes("OnlyOwner") || msg.includes("Ownable"))
-    return "Only the contract owner can create events";
-  if (msg.includes("StartDateInPast"))
-    return "Start date must be in the future — increase the start offset";
-  if (msg.includes("EndDateBeforeStart"))
-    return "End date must be after start date";
-  if (msg.includes("FeeTooLow"))
-    return "Entry fee is too low — minimum is 1 cUSD";
-  return "Transaction failed — check your wallet and try again";
 }
