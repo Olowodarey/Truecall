@@ -1,0 +1,20 @@
+{
+  "network": "Celo Sepolia Testnet",
+  "chainId": 11142220,
+  "deployedAt": "2026-05-15",
+  "deployer": "0xAB26c86b78DEDb488Bf0cb4FaCe11b048DDeFE5b",
+  "proxies": {
+    "TrueCall": "0x0dC5C876A54B6E28A7Bf3A9593Ff5136df00CC26",
+    "EventManager": "0xc76C9f0Bb031245ce145c0b7B822E2d0A1267e89",
+    "Leaderboard": "0xa95a8c09A3873C4429E69Ba05fA74dF852f539e2"
+  },
+  "implementations": {
+    "TrueCall": "0x53b67B6a622010867F60f25852A19eC6743Ed3A9",
+    "EventManager": "0x0710942A221Bc7a963C4a0f2978416D6eAF01338",
+    "Leaderboard": "0xbc65f3244EC455c66B2cC3c1d40Fe6685Dc10aa7"
+  },
+  "tokens": {
+    "cUSD": "0x874069Fa1Eb16D44d622F2e0Ca25eeA172369bC1"
+  },
+  "explorer": "https://celo-sepolia.blockscout.com"
+}
