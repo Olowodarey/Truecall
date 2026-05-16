@@ -110,7 +110,7 @@ export class BlockchainService implements OnModuleInit {
       return {
         success: true,
         transactionHash: receipt.transactionHash,
-        blockNumber: receipt.blockNumber,
+        blockNumber: Number(receipt.blockNumber),
         eventName,
         startDate,
         endDate,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@/contexts/WalletContext";
 import Header from "@/components/Header";
@@ -485,9 +485,9 @@ export default function CreateEventPage() {
             )}
 
             {/* Status */}
-            {signing && (
+            {busy && (
               <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg text-blue-400 text-sm text-center">
-                ⏳ Waiting for wallet confirmation…
+                ⏳ Creating event…
               </div>
             )}
 

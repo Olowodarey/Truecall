@@ -1,4 +1,19 @@
 export const EVENT_MANAGER_ABI = [
+  // ─── Write functions ──────────────────────────────────────────────────────
+  {
+    type: 'function',
+    name: 'createPublicEvent',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'eventName', type: 'string' },
+      { name: 'startDate', type: 'uint256' },
+      { name: 'endDate', type: 'uint256' },
+      { name: 'entryFee', type: 'uint256' },
+      { name: 'scoringRule', type: 'uint8' },
+    ],
+    outputs: [{ name: 'eventId', type: 'uint256' }],
+  },
+
   // ─── Events ───────────────────────────────────────────────────────────────
   {
     type: 'event',
