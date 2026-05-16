@@ -13,17 +13,15 @@ const ADMIN = "0xAB26c86b78DEDb488Bf0cb4FaCe11b048DDeFE5b";
 // Token options on Celo Sepolia
 const TOKENS = [
   {
+    value: "native",
+    label: "CELO",
+    symbol: "CELO",
+  },
+  {
     value: "0x874069Fa1Eb16D44d622F2e0Ca25eeA172369bC1",
     label: "cUSD",
     symbol: "cUSD",
   },
-  // Note: CELO is the native token and doesn't have an ERC-20 address
-  // Use wrapped CELO (wCELO) instead if needed
-  // {
-  //   value: "0x2DEf4285787d58a2f811AF50739649C0aB58f6D9",
-  //   label: "Wrapped CELO",
-  //   symbol: "wCELO",
-  // },
 ] as const;
 
 const SCORING_RULES = [
