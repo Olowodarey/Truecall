@@ -84,6 +84,12 @@ export class BlockchainService implements OnModuleInit {
 
       const feeBigInt = parseUnits(entryFee, 18);
 
+      // Use address(0) for native CELO, or the provided token address
+      const tokenAddress =
+        entryToken === 'native'
+          ? '0x0000000000000000000000000000000000000000'
+          : (entryToken as `0x${string}`);
+
       const hash = await this.walletClient.writeContract({
         account: this.account,
         chain: celoSepolia,
@@ -94,7 +100,7 @@ export class BlockchainService implements OnModuleInit {
           eventName,
           BigInt(startDate),
           BigInt(endDate),
-          entryToken as `0x${string}`,
+          tokenAddress,
           feeBigInt,
           scoringRule,
         ],
