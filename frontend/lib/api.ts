@@ -42,15 +42,6 @@ export const fetchEvents = (): Promise<TrueCallEvent[]> => get("/events");
 export const fetchEvent = (id: number): Promise<TrueCallEvent> =>
   get(`/events/${id}`);
 
-export const joinEvent = (
-  id: number,
-  userAddress: string,
-): Promise<{
-  success: boolean;
-  transactionHash: string;
-  blockNumber: number;
-}> => post(`/events/${id}/join`, { eventId: id, userAddress });
-
 export const fetchEventMatches = (id: number): Promise<TrueCallMatch[]> =>
   get(`/events/${id}/matches`);
 

@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useWallet } from "@/contexts/WalletContext";
+import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { parseUnits } from "viem";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import {
@@ -12,7 +14,6 @@ import {
   fetchHasJoined,
   fetchClaimable,
   fetchWinners,
-  joinEvent,
 } from "@/lib/api";
 import { CONTRACTS, EVENT_MANAGER_ABI } from "@/lib/contracts";
 import type {
@@ -39,7 +40,11 @@ export default function EventDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
-  const [claiming, setClaiming] = useState(false);
+
+  // wagmi write hook for joining
+  const { writeContract: join, data: joinTx } = useWriteContract();
+  const { isLoading: joinLoading, isSuccess: joinDone } =
+    useWaitForTransactionReceipt({ hash: joinTx });
 
   const load = useCallback(async () => {
     if (isNaN(eventId)) return;
@@ -74,18 +79,24 @@ export default function EventDetailPage() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (joinDone) load();
+  }, [joinDone, load]);
+
   const handleJoin = async () => {
-    if (!event || !address) return;
-    try {
-      setJoining(true);
-      await joinEvent(event.eventId, address);
-      // Reload event data after joining
-      await load();
-    } catch (err) {
-      setError(`Failed to join event: ${err}`);
-    } finally {
-      setJoining(false);
-    }
+    if (!event) return;
+    const amount = parseUnits(event.entryFee, 18);
+    const isNativeCELO =
+      event.entryToken.toLowerCase() ===
+      "0x0000000000000000000000000000000000000000";
+
+    join({
+      address: CONTRACTS.EVENT_MANAGER,
+      abi: EVENT_MANAGER_ABI,
+      functionName: "joinEvent",
+      args: [BigInt(eventId)],
+      ...(isNativeCELO && { value: amount }),
+    });
   };
 
   if (loading)
@@ -206,10 +217,10 @@ export default function EventDetailPage() {
               </p>
               <button
                 onClick={handleJoin}
-                disabled={joining}
+                disabled={joinLoading}
                 className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-lg transition disabled:opacity-50"
               >
-                {joining
+                {joinLoading
                   ? "Joining…"
                   : `Join (${event.entryFee} ${getTokenSymbol(event.entryToken)})`}
               </button>
