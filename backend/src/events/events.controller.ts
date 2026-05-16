@@ -5,6 +5,7 @@ import {
   Param,
   ParseIntPipe,
   Body,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { BlockchainService } from '../blockchain/blockchain.service';
@@ -33,14 +34,20 @@ export class EventsController {
   @Post()
   @ApiOperation({ summary: 'Create a new public event (admin only)' })
   async createEvent(@Body() dto: CreateEventDto) {
-    return await this.blockchain.createPublicEvent(
-      dto.eventName,
-      dto.startDate,
-      dto.endDate,
-      dto.entryToken,
-      dto.entryFee,
-      dto.scoringRule,
-    );
+    try {
+      return await this.blockchain.createPublicEvent(
+        dto.eventName,
+        dto.startDate,
+        dto.endDate,
+        dto.entryToken,
+        dto.entryFee,
+        dto.scoringRule,
+      );
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : 'Failed to create event',
+      );
+    }
   }
 
   @Get()
@@ -106,8 +113,16 @@ export class EventsController {
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: JoinEventDto,
   ) {
-    return await this.blockchain.joinEvent(id, dto.userAddress);
+    try {
+      return await this.blockchain.joinEvent(id, dto.userAddress);
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : 'Failed to join event',
+      );
+    }
   }
+
+  @Get(':id/claimable/:address')
   @ApiOperation({ summary: 'Get claimable prize amount for a user' })
   @ApiParam({ name: 'id', type: Number })
   @ApiParam({ name: 'address', type: String })
