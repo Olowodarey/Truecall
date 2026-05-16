@@ -92,13 +92,28 @@ export default function EventDetailPage() {
   const handleJoin = async () => {
     if (!event) return;
     const amount = parseUnits(event.entryFee, 18);
-    // Step 1: approve cUSD spend
-    approve({
-      address: CONTRACTS.CUSD,
-      abi: CUSD_ABI,
-      functionName: "approve",
-      args: [CONTRACTS.EVENT_MANAGER, amount],
-    });
+    const isNativeCELO =
+      event.entryToken.toLowerCase() ===
+      "0x0000000000000000000000000000000000000000";
+
+    if (isNativeCELO) {
+      // For native CELO, send value directly
+      join({
+        address: CONTRACTS.EVENT_MANAGER,
+        abi: EVENT_MANAGER_ABI,
+        functionName: "joinEvent",
+        args: [BigInt(eventId)],
+        value: amount,
+      });
+    } else {
+      // For ERC-20 tokens, approve first
+      approve({
+        address: event.entryToken as `0x${string}`,
+        abi: CUSD_ABI,
+        functionName: "approve",
+        args: [CONTRACTS.EVENT_MANAGER, amount],
+      });
+    }
   };
 
   // After approve confirms, join the event
@@ -243,11 +258,23 @@ export default function EventDetailPage() {
                 disabled={approving || joining}
                 className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-lg transition disabled:opacity-50"
               >
-                {approving
-                  ? "Approving…"
-                  : joining
-                    ? "Joining…"
-                    : `Join (${event.entryFee} ${getTokenSymbol(event.entryToken)})`}
+                {(() => {
+                  const isNativeCELO =
+                    event.entryToken.toLowerCase() ===
+                    "0x0000000000000000000000000000000000000000";
+                  const tokenSymbol = getTokenSymbol(event.entryToken);
+                  if (isNativeCELO) {
+                    return joining
+                      ? "Joining…"
+                      : `Join (${event.entryFee} ${tokenSymbol})`;
+                  } else {
+                    return approving
+                      ? `Approving ${tokenSymbol}…`
+                      : joining
+                        ? "Joining…"
+                        : `Join (${event.entryFee} ${tokenSymbol})`;
+                  }
+                })()}
               </button>
             </div>
           ) : hasJoined && isOpen ? (

@@ -87,7 +87,7 @@ export default function CreateEventPage() {
 
     const fee = parseFloat(entryFee);
     if (isNaN(fee) || fee < 1) {
-      setFormError("Entry fee must be at least 1 cUSD");
+      setFormError("Entry fee must be at least 1");
       return false;
     }
 
@@ -448,7 +448,7 @@ export default function CreateEventPage() {
                 />
               </div>
               <p className="text-xs text-gray-500 mt-1">
-                Minimum 1 cUSD · ONE-TIME per user
+                Minimum 1 · ONE-TIME per user
               </p>
             </div>
 

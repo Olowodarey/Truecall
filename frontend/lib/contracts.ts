@@ -12,19 +12,19 @@ export const CONTRACTS = {
 // ─── EventManager ABI (write functions only — reads go through backend) ───────
 
 export const EVENT_MANAGER_ABI = [
-  // Join public event
+  // Join public event (payable for native CELO, nonpayable for ERC-20)
   {
     type: "function",
     name: "joinEvent",
-    stateMutability: "nonpayable",
+    stateMutability: "payable",
     inputs: [{ name: "eventId", type: "uint256" }],
     outputs: [],
   },
-  // Join private event
+  // Join private event (payable for native CELO, nonpayable for ERC-20)
   {
     type: "function",
     name: "joinPrivateEvent",
-    stateMutability: "nonpayable",
+    stateMutability: "payable",
     inputs: [
       { name: "eventId", type: "uint256" },
       { name: "inviteCode", type: "string" },
