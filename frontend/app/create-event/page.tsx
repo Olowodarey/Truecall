@@ -17,11 +17,13 @@ const TOKENS = [
     label: "cUSD",
     symbol: "cUSD",
   },
-  {
-    value: "0xF194afDf50B5cc74333e565feC200f8a66fDC50b",
-    label: "CELO",
-    symbol: "CELO",
-  },
+  // Note: CELO is the native token and doesn't have an ERC-20 address
+  // Use wrapped CELO (wCELO) instead if needed
+  // {
+  //   value: "0x2DEf4285787d58a2f811AF50739649C0aB58f6D9",
+  //   label: "Wrapped CELO",
+  //   symbol: "wCELO",
+  // },
 ] as const;
 
 const SCORING_RULES = [
