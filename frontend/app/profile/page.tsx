@@ -13,6 +13,7 @@ import {
   fetchGlobalPoints,
 } from "@/lib/api";
 import type { TrueCallEvent } from "@/lib/types";
+import { getTokenSymbol } from "@/lib/utils";
 
 interface EventStat {
   event: TrueCallEvent;
@@ -183,7 +184,8 @@ export default function ProfilePage() {
                         </span>
                       </div>
                       <p className="text-gray-500 text-xs">
-                        {event.prizePool} cUSD prize pool
+                        {event.prizePool} {getTokenSymbol(event.entryToken)}{" "}
+                        prize pool
                       </p>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">

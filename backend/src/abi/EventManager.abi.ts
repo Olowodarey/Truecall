@@ -101,6 +101,7 @@ export const EVENT_MANAGER_ABI = [
           { name: 'eventName', type: 'string' },
           { name: 'startDate', type: 'uint256' },
           { name: 'endDate', type: 'uint256' },
+          { name: 'entryToken', type: 'address' },
           { name: 'entryFee', type: 'uint256' },
           { name: 'prizePool', type: 'uint256' },
           { name: 'maxParticipants', type: 'uint256' },

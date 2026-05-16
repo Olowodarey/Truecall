@@ -13,10 +13,11 @@ export interface TrueCallEvent {
   eventName: string;
   startDate: number; // unix timestamp
   endDate: number; // unix timestamp
-  entryFee: string; // cUSD formatted (e.g. "1.0")
-  prizePool: string; // cUSD formatted
+  entryFee: string; // formatted (e.g. "1.0")
+  prizePool: string; // formatted
   maxParticipants: number; // 0 = unlimited
   status: EventStatus;
+  entryToken: string; // token address (0x0... for native CELO)
 }
 
 export interface TrueCallMatch {

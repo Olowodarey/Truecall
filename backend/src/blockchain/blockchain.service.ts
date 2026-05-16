@@ -151,6 +151,7 @@ export class BlockchainService implements OnModuleInit {
       prizePool: formatUnits(ev.prizePool, 18),
       maxParticipants: Number(ev.maxParticipants),
       status: EVENT_STATUS[ev.status] ?? ev.status,
+      entryToken: ev.entryToken,
     };
   }
 

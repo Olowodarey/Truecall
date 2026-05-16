@@ -8,6 +8,7 @@ import { fetchEvents } from "@/lib/api";
 import type { TrueCallEvent, EventFilter } from "@/lib/types";
 import { formatDistanceToNow } from "date-fns";
 import { useRouter } from "next/navigation";
+import { getTokenSymbol } from "@/lib/utils";
 
 function statusColor(status: string) {
   if (status === "OPEN")
@@ -122,59 +123,66 @@ export default function EventsPage() {
 
           {!loading && !error && filtered.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filtered.map((ev) => (
-                <div
-                  key={ev.eventId}
-                  onClick={() => router.push(`/events/${ev.eventId}`)}
-                  className="bg-gradient-to-br from-gray-800/50 to-gray-900/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700/50 hover:border-orange-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-orange-500/10 cursor-pointer flex flex-col justify-between"
-                >
-                  <div>
-                    <div className="flex items-start justify-between mb-4">
-                      <h3 className="text-xl font-bold text-white truncate flex-1 pr-2">
-                        {ev.eventName}
-                      </h3>
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-semibold border shrink-0 ${statusColor(ev.status)}`}
-                      >
-                        {ev.status}
-                      </span>
+              {filtered.map((ev) => {
+                const tokenSymbol = getTokenSymbol(ev.entryToken);
+                return (
+                  <div
+                    key={ev.eventId}
+                    onClick={() => router.push(`/events/${ev.eventId}`)}
+                    className="bg-gradient-to-br from-gray-800/50 to-gray-900/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700/50 hover:border-orange-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-orange-500/10 cursor-pointer flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="flex items-start justify-between mb-4">
+                        <h3 className="text-xl font-bold text-white truncate flex-1 pr-2">
+                          {ev.eventName}
+                        </h3>
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-semibold border shrink-0 ${statusColor(ev.status)}`}
+                        >
+                          {ev.status}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 mb-5 text-sm">
+                        <div className="bg-gray-700/30 rounded-lg p-3">
+                          <p className="text-gray-400 text-xs mb-1">
+                            Entry Fee
+                          </p>
+                          <p className="text-white font-semibold">
+                            {ev.entryFee} {tokenSymbol}
+                          </p>
+                        </div>
+                        <div className="bg-gray-700/30 rounded-lg p-3">
+                          <p className="text-gray-400 text-xs mb-1">
+                            Prize Pool
+                          </p>
+                          <p className="text-orange-400 font-semibold">
+                            {ev.prizePool} {tokenSymbol}
+                          </p>
+                        </div>
+                        <div className="bg-gray-700/30 rounded-lg p-3">
+                          <p className="text-gray-400 text-xs mb-1">Type</p>
+                          <p className="text-white font-semibold">
+                            {ev.eventType}
+                          </p>
+                        </div>
+                        <div className="bg-gray-700/30 rounded-lg p-3">
+                          <p className="text-gray-400 text-xs mb-1">Ends</p>
+                          <p className="text-white font-semibold text-xs">
+                            {formatDistanceToNow(new Date(ev.endDate * 1000), {
+                              addSuffix: true,
+                            })}
+                          </p>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 mb-5 text-sm">
-                      <div className="bg-gray-700/30 rounded-lg p-3">
-                        <p className="text-gray-400 text-xs mb-1">Entry Fee</p>
-                        <p className="text-white font-semibold">
-                          {ev.entryFee} cUSD
-                        </p>
-                      </div>
-                      <div className="bg-gray-700/30 rounded-lg p-3">
-                        <p className="text-gray-400 text-xs mb-1">Prize Pool</p>
-                        <p className="text-orange-400 font-semibold">
-                          {ev.prizePool} cUSD
-                        </p>
-                      </div>
-                      <div className="bg-gray-700/30 rounded-lg p-3">
-                        <p className="text-gray-400 text-xs mb-1">Type</p>
-                        <p className="text-white font-semibold">
-                          {ev.eventType}
-                        </p>
-                      </div>
-                      <div className="bg-gray-700/30 rounded-lg p-3">
-                        <p className="text-gray-400 text-xs mb-1">Ends</p>
-                        <p className="text-white font-semibold text-xs">
-                          {formatDistanceToNow(new Date(ev.endDate * 1000), {
-                            addSuffix: true,
-                          })}
-                        </p>
-                      </div>
-                    </div>
+                    <button className="w-full bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300">
+                      View Event →
+                    </button>
                   </div>
-
-                  <button className="w-full bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300">
-                    View Event →
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </main>

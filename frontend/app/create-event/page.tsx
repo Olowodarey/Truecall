@@ -54,7 +54,7 @@ export default function CreateEventPage() {
 
   const [eventName, setEventName] = useState("");
   const [entryFee, setEntryFee] = useState("1");
-  const [entryToken, setEntryToken] = useState(TOKENS[0].value);
+  const [entryToken, setEntryToken] = useState<string>(TOKENS[0].value);
   const [scoringRule, setScoringRule] = useState(2);
   const [formError, setFormError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);

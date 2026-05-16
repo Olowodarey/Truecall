@@ -22,6 +22,7 @@ import type {
   LeaderboardEntry,
 } from "@/lib/types";
 import { formatDistanceToNow, format } from "date-fns";
+import { getTokenSymbol } from "@/lib/utils";
 
 const MEDALS = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
 
@@ -178,35 +179,41 @@ export default function EventDetailPage() {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            {[
-              { label: "Entry Fee", value: `${event.entryFee} cUSD` },
-              {
-                label: "Prize Pool",
-                value: `${event.prizePool} cUSD`,
-                highlight: true,
-              },
-              { label: "Type", value: event.eventType },
-              {
-                label: "Ends",
-                value: formatDistanceToNow(new Date(event.endDate * 1000), {
-                  addSuffix: true,
-                }),
-              },
-            ].map(({ label, value, highlight }) => (
-              <div
-                key={label}
-                className="bg-gray-900/50 rounded-xl p-4 border border-gray-700/30"
-              >
-                <p className="text-gray-400 text-xs mb-1 uppercase font-semibold">
-                  {label}
-                </p>
-                <p
-                  className={`font-medium text-lg ${highlight ? "text-orange-400" : "text-white"}`}
+            {(() => {
+              const tokenSymbol = getTokenSymbol(event.entryToken);
+              return [
+                {
+                  label: "Entry Fee",
+                  value: `${event.entryFee} ${tokenSymbol}`,
+                },
+                {
+                  label: "Prize Pool",
+                  value: `${event.prizePool} ${tokenSymbol}`,
+                  highlight: true,
+                },
+                { label: "Type", value: event.eventType },
+                {
+                  label: "Ends",
+                  value: formatDistanceToNow(new Date(event.endDate * 1000), {
+                    addSuffix: true,
+                  }),
+                },
+              ].map(({ label, value, highlight }) => (
+                <div
+                  key={label}
+                  className="bg-gray-900/50 rounded-xl p-4 border border-gray-700/30"
                 >
-                  {value}
-                </p>
-              </div>
-            ))}
+                  <p className="text-gray-400 text-xs mb-1 uppercase font-semibold">
+                    {label}
+                  </p>
+                  <p
+                    className={`font-medium text-lg ${highlight ? "text-orange-400" : "text-white"}`}
+                  >
+                    {value}
+                  </p>
+                </div>
+              ));
+            })()}
           </div>
 
           {/* CTA */}
@@ -228,8 +235,8 @@ export default function EventDetailPage() {
                 Join this Event
               </h3>
               <p className="text-gray-400 text-sm mb-6">
-                Pay {event.entryFee} cUSD once — predict all matches, earn
-                points
+                Pay {event.entryFee} {getTokenSymbol(event.entryToken)} once —
+                predict all matches, earn points
               </p>
               <button
                 onClick={handleJoin}
@@ -237,10 +244,10 @@ export default function EventDetailPage() {
                 className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-lg transition disabled:opacity-50"
               >
                 {approving
-                  ? "Approving cUSD…"
+                  ? "Approving…"
                   : joining
                     ? "Joining…"
-                    : `Join (${event.entryFee} cUSD)`}
+                    : `Join (${event.entryFee} ${getTokenSymbol(event.entryToken)})`}
               </button>
             </div>
           ) : hasJoined && isOpen ? (
@@ -250,7 +257,8 @@ export default function EventDetailPage() {
           ) : isResolved && parseFloat(claimable) > 0 ? (
             <div className="p-5 bg-green-900/20 rounded-xl border border-green-500/30 text-center">
               <p className="text-green-400 font-semibold mb-3">
-                🎉 You have {claimable} cUSD to claim!
+                🎉 You have {claimable} {getTokenSymbol(event.entryToken)} to
+                claim!
               </p>
               <button
                 onClick={handleClaim}
