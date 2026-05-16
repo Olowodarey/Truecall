@@ -15,7 +15,7 @@ import {
   fetchClaimable,
   fetchWinners,
 } from "@/lib/api";
-import { CONTRACTS, EVENT_MANAGER_ABI, CUSD_ABI } from "@/lib/contracts";
+import { CONTRACTS, EVENT_MANAGER_ABI } from "@/lib/contracts";
 import type {
   TrueCallEvent,
   TrueCallMatch,
@@ -41,13 +41,8 @@ export default function EventDetailPage() {
   const [error, setError] = useState<string | null>(null);
 
   // wagmi write hooks
-  const { writeContract: approve, data: approveTx } = useWriteContract();
   const { writeContract: join, data: joinTx } = useWriteContract();
   const { writeContract: claim, data: claimTx } = useWriteContract();
-
-  const { isLoading: approving } = useWaitForTransactionReceipt({
-    hash: approveTx,
-  });
   const { isLoading: joining, isSuccess: joinDone } =
     useWaitForTransactionReceipt({ hash: joinTx });
   const { isLoading: claiming, isSuccess: claimDone } =
@@ -96,37 +91,14 @@ export default function EventDetailPage() {
       event.entryToken.toLowerCase() ===
       "0x0000000000000000000000000000000000000000";
 
-    if (isNativeCELO) {
-      // For native CELO, send value directly
-      join({
-        address: CONTRACTS.EVENT_MANAGER,
-        abi: EVENT_MANAGER_ABI,
-        functionName: "joinEvent",
-        args: [BigInt(eventId)],
-        value: amount,
-      });
-    } else {
-      // For ERC-20 tokens, approve first
-      approve({
-        address: event.entryToken as `0x${string}`,
-        abi: CUSD_ABI,
-        functionName: "approve",
-        args: [CONTRACTS.EVENT_MANAGER, amount],
-      });
-    }
+    join({
+      address: CONTRACTS.EVENT_MANAGER,
+      abi: EVENT_MANAGER_ABI,
+      functionName: "joinEvent",
+      args: [BigInt(eventId)],
+      ...(isNativeCELO && { value: amount }),
+    });
   };
-
-  // After approve confirms, join the event
-  useEffect(() => {
-    if (!approving && approveTx) {
-      join({
-        address: CONTRACTS.EVENT_MANAGER,
-        abi: EVENT_MANAGER_ABI,
-        functionName: "joinEvent",
-        args: [BigInt(eventId)],
-      });
-    }
-  }, [approving, approveTx]);
 
   const handleClaim = () => {
     claim({
@@ -255,26 +227,12 @@ export default function EventDetailPage() {
               </p>
               <button
                 onClick={handleJoin}
-                disabled={approving || joining}
+                disabled={joining}
                 className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-lg transition disabled:opacity-50"
               >
-                {(() => {
-                  const isNativeCELO =
-                    event.entryToken.toLowerCase() ===
-                    "0x0000000000000000000000000000000000000000";
-                  const tokenSymbol = getTokenSymbol(event.entryToken);
-                  if (isNativeCELO) {
-                    return joining
-                      ? "Joining…"
-                      : `Join (${event.entryFee} ${tokenSymbol})`;
-                  } else {
-                    return approving
-                      ? `Approving ${tokenSymbol}…`
-                      : joining
-                        ? "Joining…"
-                        : `Join (${event.entryFee} ${tokenSymbol})`;
-                  }
-                })()}
+                {joining
+                  ? "Joining…"
+                  : `Join (${event.entryFee} ${getTokenSymbol(event.entryToken)})`}
               </button>
             </div>
           ) : hasJoined && isOpen ? (
