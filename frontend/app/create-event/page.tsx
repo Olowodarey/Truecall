@@ -389,27 +389,42 @@ export default function CreateEventPage() {
 
             {/* Entry Token */}
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-gray-300 mb-3">
                 Entry Token <span className="text-red-400">*</span>
               </label>
-              <select
-                value={entryToken}
-                onChange={(e) => {
-                  setEntryToken(e.target.value);
-                  setFormError(null);
-                }}
-                disabled={busy}
-                className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 transition scheme-dark"
-              >
+              <div className="space-y-2">
                 {TOKENS.map((token) => (
-                  <option key={token.value} value={token.value}>
-                    {token.label} ({token.symbol})
-                  </option>
+                  <label
+                    key={token.value}
+                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition ${
+                      entryToken === token.value
+                        ? "border-orange-500 bg-orange-500/10"
+                        : "border-gray-600 bg-gray-700/30 hover:border-gray-500"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="entryToken"
+                      value={token.value}
+                      checked={entryToken === token.value}
+                      onChange={() => {
+                        setEntryToken(token.value);
+                        setFormError(null);
+                      }}
+                      disabled={busy}
+                      className="accent-orange-500"
+                    />
+                    <div>
+                      <p
+                        className={`text-sm font-semibold ${entryToken === token.value ? "text-orange-400" : "text-white"}`}
+                      >
+                        {token.label}
+                      </p>
+                      <p className="text-xs text-gray-400">{token.symbol}</p>
+                    </div>
+                  </label>
                 ))}
-              </select>
-              <p className="text-xs text-gray-500 mt-1">
-                Select which token to use for entry fees
-              </p>
+              </div>
             </div>
 
             {/* Entry Fee */}
