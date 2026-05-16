@@ -1,6 +1,13 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createPublicClient, http, formatUnits } from 'viem';
+import {
+  createPublicClient,
+  createWalletClient,
+  http,
+  formatUnits,
+  parseUnits,
+} from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 import { EVENT_MANAGER_ABI } from '../abi/EventManager.abi';
 import { LEADERBOARD_ABI } from '../abi/Leaderboard.abi';
 
@@ -25,14 +32,18 @@ const OUTCOME_LABEL = ['HOME_WIN', 'DRAW', 'AWAY_WIN'] as const;
 @Injectable()
 export class BlockchainService implements OnModuleInit {
   private readonly logger = new Logger(BlockchainService.name);
-  private client: ReturnType<typeof createPublicClient>;
+  private publicClient: ReturnType<typeof createPublicClient>;
+  private walletClient: ReturnType<typeof createWalletClient>;
   private eventManagerAddress: `0x${string}`;
   private leaderboardAddress: `0x${string}`;
+  private account: ReturnType<typeof privateKeyToAccount>;
 
   constructor(private config: ConfigService) {}
 
   onModuleInit() {
     const rpcUrl = this.config.get<string>('CELO_RPC_URL')!;
+    const privateKey = this.config.get<string>('PRIVATE_KEY')! as `0x${string}`;
+
     this.eventManagerAddress = this.config.get<string>(
       'EVENT_MANAGER_ADDRESS',
     )! as `0x${string}`;
@@ -40,19 +51,78 @@ export class BlockchainService implements OnModuleInit {
       'LEADERBOARD_ADDRESS',
     )! as `0x${string}`;
 
-    this.client = createPublicClient({
+    this.account = privateKeyToAccount(privateKey);
+
+    this.publicClient = createPublicClient({
       chain: celoSepolia,
       transport: http(rpcUrl),
     }) as any;
 
+    this.walletClient = createWalletClient({
+      chain: celoSepolia,
+      transport: http(rpcUrl),
+      account: this.account,
+    }) as any;
+
     this.logger.log(`Connected to Celo Sepolia`);
     this.logger.log(`EventManager: ${this.eventManagerAddress}`);
+    this.logger.log(`Admin Account: ${this.account.address}`);
   }
 
   // ─── Events ────────────────────────────────────────────────────────────────
 
+  async createPublicEvent(
+    eventName: string,
+    startDate: number,
+    endDate: number,
+    entryFee: string, // in cUSD
+    scoringRule: number,
+  ) {
+    try {
+      this.logger.log(`Creating event: ${eventName}`);
+
+      const feeBigInt = parseUnits(entryFee, 18);
+
+      const hash = await this.walletClient.writeContract({
+        address: this.eventManagerAddress,
+        abi: EVENT_MANAGER_ABI,
+        functionName: 'createPublicEvent',
+        args: [
+          eventName,
+          BigInt(startDate),
+          BigInt(endDate),
+          feeBigInt,
+          scoringRule,
+        ],
+      });
+
+      this.logger.log(`Transaction sent: ${hash}`);
+
+      // Wait for transaction receipt
+      const receipt = await this.publicClient.waitForTransactionReceipt({
+        hash,
+      });
+
+      this.logger.log(`Transaction confirmed: ${receipt.transactionHash}`);
+
+      return {
+        success: true,
+        transactionHash: receipt.transactionHash,
+        blockNumber: receipt.blockNumber,
+        eventName,
+        startDate,
+        endDate,
+        entryFee,
+        scoringRule,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to create event: ${error}`);
+      throw error;
+    }
+  }
+
   async getEvent(eventId: number) {
-    const ev = await this.client.readContract({
+    const ev = await this.publicClient.readContract({
       address: this.eventManagerAddress,
       abi: EVENT_MANAGER_ABI,
       functionName: 'getEvent',
@@ -74,7 +144,7 @@ export class BlockchainService implements OnModuleInit {
   }
 
   async getTotalEvents(): Promise<number> {
-    const next = await this.client.readContract({
+    const next = await this.publicClient.readContract({
       address: this.eventManagerAddress,
       abi: EVENT_MANAGER_ABI,
       functionName: 'nextEventId',
@@ -93,7 +163,7 @@ export class BlockchainService implements OnModuleInit {
   // ─── Matches ───────────────────────────────────────────────────────────────
 
   async getMatch(matchId: number) {
-    const m = await this.client.readContract({
+    const m = await this.publicClient.readContract({
       address: this.eventManagerAddress,
       abi: EVENT_MANAGER_ABI,
       functionName: 'getMatch',
@@ -118,7 +188,7 @@ export class BlockchainService implements OnModuleInit {
   }
 
   async getEventMatches(eventId: number) {
-    const matchIds = await this.client.readContract({
+    const matchIds = await this.publicClient.readContract({
       address: this.eventManagerAddress,
       abi: EVENT_MANAGER_ABI,
       functionName: 'getEventMatches',
@@ -133,7 +203,7 @@ export class BlockchainService implements OnModuleInit {
   // ─── Participants ──────────────────────────────────────────────────────────
 
   async getParticipants(eventId: number): Promise<string[]> {
-    const participants = await this.client.readContract({
+    const participants = await this.publicClient.readContract({
       address: this.eventManagerAddress,
       abi: EVENT_MANAGER_ABI,
       functionName: 'getParticipants',
@@ -143,7 +213,7 @@ export class BlockchainService implements OnModuleInit {
   }
 
   async getParticipantCount(eventId: number): Promise<number> {
-    const count = await this.client.readContract({
+    const count = await this.publicClient.readContract({
       address: this.eventManagerAddress,
       abi: EVENT_MANAGER_ABI,
       functionName: 'getParticipantCount',
@@ -153,7 +223,7 @@ export class BlockchainService implements OnModuleInit {
   }
 
   async hasJoined(eventId: number, user: string): Promise<boolean> {
-    return this.client.readContract({
+    return this.publicClient.readContract({
       address: this.eventManagerAddress,
       abi: EVENT_MANAGER_ABI,
       functionName: 'hasJoined',
@@ -164,7 +234,7 @@ export class BlockchainService implements OnModuleInit {
   // ─── Predictions ───────────────────────────────────────────────────────────
 
   async getPrediction(matchId: number, user: string) {
-    const p = (await this.client.readContract({
+    const p = (await this.publicClient.readContract({
       address: this.eventManagerAddress,
       abi: EVENT_MANAGER_ABI,
       functionName: 'getPrediction',
@@ -187,7 +257,7 @@ export class BlockchainService implements OnModuleInit {
   // ─── Winners ───────────────────────────────────────────────────────────────
 
   async getWinners(eventId: number): Promise<string[]> {
-    const winners = (await this.client.readContract({
+    const winners = (await this.publicClient.readContract({
       address: this.eventManagerAddress,
       abi: EVENT_MANAGER_ABI,
       functionName: 'getWinners',
@@ -199,7 +269,7 @@ export class BlockchainService implements OnModuleInit {
   }
 
   async getClaimable(eventId: number, user: string): Promise<string> {
-    const amount = (await this.client.readContract({
+    const amount = (await this.publicClient.readContract({
       address: this.eventManagerAddress,
       abi: EVENT_MANAGER_ABI,
       functionName: 'claimable',
@@ -211,7 +281,7 @@ export class BlockchainService implements OnModuleInit {
   // ─── Leaderboard ───────────────────────────────────────────────────────────
 
   async getEventLeaderboard(eventId: number, limit = 10) {
-    const entries = (await this.client.readContract({
+    const entries = (await this.publicClient.readContract({
       address: this.leaderboardAddress,
       abi: LEADERBOARD_ABI,
       functionName: 'getTopN',
@@ -227,7 +297,7 @@ export class BlockchainService implements OnModuleInit {
   }
 
   async getUserEventRank(eventId: number, user: string) {
-    const result = (await this.client.readContract({
+    const result = (await this.publicClient.readContract({
       address: this.leaderboardAddress,
       abi: LEADERBOARD_ABI,
       functionName: 'getUserEventRank',
@@ -238,7 +308,7 @@ export class BlockchainService implements OnModuleInit {
   }
 
   async getGlobalLeaderboard(limit = 10) {
-    const entries = (await this.client.readContract({
+    const entries = (await this.publicClient.readContract({
       address: this.leaderboardAddress,
       abi: LEADERBOARD_ABI,
       functionName: 'getGlobalTopN',
@@ -253,7 +323,7 @@ export class BlockchainService implements OnModuleInit {
   }
 
   async getGlobalPoints(user: string): Promise<number> {
-    const points = (await this.client.readContract({
+    const points = (await this.publicClient.readContract({
       address: this.leaderboardAddress,
       abi: LEADERBOARD_ABI,
       functionName: 'getGlobalPoints',

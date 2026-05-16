@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@/contexts/WalletContext";
-import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useWriteContract } from "wagmi";
 import { parseUnits } from "viem";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -43,9 +43,8 @@ const SCORING_RULES = [
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Minimum datetime-local value — 5 minutes from now */
-function minDateTime(offsetMs = 5 * 60 * 1000): string {
-  return new Date(Date.now() + offsetMs).toISOString().slice(0, 16);
+function todayStr() {
+  return new Date().toISOString().split("T")[0];
 }
 
 function parseWriteError(err: Error): string {
@@ -71,10 +70,13 @@ export default function CreateEventPage() {
   const router = useRouter();
   const { isConnected, address, connectWallet } = useWallet();
 
-  // Form state
+  // Separate date + time state for each field
+  const [startDateVal, setStartDateVal] = useState(""); // "YYYY-MM-DD"
+  const [startTimeVal, setStartTimeVal] = useState("09:00");
+  const [endDateVal, setEndDateVal] = useState(""); // "YYYY-MM-DD"
+  const [endTimeVal, setEndTimeVal] = useState("23:00");
+
   const [eventName, setEventName] = useState("");
-  const [startDate, setStartDate] = useState(""); // datetime-local value
-  const [endDate, setEndDate] = useState(""); // datetime-local value
   const [entryFee, setEntryFee] = useState("1");
   const [scoringRule, setScoringRule] = useState(2);
   const [formError, setFormError] = useState<string | null>(null);
@@ -85,11 +87,38 @@ export default function CreateEventPage() {
     data: txHash,
     isPending: signing,
     error: writeError,
+    status: writeStatus,
   } = useWriteContract();
-  const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({
-    hash: txHash,
-  });
-  const busy = signing || confirming;
+  const busy = signing;
+
+  // Log transaction when sent
+  useEffect(() => {
+    if (txHash) {
+      console.log("✅ Transaction Hash:", txHash);
+      console.log(
+        "🔗 Blockscout Link:",
+        `https://celo-sepolia.blockscout.com/tx/${txHash}`,
+      );
+    }
+  }, [txHash]);
+
+  // Log write errors
+  useEffect(() => {
+    if (writeError) {
+      console.error("❌ Write Error:", writeError);
+    }
+  }, [writeError]);
+
+  // Log write status
+  useEffect(() => {
+    if (writeStatus) {
+      console.log("📝 Write Status:", writeStatus);
+    }
+  }, [writeStatus]);
+
+  // Combined ISO strings for display + conversion
+  const startISO = startDateVal ? `${startDateVal}T${startTimeVal}` : "";
+  const endISO = endDateVal ? `${endDateVal}T${endTimeVal}` : "";
 
   // ── Validation ──────────────────────────────────────────────────────────────
 
@@ -103,11 +132,11 @@ export default function CreateEventPage() {
       setFormError("Event name must be 64 characters or less");
       return false;
     }
-    if (!startDate) {
+    if (!startDateVal) {
       setFormError("Start date is required");
       return false;
     }
-    if (!endDate) {
+    if (!endDateVal) {
       setFormError("End date is required");
       return false;
     }
@@ -118,8 +147,8 @@ export default function CreateEventPage() {
       return false;
     }
 
-    const startTs = Math.floor(new Date(startDate).getTime() / 1000);
-    const endTs = Math.floor(new Date(endDate).getTime() / 1000);
+    const startTs = Math.floor(new Date(startISO).getTime() / 1000);
+    const endTs = Math.floor(new Date(endISO).getTime() / 1000);
     const now = Math.floor(Date.now() / 1000);
 
     if (startTs <= now) {
@@ -140,9 +169,29 @@ export default function CreateEventPage() {
     e.preventDefault();
     if (!validate()) return;
 
-    const startTs = Math.floor(new Date(startDate).getTime() / 1000);
-    const endTs = Math.floor(new Date(endDate).getTime() / 1000);
+    const startTs = Math.floor(new Date(startISO).getTime() / 1000);
+    const endTs = Math.floor(new Date(endISO).getTime() / 1000);
     const feeBigInt = parseUnits(entryFee, 18);
+
+    console.log("=== Creating Event ===");
+    console.log("Event Name:", eventName.trim());
+    console.log(
+      "Start Timestamp:",
+      startTs,
+      new Date(startTs * 1000).toISOString(),
+    );
+    console.log("End Timestamp:", endTs, new Date(endTs * 1000).toISOString());
+    console.log("Entry Fee (wei):", feeBigInt.toString());
+    console.log("Scoring Rule:", scoringRule);
+    console.log("Contract Address:", EVENT_MANAGER);
+    console.log("Function: createPublicEvent");
+    console.log("Args:", [
+      eventName.trim(),
+      BigInt(startTs),
+      BigInt(endTs),
+      feeBigInt,
+      scoringRule,
+    ]);
 
     writeContract({
       address: EVENT_MANAGER,
@@ -212,7 +261,7 @@ export default function CreateEventPage() {
       </div>
     );
 
-  if (isSuccess)
+  if (txHash)
     return (
       <div className="relative pt-20 min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
         <Header />
@@ -223,16 +272,19 @@ export default function CreateEventPage() {
               Event Created!
             </h2>
             <p className="text-green-400 font-medium mb-2">
-              Transaction confirmed on Celo Sepolia
+              Transaction submitted to Celo Sepolia
+            </p>
+            <p className="text-gray-400 text-sm mb-4">
+              Check the transaction on Blockscout to confirm it was mined
             </p>
             {txHash && (
               <a
                 href={`https://celo-sepolia.blockscout.com/tx/${txHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-gray-500 hover:text-orange-400 transition break-all block mb-6"
+                className="text-sm text-orange-400 hover:text-orange-300 transition break-all block mb-6 font-mono"
               >
-                {txHash.slice(0, 20)}…{txHash.slice(-8)} ↗
+                {txHash}
               </a>
             )}
             <div className="flex gap-3 justify-center">
@@ -245,8 +297,10 @@ export default function CreateEventPage() {
               <button
                 onClick={() => {
                   setEventName("");
-                  setStartDate("");
-                  setEndDate("");
+                  setStartDateVal("");
+                  setStartTimeVal("09:00");
+                  setEndDateVal("");
+                  setEndTimeVal("23:00");
                   setEntryFee("1");
                   setScoringRule(2);
                 }}
@@ -302,46 +356,70 @@ export default function CreateEventPage() {
               </p>
             </div>
 
-            {/* Date pickers */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Start Date & Time <span className="text-red-400">*</span>
-                </label>
+            {/* Start Date + Time */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Start Date & Time <span className="text-red-400">*</span>
+              </label>
+              <div className="flex gap-3">
                 <input
-                  type="datetime-local"
-                  value={startDate}
+                  type="date"
+                  value={startDateVal}
                   onChange={(e) => {
-                    setStartDate(e.target.value);
+                    setStartDateVal(e.target.value);
                     setFormError(null);
                   }}
-                  min={minDateTime()}
+                  min={todayStr()}
                   disabled={busy}
-                  className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 transition [color-scheme:dark]"
+                  className="flex-1 px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 transition [color-scheme:dark]"
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Users can join before this
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  End Date & Time <span className="text-red-400">*</span>
-                </label>
                 <input
-                  type="datetime-local"
-                  value={endDate}
+                  type="time"
+                  value={startTimeVal}
                   onChange={(e) => {
-                    setEndDate(e.target.value);
+                    setStartTimeVal(e.target.value);
                     setFormError(null);
                   }}
-                  min={startDate || minDateTime(10 * 60 * 1000)}
                   disabled={busy}
-                  className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 transition [color-scheme:dark]"
+                  className="w-32 px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 transition [color-scheme:dark]"
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  All matches must finish before this
-                </p>
               </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Users can join before this time
+              </p>
+            </div>
+
+            {/* End Date + Time */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                End Date & Time <span className="text-red-400">*</span>
+              </label>
+              <div className="flex gap-3">
+                <input
+                  type="date"
+                  value={endDateVal}
+                  onChange={(e) => {
+                    setEndDateVal(e.target.value);
+                    setFormError(null);
+                  }}
+                  min={startDateVal || todayStr()}
+                  disabled={busy}
+                  className="flex-1 px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 transition [color-scheme:dark]"
+                />
+                <input
+                  type="time"
+                  value={endTimeVal}
+                  onChange={(e) => {
+                    setEndTimeVal(e.target.value);
+                    setFormError(null);
+                  }}
+                  disabled={busy}
+                  className="w-32 px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 transition [color-scheme:dark]"
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                All matches must finish before this time
+              </p>
             </div>
 
             {/* Entry Fee */}
@@ -413,13 +491,23 @@ export default function CreateEventPage() {
               <div className="flex justify-between">
                 <span className="text-gray-500">Starts</span>
                 <span className="text-white">
-                  {startDate ? new Date(startDate).toLocaleString() : "—"}
+                  {startISO
+                    ? new Date(startISO).toLocaleString(undefined, {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      })
+                    : "—"}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Ends</span>
                 <span className="text-white">
-                  {endDate ? new Date(endDate).toLocaleString() : "—"}
+                  {endISO
+                    ? new Date(endISO).toLocaleString(undefined, {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      })
+                    : "—"}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -454,11 +542,6 @@ export default function CreateEventPage() {
                 ⏳ Waiting for wallet confirmation…
               </div>
             )}
-            {confirming && (
-              <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-yellow-400 text-sm text-center">
-                ⛓️ Transaction submitted — waiting for block confirmation…
-              </div>
-            )}
 
             {/* Submit */}
             <button
@@ -469,7 +552,7 @@ export default function CreateEventPage() {
               {busy ? (
                 <>
                   <span className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white" />
-                  {signing ? "Confirm in wallet…" : "Confirming on-chain…"}
+                  Confirm in wallet…
                 </>
               ) : (
                 "Create Event On-Chain"
@@ -477,21 +560,6 @@ export default function CreateEventPage() {
             </button>
           </form>
         </div>
-
-        {/* Tx link while confirming */}
-        {txHash && !isSuccess && (
-          <p className="text-center mt-4 text-xs text-gray-500">
-            Tx:{" "}
-            <a
-              href={`https://celo-sepolia.blockscout.com/tx/${txHash}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-orange-400 hover:underline"
-            >
-              {txHash.slice(0, 16)}…{txHash.slice(-8)} ↗
-            </a>
-          </p>
-        )}
       </main>
       <Footer />
     </div>

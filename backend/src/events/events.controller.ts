@@ -1,11 +1,40 @@
-import { Controller, Get, Param, ParseIntPipe, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Param,
+  ParseIntPipe,
+  Query,
+  Body,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { BlockchainService } from '../blockchain/blockchain.service';
+
+// DTO for creating an event
+class CreateEventDto {
+  eventName: string;
+  startDate: number;
+  endDate: number;
+  entryFee: string; // in cUSD
+  scoringRule: number; // 0=ExactOnly, 1=OutcomeOnly, 2=Both
+}
 
 @ApiTags('Events')
 @Controller('events')
 export class EventsController {
   constructor(private readonly blockchain: BlockchainService) {}
+
+  @Post()
+  @ApiOperation({ summary: 'Create a new public event (admin only)' })
+  async createEvent(@Body() dto: CreateEventDto) {
+    return this.blockchain.createPublicEvent(
+      dto.eventName,
+      dto.startDate,
+      dto.endDate,
+      dto.entryFee,
+      dto.scoringRule,
+    );
+  }
 
   @Get()
   @ApiOperation({ summary: 'Get all events' })
