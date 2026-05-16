@@ -36,7 +36,8 @@ interface IEventManager {
         string eventName;        // e.g., "Premier League Week 10"
         uint256 startDate;       // When event starts (users can join before this)
         uint256 endDate;         // When event ends (all matches must finish before this)
-        uint256 entryFee;        // in cUSD (18 decimals) - ONE-TIME payment
+        address entryToken;      // Token address for entry fee (any Celo native token)
+        uint256 entryFee;        // Entry fee amount (18 decimals) - ONE-TIME payment
         uint256 prizePool;       // accumulated entry fees
         uint256 maxParticipants; // 0 = unlimited (public events)
         EventStatus status;

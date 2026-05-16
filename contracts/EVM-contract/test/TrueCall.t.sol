@@ -165,6 +165,7 @@ contract TrueCallTest is Test {
             "Premier League Week 10",
             block.timestamp + 1 days,  // startDate
             block.timestamp + 8 days,  // endDate
+            MOCK_CUSD,
             1e18, IEventManager.ScoringRule.BOTH
         );
     }
@@ -176,6 +177,7 @@ contract TrueCallTest is Test {
             "Premier League Week 10",
             block.timestamp,           // not in future
             block.timestamp + 7 days,
+            MOCK_CUSD,
             1e18, IEventManager.ScoringRule.BOTH
         );
     }
@@ -187,6 +189,7 @@ contract TrueCallTest is Test {
             "Premier League Week 10",
             block.timestamp + 7 days,
             block.timestamp + 1 days,  // endDate BEFORE startDate
+            MOCK_CUSD,
             1e18, IEventManager.ScoringRule.BOTH
         );
     }
@@ -197,6 +200,7 @@ contract TrueCallTest is Test {
             "Premier League Week 10",
             block.timestamp + 1 days,  // startDate
             block.timestamp + 8 days,  // endDate
+            MOCK_CUSD,
             1e18, IEventManager.ScoringRule.BOTH
         );
 
@@ -216,6 +220,7 @@ contract TrueCallTest is Test {
             "Champions League Predictions",
             block.timestamp + 1 days,  // startDate
             block.timestamp + 8 days,  // endDate
+            MOCK_CUSD,
             2e18, IEventManager.ScoringRule.BOTH,
             10, codeHash
         );
@@ -283,6 +288,7 @@ contract TrueCallTest is Test {
             "Premier League Week 10",
             block.timestamp + 1 days,  // startDate
             block.timestamp + 8 days,  // endDate
+            MOCK_CUSD,
             1e18, IEventManager.ScoringRule.BOTH
         );
 

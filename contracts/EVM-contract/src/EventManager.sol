@@ -222,15 +222,18 @@ contract EventManager is
     /// @param eventName Name of the competition (e.g., "Premier League Week 10")
     /// @param startDate When the event starts (users can join before this)
     /// @param endDate When the event ends
-    /// @param entryFee ONE-TIME entry fee in cUSD
+    /// @param entryToken Token address for entry fee (any Celo native token)
+    /// @param entryFee Entry fee amount in the specified token
     /// @param scoringRule Scoring rule applied to all matches in this event
     function createPublicEvent(
         string calldata eventName,
         uint256 startDate,
         uint256 endDate,
+        address entryToken,
         uint256 entryFee,
         ScoringRule scoringRule
     ) external onlyOwner whenNotPaused returns (uint256 eventId) {
+        require(entryToken != address(0), "Invalid token address");
         _validateEventDates(startDate, endDate, entryFee);
 
         eventId = nextEventId++;
@@ -241,6 +244,7 @@ contract EventManager is
         ev.eventName = eventName;
         ev.startDate = startDate;
         ev.endDate = endDate;
+        ev.entryToken = entryToken;
         ev.entryFee = entryFee;
         ev.status = EventStatus.OPEN;
         ev.scoringRule = scoringRule;
@@ -252,15 +256,18 @@ contract EventManager is
     ///         Creator gets free entry and is auto-joined.
     /// @param inviteCodeHash keccak256 of the plain-text invite code (stored off-chain)
     /// @param maxParticipants 2–100 participants
+    /// @param entryToken Token address for entry fee (any Celo native token)
     function createPrivateEvent(
         string calldata eventName,
         uint256 startDate,
         uint256 endDate,
+        address entryToken,
         uint256 entryFee,
         ScoringRule scoringRule,
         uint256 maxParticipants,
         bytes32 inviteCodeHash
     ) external whenNotPaused returns (uint256 eventId) {
+        require(entryToken != address(0), "Invalid token address");
         _validateEventDates(startDate, endDate, entryFee);
         require(maxParticipants >= 2 && maxParticipants <= 100, "maxParticipants: 2-100");
         require(inviteCodeHash != bytes32(0), "Invalid invite code hash");
@@ -273,6 +280,7 @@ contract EventManager is
         ev.eventName = eventName;
         ev.startDate = startDate;
         ev.endDate = endDate;
+        ev.entryToken = entryToken;
         ev.entryFee = entryFee;
         ev.maxParticipants = maxParticipants;
         ev.status = EventStatus.OPEN;
@@ -570,7 +578,8 @@ contract EventManager is
         hasClaimed[eventId][msg.sender] = true;
         claimable[eventId][msg.sender] = 0;
 
-        cUSD.safeTransfer(msg.sender, amount);
+        IERC20 token = IERC20(ev.entryToken);
+        token.safeTransfer(msg.sender, amount);
         emit PrizeClaimed(eventId, msg.sender, amount);
     }
 
@@ -644,7 +653,8 @@ contract EventManager is
         if (msg.sender == ev.creator) revert NothingToClaim(); // creator had free entry
 
         refundClaimed[eventId][msg.sender] = true;
-        cUSD.safeTransfer(msg.sender, ev.entryFee);
+        IERC20 token = IERC20(ev.entryToken);
+        token.safeTransfer(msg.sender, ev.entryFee);
         emit RefundClaimed(eventId, msg.sender, ev.entryFee);
     }
 
@@ -719,7 +729,8 @@ contract EventManager is
 
     function _collectEntryFee(uint256 eventId, address user) internal {
         Event storage ev = events[eventId];
-        cUSD.safeTransferFrom(user, address(this), ev.entryFee);
+        IERC20 token = IERC20(ev.entryToken);
+        token.safeTransferFrom(user, address(this), ev.entryFee);
         ev.prizePool += ev.entryFee;
     }
 

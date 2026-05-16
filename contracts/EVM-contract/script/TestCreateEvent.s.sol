@@ -10,6 +10,7 @@ import {IEventManager} from "../src/interfaces/IEventManager.sol";
 ///   forge script script/TestCreateEvent.s.sol --rpc-url celo-sepolia --broadcast
 contract TestCreateEvent is Script {
     address constant EVENT_MANAGER_PROXY = 0xc76C9f0Bb031245ce145c0b7B822E2d0A1267e89;
+    address constant CUSD_TOKEN = 0x874069Fa1Eb16D44d622F2e0Ca25eeA172369bC1; // cUSD on Celo Sepolia
 
     function run() external {
         uint256 deployerKey = vm.envUint("PRIVATE_KEY");
@@ -36,6 +37,7 @@ contract TestCreateEvent is Script {
         console.log("  Name: Test Event");
         console.log("  Start:", startDate);
         console.log("  End:", endDate);
+        console.log("  Token:", CUSD_TOKEN);
         console.log("  Fee:", entryFee);
         console.log("  Scoring Rule: BOTH");
 
@@ -43,6 +45,7 @@ contract TestCreateEvent is Script {
             "Test Event",
             startDate,
             endDate,
+            CUSD_TOKEN,
             entryFee,
             IEventManager.ScoringRule.BOTH
         );
