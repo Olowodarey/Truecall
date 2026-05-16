@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useWallet } from "@/contexts/WalletContext";
-import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { parseUnits } from "viem";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -14,6 +13,7 @@ import {
   fetchHasJoined,
   fetchClaimable,
   fetchWinners,
+  joinEventApi,
 } from "@/lib/api";
 import { CONTRACTS, EVENT_MANAGER_ABI } from "@/lib/contracts";
 import type {
@@ -39,12 +39,9 @@ export default function EventDetailPage() {
   const [claimable, setClaimable] = useState("0");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [joining, setJoining] = useState(false);
 
-  // wagmi write hook for joining
-  const { writeContract: join, data: joinTx } = useWriteContract();
-  const { isLoading: joinLoading, isSuccess: joinDone } =
-    useWaitForTransactionReceipt({ hash: joinTx });
+  const [joinLoading, setJoinLoading] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (isNaN(eventId)) return;
@@ -75,28 +72,18 @@ export default function EventDetailPage() {
     }
   }, [eventId, address]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  useEffect(() => {
-    if (joinDone) load();
-  }, [joinDone, load]);
-
   const handleJoin = async () => {
-    if (!event) return;
-    const amount = parseUnits(event.entryFee, 18);
-    const isNativeCELO =
-      event.entryToken.toLowerCase() ===
-      "0x0000000000000000000000000000000000000000";
-
-    join({
-      address: CONTRACTS.EVENT_MANAGER,
-      abi: EVENT_MANAGER_ABI,
-      functionName: "joinEvent",
-      args: [BigInt(eventId)],
-      ...(isNativeCELO && { value: amount }),
-    });
+    if (!event || !address || joinLoading) return;
+    setJoinLoading(true);
+    setJoinError(null);
+    try {
+      await joinEventApi(eventId, address);
+      await load();
+    } catch (err: any) {
+      setJoinError(err.message || "Failed to join via API");
+    } finally {
+      setJoinLoading(false);
+    }
   };
 
   if (loading)
@@ -224,6 +211,19 @@ export default function EventDetailPage() {
                   ? "Joining…"
                   : `Join (${event.entryFee} ${getTokenSymbol(event.entryToken)})`}
               </button>
+              {joinError && (
+                <div className="mt-4 bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-left">
+                  <p className="text-red-400 text-sm mb-2">
+                    ⚠️ {joinError}
+                  </p>
+                  <button
+                    onClick={() => setJoinError(null)}
+                    className="text-xs text-gray-400 hover:text-white underline"
+                  >
+                    Try again
+                  </button>
+                </div>
+              )}
             </div>
           ) : hasJoined && isOpen ? (
             <div className="bg-green-500/10 border border-green-500/30 text-green-400 p-4 rounded-xl text-center font-medium">

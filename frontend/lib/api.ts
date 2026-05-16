@@ -56,6 +56,9 @@ export const fetchHasJoined = (
   address: string,
 ): Promise<JoinedResponse> => get(`/events/${id}/joined/${address}`);
 
+export const joinEventApi = (id: number, address: string): Promise<any> =>
+  post(`/events/${id}/join`, { eventId: id, userAddress: address });
+
 export const fetchClaimable = (
   id: number,
   address: string,
