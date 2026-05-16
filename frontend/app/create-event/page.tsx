@@ -18,7 +18,7 @@ const TOKENS = [
     symbol: "cUSD",
   },
   {
-    value: "0xF194afDf50B5cc74333e565feC200f8a66fDC50B",
+    value: "0xF194afDf50B5cc74333e565feC200f8a66fDC50b",
     label: "CELO",
     symbol: "CELO",
   },
