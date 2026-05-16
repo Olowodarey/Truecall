@@ -10,6 +10,20 @@ import Footer from "@/components/Footer";
 
 const ADMIN = "0xAB26c86b78DEDb488Bf0cb4FaCe11b048DDeFE5b";
 
+// Token options on Celo Sepolia
+const TOKENS = [
+  {
+    value: "0x874069Fa1Eb16D44d622F2e0Ca25eeA172369bC1",
+    label: "cUSD",
+    symbol: "cUSD",
+  },
+  {
+    value: "0xF194afDf50B5cc74333e565feC200f8a66fDC50B",
+    label: "CELO",
+    symbol: "CELO",
+  },
+] as const;
+
 const SCORING_RULES = [
   { value: 0, label: "Exact Score Only", desc: "5 pts for correct score" },
   { value: 1, label: "Outcome Only", desc: "3 pts for correct W/D/L" },
@@ -40,6 +54,7 @@ export default function CreateEventPage() {
 
   const [eventName, setEventName] = useState("");
   const [entryFee, setEntryFee] = useState("1");
+  const [entryToken, setEntryToken] = useState(TOKENS[0].value);
   const [scoringRule, setScoringRule] = useState(2);
   const [formError, setFormError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -109,7 +124,8 @@ export default function CreateEventPage() {
       new Date(startTs * 1000).toISOString(),
     );
     console.log("End Timestamp:", endTs, new Date(endTs * 1000).toISOString());
-    console.log("Entry Fee (cUSD):", entryFee);
+    console.log("Entry Token:", entryToken);
+    console.log("Entry Fee:", entryFee);
     console.log("Scoring Rule:", scoringRule);
 
     setIsLoading(true);
@@ -123,6 +139,7 @@ export default function CreateEventPage() {
             eventName: eventName.trim(),
             startDate: startTs,
             endDate: endTs,
+            entryToken,
             entryFee,
             scoringRule,
           }),
@@ -370,10 +387,36 @@ export default function CreateEventPage() {
               </p>
             </div>
 
+            {/* Entry Token */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Entry Token <span className="text-red-400">*</span>
+              </label>
+              <select
+                value={entryToken}
+                onChange={(e) => {
+                  setEntryToken(e.target.value);
+                  setFormError(null);
+                }}
+                disabled={busy}
+                className="w-full px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 transition scheme-dark"
+              >
+                {TOKENS.map((token) => (
+                  <option key={token.value} value={token.value}>
+                    {token.label} ({token.symbol})
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Select which token to use for entry fees
+              </p>
+            </div>
+
             {/* Entry Fee */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Entry Fee (cUSD) <span className="text-red-400">*</span>
+                Entry Fee ({TOKENS.find((t) => t.value === entryToken)?.symbol}){" "}
+                <span className="text-red-400">*</span>
               </label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-medium">
@@ -459,9 +502,16 @@ export default function CreateEventPage() {
                 </span>
               </div>
               <div className="flex justify-between">
+                <span className="text-gray-500">Entry Token</span>
+                <span className="text-orange-400 font-semibold">
+                  {TOKENS.find((t) => t.value === entryToken)?.label}
+                </span>
+              </div>
+              <div className="flex justify-between">
                 <span className="text-gray-500">Entry Fee</span>
                 <span className="text-orange-400 font-semibold">
-                  {entryFee} cUSD
+                  {entryFee}{" "}
+                  {TOKENS.find((t) => t.value === entryToken)?.symbol}
                 </span>
               </div>
               <div className="flex justify-between">

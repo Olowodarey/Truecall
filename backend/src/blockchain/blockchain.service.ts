@@ -75,7 +75,8 @@ export class BlockchainService implements OnModuleInit {
     eventName: string,
     startDate: number,
     endDate: number,
-    entryFee: string, // in cUSD
+    entryToken: string,
+    entryFee: string, // in token units
     scoringRule: number,
   ) {
     try {
@@ -93,6 +94,7 @@ export class BlockchainService implements OnModuleInit {
           eventName,
           BigInt(startDate),
           BigInt(endDate),
+          entryToken as `0x${string}`,
           feeBigInt,
           scoringRule,
         ],
@@ -114,6 +116,7 @@ export class BlockchainService implements OnModuleInit {
         eventName,
         startDate,
         endDate,
+        entryToken,
         entryFee,
         scoringRule,
       };

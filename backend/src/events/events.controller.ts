@@ -14,7 +14,8 @@ class CreateEventDto {
   eventName: string;
   startDate: number;
   endDate: number;
-  entryFee: string; // in cUSD
+  entryToken: string; // Token address (any Celo native token)
+  entryFee: string; // in token units
   scoringRule: number; // 0=ExactOnly, 1=OutcomeOnly, 2=Both
 }
 
@@ -30,6 +31,7 @@ export class EventsController {
       dto.eventName,
       dto.startDate,
       dto.endDate,
+      dto.entryToken,
       dto.entryFee,
       dto.scoringRule,
     );
