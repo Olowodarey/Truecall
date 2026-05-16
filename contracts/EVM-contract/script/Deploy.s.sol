@@ -52,7 +52,7 @@ contract Deploy is Script {
         EventManager eventManagerImpl = new EventManager();
         bytes memory emInit = abi.encodeCall(EventManager.initialize, (cusd, treasury, deployer));
         ERC1967Proxy eventManagerProxy = new ERC1967Proxy(address(eventManagerImpl), emInit);
-        EventManager eventManager = EventManager(address(eventManagerProxy));
+        EventManager eventManager = EventManager(payable(address(eventManagerProxy)));
         console.log("EventManager impl:  ", address(eventManagerImpl));
         console.log("EventManager proxy: ", address(eventManagerProxy));
 

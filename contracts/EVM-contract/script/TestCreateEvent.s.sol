@@ -22,7 +22,7 @@ contract TestCreateEvent is Script {
 
         vm.startBroadcast(deployerKey);
 
-        EventManager eventManager = EventManager(EVENT_MANAGER_PROXY);
+        EventManager eventManager = EventManager(payable(EVENT_MANAGER_PROXY));
 
         // Create a public event
         // Use future dates (current time is around May 16, 2026)

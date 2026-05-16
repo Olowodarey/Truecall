@@ -48,12 +48,12 @@ contract TrueCallTest is Test {
             )
         ));
 
-        eventManager = EventManager(address(
+        eventManager = EventManager(payable(address(
             new ERC1967Proxy(
                 address(eventManagerImpl),
                 abi.encodeCall(EventManager.initialize, (MOCK_CUSD, treasury, owner))
             )
-        ));
+        )));
 
         truecall = TrueCall(address(
             new ERC1967Proxy(

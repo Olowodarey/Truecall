@@ -188,6 +188,11 @@ contract EventManager is
     /// @dev Only owner can authorize upgrades
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
+    // ─── Receive Native CELO ──────────────────────────────────────────────────
+
+    /// @notice Accept native CELO transfers
+    receive() external payable {}
+
     // ─── Admin Configuration ──────────────────────────────────────────────────
 
     function setLeaderboard(address _leaderboard) external onlyOwner {
@@ -222,7 +227,7 @@ contract EventManager is
     /// @param eventName Name of the competition (e.g., "Premier League Week 10")
     /// @param startDate When the event starts (users can join before this)
     /// @param endDate When the event ends
-    /// @param entryToken Token address for entry fee (any Celo native token)
+    /// @param entryToken Token address for entry fee (address(0) for native CELO, or any ERC-20)
     /// @param entryFee Entry fee amount in the specified token
     /// @param scoringRule Scoring rule applied to all matches in this event
     function createPublicEvent(
@@ -233,7 +238,7 @@ contract EventManager is
         uint256 entryFee,
         ScoringRule scoringRule
     ) external onlyOwner whenNotPaused returns (uint256 eventId) {
-        require(entryToken != address(0), "Invalid token address");
+        // Allow address(0) for native CELO or any valid ERC-20 address
         _validateEventDates(startDate, endDate, entryFee);
 
         eventId = nextEventId++;
@@ -256,7 +261,7 @@ contract EventManager is
     ///         Creator gets free entry and is auto-joined.
     /// @param inviteCodeHash keccak256 of the plain-text invite code (stored off-chain)
     /// @param maxParticipants 2–100 participants
-    /// @param entryToken Token address for entry fee (any Celo native token)
+    /// @param entryToken Token address for entry fee (address(0) for native CELO, or any ERC-20)
     function createPrivateEvent(
         string calldata eventName,
         uint256 startDate,
@@ -267,7 +272,7 @@ contract EventManager is
         uint256 maxParticipants,
         bytes32 inviteCodeHash
     ) external whenNotPaused returns (uint256 eventId) {
-        require(entryToken != address(0), "Invalid token address");
+        // Allow address(0) for native CELO or any valid ERC-20 address
         _validateEventDates(startDate, endDate, entryFee);
         require(maxParticipants >= 2 && maxParticipants <= 100, "maxParticipants: 2-100");
         require(inviteCodeHash != bytes32(0), "Invalid invite code hash");
@@ -342,7 +347,7 @@ contract EventManager is
     // ─── Joining & Predicting ─────────────────────────────────────────────────
 
     /// @notice Join a PUBLIC event (pay ONE-TIME entry fee)
-    function joinEvent(uint256 eventId) external nonReentrant whenNotPaused {
+    function joinEvent(uint256 eventId) external payable nonReentrant whenNotPaused {
         Event storage ev = events[eventId];
 
         if (ev.status != EventStatus.OPEN) revert EventNotOpen();
@@ -361,7 +366,7 @@ contract EventManager is
     function joinPrivateEvent(
         uint256 eventId,
         string calldata inviteCode
-    ) external nonReentrant whenNotPaused {
+    ) external payable nonReentrant whenNotPaused {
         Event storage ev = events[eventId];
 
         if (ev.status != EventStatus.OPEN) revert EventNotOpen();
@@ -578,8 +583,17 @@ contract EventManager is
         hasClaimed[eventId][msg.sender] = true;
         claimable[eventId][msg.sender] = 0;
 
-        IERC20 token = IERC20(ev.entryToken);
-        token.safeTransfer(msg.sender, amount);
+        // Check if entry token is native CELO (address(0))
+        if (ev.entryToken == address(0)) {
+            // Transfer native CELO
+            (bool success, ) = payable(msg.sender).call{value: amount}("");
+            require(success, "CELO transfer failed");
+        } else {
+            // Transfer ERC-20 token
+            IERC20 token = IERC20(ev.entryToken);
+            token.safeTransfer(msg.sender, amount);
+        }
+        
         emit PrizeClaimed(eventId, msg.sender, amount);
     }
 
@@ -653,8 +667,18 @@ contract EventManager is
         if (msg.sender == ev.creator) revert NothingToClaim(); // creator had free entry
 
         refundClaimed[eventId][msg.sender] = true;
-        IERC20 token = IERC20(ev.entryToken);
-        token.safeTransfer(msg.sender, ev.entryFee);
+        
+        // Check if entry token is native CELO (address(0))
+        if (ev.entryToken == address(0)) {
+            // Transfer native CELO
+            (bool success, ) = payable(msg.sender).call{value: ev.entryFee}("");
+            require(success, "CELO transfer failed");
+        } else {
+            // Transfer ERC-20 token
+            IERC20 token = IERC20(ev.entryToken);
+            token.safeTransfer(msg.sender, ev.entryFee);
+        }
+        
         emit RefundClaimed(eventId, msg.sender, ev.entryFee);
     }
 
@@ -729,8 +753,22 @@ contract EventManager is
 
     function _collectEntryFee(uint256 eventId, address user) internal {
         Event storage ev = events[eventId];
-        IERC20 token = IERC20(ev.entryToken);
-        token.safeTransferFrom(user, address(this), ev.entryFee);
+        
+        // Check if entry token is native CELO (address(0))
+        if (ev.entryToken == address(0)) {
+            // Native CELO transfer - msg.value should equal entry fee
+            require(msg.value >= ev.entryFee, "Insufficient CELO sent");
+            // Refund excess CELO if any
+            if (msg.value > ev.entryFee) {
+                (bool success, ) = payable(user).call{value: msg.value - ev.entryFee}("");
+                require(success, "Refund failed");
+            }
+        } else {
+            // ERC-20 token transfer
+            IERC20 token = IERC20(ev.entryToken);
+            token.safeTransferFrom(user, address(this), ev.entryFee);
+        }
+        
         ev.prizePool += ev.entryFee;
     }
 
