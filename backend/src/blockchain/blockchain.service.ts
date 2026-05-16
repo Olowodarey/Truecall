@@ -84,6 +84,8 @@ export class BlockchainService implements OnModuleInit {
       const feeBigInt = parseUnits(entryFee, 18);
 
       const hash = await this.walletClient.writeContract({
+        account: this.account,
+        chain: celoSepolia,
         address: this.eventManagerAddress,
         abi: EVENT_MANAGER_ABI,
         functionName: 'createPublicEvent',

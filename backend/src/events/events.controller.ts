@@ -4,10 +4,9 @@ import {
   Post,
   Param,
   ParseIntPipe,
-  Query,
   Body,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiParam, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { BlockchainService } from '../blockchain/blockchain.service';
 
 // DTO for creating an event
@@ -27,7 +26,7 @@ export class EventsController {
   @Post()
   @ApiOperation({ summary: 'Create a new public event (admin only)' })
   async createEvent(@Body() dto: CreateEventDto) {
-    return this.blockchain.createPublicEvent(
+    return await this.blockchain.createPublicEvent(
       dto.eventName,
       dto.startDate,
       dto.endDate,

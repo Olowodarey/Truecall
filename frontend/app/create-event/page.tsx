@@ -3,33 +3,12 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@/contexts/WalletContext";
-import { useWriteContract } from "wagmi";
-import { parseUnits } from "viem";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const ADMIN = "0xAB26c86b78DEDb488Bf0cb4FaCe11b048DDeFE5b";
-
-const EVENT_MANAGER = (process.env.NEXT_PUBLIC_EVENT_MANAGER ??
-  "0xc76C9f0Bb031245ce145c0b7B822E2d0A1267e89") as `0x${string}`;
-
-const ABI = [
-  {
-    type: "function",
-    name: "createPublicEvent",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "eventName", type: "string" },
-      { name: "startDate", type: "uint256" },
-      { name: "endDate", type: "uint256" },
-      { name: "entryFee", type: "uint256" },
-      { name: "scoringRule", type: "uint8" },
-    ],
-    outputs: [{ name: "eventId", type: "uint256" }],
-  },
-] as const;
 
 const SCORING_RULES = [
   { value: 0, label: "Exact Score Only", desc: "5 pts for correct score" },
@@ -45,23 +24,6 @@ const SCORING_RULES = [
 
 function todayStr() {
   return new Date().toISOString().split("T")[0];
-}
-
-function parseWriteError(err: Error): string {
-  const msg = err.message ?? "";
-  if (msg.includes("User rejected") || msg.includes("user rejected"))
-    return "Transaction rejected in wallet";
-  if (msg.includes("insufficient funds"))
-    return "Insufficient CELO for gas fees";
-  if (msg.includes("OnlyOwner") || msg.includes("Ownable"))
-    return "Only the contract owner can create events";
-  if (msg.includes("StartDateInPast"))
-    return "Start date must be in the future";
-  if (msg.includes("EndDateBeforeStart"))
-    return "End date must be after start date";
-  if (msg.includes("FeeTooLow"))
-    return "Entry fee is too low — minimum is 1 cUSD";
-  return "Transaction failed — check your wallet and try again";
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -80,41 +42,8 @@ export default function CreateEventPage() {
   const [entryFee, setEntryFee] = useState("1");
   const [scoringRule, setScoringRule] = useState(2);
   const [formError, setFormError] = useState<string | null>(null);
-
-  // Wagmi
-  const {
-    writeContract,
-    data: txHash,
-    isPending: signing,
-    error: writeError,
-    status: writeStatus,
-  } = useWriteContract();
-  const busy = signing;
-
-  // Log transaction when sent
-  useEffect(() => {
-    if (txHash) {
-      console.log("✅ Transaction Hash:", txHash);
-      console.log(
-        "🔗 Blockscout Link:",
-        `https://celo-sepolia.blockscout.com/tx/${txHash}`,
-      );
-    }
-  }, [txHash]);
-
-  // Log write errors
-  useEffect(() => {
-    if (writeError) {
-      console.error("❌ Write Error:", writeError);
-    }
-  }, [writeError]);
-
-  // Log write status
-  useEffect(() => {
-    if (writeStatus) {
-      console.log("📝 Write Status:", writeStatus);
-    }
-  }, [writeStatus]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [successTxHash, setSuccessTxHash] = useState<string | null>(null);
 
   // Combined ISO strings for display + conversion
   const startISO = startDateVal ? `${startDateVal}T${startTimeVal}` : "";
@@ -165,15 +94,14 @@ export default function CreateEventPage() {
 
   // ── Submit ──────────────────────────────────────────────────────────────────
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!validate()) return;
 
     const startTs = Math.floor(new Date(startISO).getTime() / 1000);
     const endTs = Math.floor(new Date(endISO).getTime() / 1000);
-    const feeBigInt = parseUnits(entryFee, 18);
 
-    console.log("=== Creating Event ===");
+    console.log("=== Creating Event via Backend ===");
     console.log("Event Name:", eventName.trim());
     console.log(
       "Start Timestamp:",
@@ -181,40 +109,61 @@ export default function CreateEventPage() {
       new Date(startTs * 1000).toISOString(),
     );
     console.log("End Timestamp:", endTs, new Date(endTs * 1000).toISOString());
-    console.log("Entry Fee (wei):", feeBigInt.toString());
+    console.log("Entry Fee (cUSD):", entryFee);
     console.log("Scoring Rule:", scoringRule);
-    console.log("Contract Address:", EVENT_MANAGER);
-    console.log("Function: createPublicEvent");
-    console.log("Args:", [
-      eventName.trim(),
-      BigInt(startTs),
-      BigInt(endTs),
-      feeBigInt,
-      scoringRule,
-    ]);
 
-    writeContract({
-      address: EVENT_MANAGER,
-      abi: ABI,
-      functionName: "createPublicEvent",
-      args: [
-        eventName.trim(),
-        BigInt(startTs),
-        BigInt(endTs),
-        feeBigInt,
-        scoringRule,
-      ],
-    });
+    setIsLoading(true);
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/events`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            eventName: eventName.trim(),
+            startDate: startTs,
+            endDate: endTs,
+            entryFee,
+            scoringRule,
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        setFormError(error.message || "Failed to create event");
+        setIsLoading(false);
+        return;
+      }
+
+      const result = await response.json();
+      console.log("✅ Event created successfully:", result);
+      setSuccessTxHash(result.transactionHash);
+
+      // Show success screen
+      setEventName("");
+      setStartDateVal("");
+      setEndDateVal("");
+      setEntryFee("1");
+      setScoringRule(2);
+
+      // Redirect to events page after 2 seconds
+      setTimeout(() => router.push("/events"), 2000);
+    } catch (error) {
+      console.error("❌ Error creating event:", error);
+      setFormError("Failed to create event. Check console for details.");
+      setIsLoading(false);
+    }
   };
 
-  const displayError =
-    formError ?? (writeError ? parseWriteError(writeError) : null);
+  const displayError = formError;
+  const busy = isLoading;
 
   // ── Guards ──────────────────────────────────────────────────────────────────
 
   if (!isConnected)
     return (
-      <div className="relative pt-20 min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
+      <div className="relative pt-20 min-h-screen bg-linear-to-br from-gray-900 via-black to-gray-900">
         <Header />
         <main className="container mx-auto px-4 py-20 text-center">
           <div className="max-w-md mx-auto bg-gray-800/40 border border-gray-700/50 rounded-2xl p-10">
@@ -225,7 +174,7 @@ export default function CreateEventPage() {
             </p>
             <button
               onClick={connectWallet}
-              className="bg-gradient-to-r from-orange-500 to-yellow-500 text-white font-bold py-3 px-8 rounded-lg hover:from-orange-600 hover:to-yellow-600 transition"
+              className="bg-linear-to-r from-orange-500 to-yellow-500 text-white font-bold py-3 px-8 rounded-lg hover:from-orange-600 hover:to-yellow-600 transition"
             >
               Connect Wallet
             </button>
@@ -237,7 +186,7 @@ export default function CreateEventPage() {
 
   if (address?.toLowerCase() !== ADMIN.toLowerCase())
     return (
-      <div className="relative pt-20 min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
+      <div className="relative pt-20 min-h-screen bg-linear-to-br from-gray-900 via-black to-gray-900">
         <Header />
         <main className="container mx-auto px-4 py-20 text-center">
           <div className="max-w-md mx-auto bg-red-900/20 border border-red-900/50 rounded-2xl p-10">
@@ -261,9 +210,9 @@ export default function CreateEventPage() {
       </div>
     );
 
-  if (txHash)
+  if (successTxHash)
     return (
-      <div className="relative pt-20 min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
+      <div className="relative pt-20 min-h-screen bg-linear-to-br from-gray-900 via-black to-gray-900">
         <Header />
         <main className="container mx-auto px-4 py-20 text-center">
           <div className="max-w-md mx-auto bg-gray-800/40 border border-green-500/30 rounded-2xl p-10">
@@ -277,14 +226,14 @@ export default function CreateEventPage() {
             <p className="text-gray-400 text-sm mb-4">
               Check the transaction on Blockscout to confirm it was mined
             </p>
-            {txHash && (
+            {successTxHash && (
               <a
-                href={`https://celo-sepolia.blockscout.com/tx/${txHash}`}
+                href={`https://celo-sepolia.blockscout.com/tx/${successTxHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-sm text-orange-400 hover:text-orange-300 transition break-all block mb-6 font-mono"
               >
-                {txHash}
+                {successTxHash}
               </a>
             )}
             <div className="flex gap-3 justify-center">
@@ -303,6 +252,7 @@ export default function CreateEventPage() {
                   setEndTimeVal("23:00");
                   setEntryFee("1");
                   setScoringRule(2);
+                  setSuccessTxHash(null);
                 }}
                 className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg transition"
               >
@@ -315,10 +265,8 @@ export default function CreateEventPage() {
       </div>
     );
 
-  // ── Main form ────────────────────────────────────────────────────────────────
-
   return (
-    <div className="relative pt-20 min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
+    <div className="relative pt-20 min-h-screen bg-linear-to-br from-gray-900 via-black to-gray-900">
       <Header />
       <main className="container mx-auto px-4 py-12 max-w-xl">
         <div className="text-center mb-10">
@@ -371,7 +319,7 @@ export default function CreateEventPage() {
                   }}
                   min={todayStr()}
                   disabled={busy}
-                  className="flex-1 px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 transition [color-scheme:dark]"
+                  className="flex-1 px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 transition scheme-dark"
                 />
                 <input
                   type="time"
@@ -381,7 +329,7 @@ export default function CreateEventPage() {
                     setFormError(null);
                   }}
                   disabled={busy}
-                  className="w-32 px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 transition [color-scheme:dark]"
+                  className="w-32 px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 transition scheme-dark"
                 />
               </div>
               <p className="text-xs text-gray-500 mt-1">
@@ -404,7 +352,7 @@ export default function CreateEventPage() {
                   }}
                   min={startDateVal || todayStr()}
                   disabled={busy}
-                  className="flex-1 px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 transition [color-scheme:dark]"
+                  className="flex-1 px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 transition scheme-dark"
                 />
                 <input
                   type="time"
@@ -414,7 +362,7 @@ export default function CreateEventPage() {
                     setFormError(null);
                   }}
                   disabled={busy}
-                  className="w-32 px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 transition [color-scheme:dark]"
+                  className="w-32 px-4 py-3 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 transition scheme-dark"
                 />
               </div>
               <p className="text-xs text-gray-500 mt-1">
@@ -547,12 +495,12 @@ export default function CreateEventPage() {
             <button
               type="submit"
               disabled={busy}
-              className="w-full bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold py-3.5 px-6 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full bg-linear-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold py-3.5 px-6 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {busy ? (
                 <>
                   <span className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white" />
-                  Confirm in wallet…
+                  Creating event…
                 </>
               ) : (
                 "Create Event On-Chain"
