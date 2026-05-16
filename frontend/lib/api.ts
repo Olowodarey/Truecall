@@ -23,12 +23,31 @@ async function get<T>(path: string): Promise<T> {
   return res.json();
 }
 
+async function post<T>(path: string, body: any): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`API error ${res.status}: ${path}`);
+  return res.json();
+}
+
 // ─── Events ───────────────────────────────────────────────────────────────────
 
 export const fetchEvents = (): Promise<TrueCallEvent[]> => get("/events");
 
 export const fetchEvent = (id: number): Promise<TrueCallEvent> =>
   get(`/events/${id}`);
+
+export const joinEvent = (
+  id: number,
+  userAddress: string,
+): Promise<{
+  success: boolean;
+  transactionHash: string;
+  blockNumber: number;
+}> => post(`/events/${id}/join`, { eventId: id, userAddress });
 
 export const fetchEventMatches = (id: number): Promise<TrueCallMatch[]> =>
   get(`/events/${id}/matches`);

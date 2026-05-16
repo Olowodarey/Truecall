@@ -132,6 +132,98 @@ export class BlockchainService implements OnModuleInit {
     }
   }
 
+  async joinEvent(eventId: number, userAddress: string) {
+    try {
+      this.logger.log(`Joining event ${eventId} for user ${userAddress}`);
+
+      const ev = await this.publicClient.readContract({
+        address: this.eventManagerAddress,
+        abi: EVENT_MANAGER_ABI,
+        functionName: 'getEvent',
+        args: [BigInt(eventId)],
+      });
+
+      const entryFee = (ev as any).entryFee as bigint;
+      const entryToken = (ev as any).entryToken as `0x${string}`;
+      const isNativeCELO =
+        entryToken === '0x0000000000000000000000000000000000000000';
+
+      let hash: `0x${string}`;
+
+      if (isNativeCELO) {
+        // For native CELO, send value directly
+        hash = await this.walletClient.writeContract({
+          account: this.account,
+          chain: celoSepolia,
+          address: this.eventManagerAddress,
+          abi: EVENT_MANAGER_ABI,
+          functionName: 'joinEvent',
+          args: [BigInt(eventId)],
+          value: entryFee,
+        });
+      } else {
+        // For ERC-20 tokens, approve first then join
+        // First, approve the token
+        const approveHash = await this.walletClient.writeContract({
+          account: this.account,
+          chain: celoSepolia,
+          address: entryToken,
+          abi: [
+            {
+              type: 'function',
+              name: 'approve',
+              stateMutability: 'nonpayable',
+              inputs: [
+                { name: 'spender', type: 'address' },
+                { name: 'amount', type: 'uint256' },
+              ],
+              outputs: [{ type: 'bool' }],
+            },
+          ],
+          functionName: 'approve',
+          args: [this.eventManagerAddress, entryFee],
+        });
+
+        // Wait for approval to confirm
+        await this.publicClient.waitForTransactionReceipt({
+          hash: approveHash,
+        });
+
+        this.logger.log(`Token approved: ${approveHash}`);
+
+        // Then join the event
+        hash = await this.walletClient.writeContract({
+          account: this.account,
+          chain: celoSepolia,
+          address: this.eventManagerAddress,
+          abi: EVENT_MANAGER_ABI,
+          functionName: 'joinEvent',
+          args: [BigInt(eventId)],
+        });
+      }
+
+      this.logger.log(`Join transaction sent: ${hash}`);
+
+      // Wait for transaction receipt
+      const receipt = await this.publicClient.waitForTransactionReceipt({
+        hash,
+      });
+
+      this.logger.log(`Join confirmed: ${receipt.transactionHash}`);
+
+      return {
+        success: true,
+        transactionHash: receipt.transactionHash,
+        blockNumber: Number(receipt.blockNumber),
+        eventId,
+        userAddress,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to join event: ${error}`);
+      throw error;
+    }
+  }
+
   async getEvent(eventId: number) {
     const ev = await this.publicClient.readContract({
       address: this.eventManagerAddress,

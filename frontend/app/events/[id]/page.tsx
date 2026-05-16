@@ -3,8 +3,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useWallet } from "@/contexts/WalletContext";
-import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { parseUnits } from "viem";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import {
@@ -14,6 +12,7 @@ import {
   fetchHasJoined,
   fetchClaimable,
   fetchWinners,
+  joinEvent,
 } from "@/lib/api";
 import { CONTRACTS, EVENT_MANAGER_ABI } from "@/lib/contracts";
 import type {
@@ -39,14 +38,8 @@ export default function EventDetailPage() {
   const [claimable, setClaimable] = useState("0");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // wagmi write hooks
-  const { writeContract: join, data: joinTx } = useWriteContract();
-  const { writeContract: claim, data: claimTx } = useWriteContract();
-  const { isLoading: joining, isSuccess: joinDone } =
-    useWaitForTransactionReceipt({ hash: joinTx });
-  const { isLoading: claiming, isSuccess: claimDone } =
-    useWaitForTransactionReceipt({ hash: claimTx });
+  const [joining, setJoining] = useState(false);
+  const [claiming, setClaiming] = useState(false);
 
   const load = useCallback(async () => {
     if (isNaN(eventId)) return;
@@ -80,33 +73,19 @@ export default function EventDetailPage() {
   useEffect(() => {
     load();
   }, [load]);
-  useEffect(() => {
-    if (joinDone || claimDone) load();
-  }, [joinDone, claimDone]);
 
   const handleJoin = async () => {
-    if (!event) return;
-    const amount = parseUnits(event.entryFee, 18);
-    const isNativeCELO =
-      event.entryToken.toLowerCase() ===
-      "0x0000000000000000000000000000000000000000";
-
-    join({
-      address: CONTRACTS.EVENT_MANAGER,
-      abi: EVENT_MANAGER_ABI,
-      functionName: "joinEvent",
-      args: [BigInt(eventId)],
-      ...(isNativeCELO && { value: amount }),
-    });
-  };
-
-  const handleClaim = () => {
-    claim({
-      address: CONTRACTS.EVENT_MANAGER,
-      abi: EVENT_MANAGER_ABI,
-      functionName: "claimPrize",
-      args: [BigInt(eventId)],
-    });
+    if (!event || !address) return;
+    try {
+      setJoining(true);
+      await joinEvent(event.eventId, address);
+      // Reload event data after joining
+      await load();
+    } catch (err) {
+      setError(`Failed to join event: ${err}`);
+    } finally {
+      setJoining(false);
+    }
   };
 
   if (loading)
@@ -238,20 +217,6 @@ export default function EventDetailPage() {
           ) : hasJoined && isOpen ? (
             <div className="bg-green-500/10 border border-green-500/30 text-green-400 p-4 rounded-xl text-center font-medium">
               ✅ You have joined — predict on matches below
-            </div>
-          ) : isResolved && parseFloat(claimable) > 0 ? (
-            <div className="p-5 bg-green-900/20 rounded-xl border border-green-500/30 text-center">
-              <p className="text-green-400 font-semibold mb-3">
-                🎉 You have {claimable} {getTokenSymbol(event.entryToken)} to
-                claim!
-              </p>
-              <button
-                onClick={handleClaim}
-                disabled={claiming}
-                className="bg-gradient-to-r from-green-500 to-emerald-500 text-white font-bold py-3 px-8 rounded-lg disabled:opacity-50"
-              >
-                {claiming ? "Claiming…" : "🏆 Claim Prize"}
-              </button>
             </div>
           ) : started && !hasJoined ? (
             <div className="bg-gray-700/40 border border-gray-600/50 rounded-xl p-4 text-gray-400 text-center">

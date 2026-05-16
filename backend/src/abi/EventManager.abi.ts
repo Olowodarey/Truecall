@@ -15,6 +15,14 @@ export const EVENT_MANAGER_ABI = [
     outputs: [{ name: 'eventId', type: 'uint256' }],
   },
 
+  {
+    type: 'function',
+    name: 'joinEvent',
+    stateMutability: 'payable',
+    inputs: [{ name: 'eventId', type: 'uint256' }],
+    outputs: [],
+  },
+
   // ─── Events ───────────────────────────────────────────────────────────────
   {
     type: 'event',

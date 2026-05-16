@@ -19,6 +19,12 @@ class CreateEventDto {
   scoringRule: number; // 0=ExactOnly, 1=OutcomeOnly, 2=Both
 }
 
+// DTO for joining an event
+class JoinEventDto {
+  eventId: number;
+  userAddress: string;
+}
+
 @ApiTags('Events')
 @Controller('events')
 export class EventsController {
@@ -93,7 +99,15 @@ export class EventsController {
     };
   }
 
-  @Get(':id/claimable/:address')
+  @Post(':id/join')
+  @ApiOperation({ summary: 'Join an event (handles approval + join)' })
+  @ApiParam({ name: 'id', type: Number })
+  async joinEvent(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: JoinEventDto,
+  ) {
+    return await this.blockchain.joinEvent(id, dto.userAddress);
+  }
   @ApiOperation({ summary: 'Get claimable prize amount for a user' })
   @ApiParam({ name: 'id', type: Number })
   @ApiParam({ name: 'address', type: String })
