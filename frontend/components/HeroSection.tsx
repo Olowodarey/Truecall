@@ -22,22 +22,23 @@ export default function HeroSection() {
           <div className="space-y-8 text-center lg:text-left">
             <div className="space-y-4">
               <h1 className="text-5xl lg:text-6xl font-bold text-white leading-tight">
-                The Fantasy League
+                The Ultimate
                 <br />
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-yellow-400">
-                  for Bitcoin Traders.
+                  Football Prediction League
                 </span>
               </h1>
 
               <p className="text-xl text-gray-300 max-w-lg mx-auto lg:mx-0">
-                Make Bitcoin calls. Back them on-chain. Climb the leaderboard.
-                Win the pool. Build a reputation that can't be faked.
+                Predict match scores and outcomes. Back them on-chain. Climb the
+                leaderboard. Win the prize pool. Build your forecasting
+                reputation.
               </p>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
               <button className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-lg font-semibold transition-colors">
-                Join a Season
+                Join an Event
               </button>
               <button className="border border-gray-600 hover:border-gray-500 text-white px-8 py-3 rounded-lg font-semibold transition-colors">
                 View Leaderboard
@@ -50,7 +51,7 @@ export default function HeroSection() {
               src="/block.png"
               height={700}
               width={700}
-              alt="Description"
+              alt="Football Prediction"
               className="rounded-2xl shadow-2xl mx-auto"
             />
           </div>
