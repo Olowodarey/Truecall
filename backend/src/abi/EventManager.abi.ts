@@ -23,6 +23,23 @@ export const EVENT_MANAGER_ABI = [
     outputs: [],
   },
 
+  {
+    type: 'function',
+    name: 'addMatch',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'eventId', type: 'uint256' },
+      { name: 'homeTeam', type: 'string' },
+      { name: 'awayTeam', type: 'string' },
+      { name: 'apiMatchId', type: 'string' },
+      { name: 'kickoffTime', type: 'uint256' },
+      { name: 'predictionDeadline', type: 'uint256' },
+      { name: 'allowScorePrediction', type: 'bool' },
+      { name: 'allowOutcomePrediction', type: 'bool' },
+    ],
+    outputs: [{ name: 'matchId', type: 'uint256' }],
+  },
+
   // ─── Events ───────────────────────────────────────────────────────────────
   {
     type: 'event',

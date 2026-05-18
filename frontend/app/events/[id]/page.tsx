@@ -334,7 +334,7 @@ export default function EventDetailPage() {
     );
 
   const isOpen = event.status === "OPEN";
-  const now = Date.now() / 1000;
+  const now = Math.floor(Date.now() / 1000);
   const started = now >= event.startDate;
   const canJoin = isOpen && !started && !hasJoined;
 

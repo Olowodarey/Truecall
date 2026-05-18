@@ -148,59 +148,17 @@ export class BlockchainService implements OnModuleInit {
       const isNativeCELO =
         entryToken === '0x0000000000000000000000000000000000000000';
 
-      let hash: `0x${string}`;
-
-      if (isNativeCELO) {
-        // For native CELO, send value directly
-        hash = await this.walletClient.writeContract({
-          account: this.account,
-          chain: celoSepolia,
-          address: this.eventManagerAddress,
-          abi: EVENT_MANAGER_ABI,
-          functionName: 'joinEvent',
-          args: [BigInt(eventId)],
-          value: entryFee,
-        });
-      } else {
-        // For ERC-20 tokens, approve first then join
-        // First, approve the token
-        const approveHash = await this.walletClient.writeContract({
-          account: this.account,
-          chain: celoSepolia,
-          address: entryToken,
-          abi: [
-            {
-              type: 'function',
-              name: 'approve',
-              stateMutability: 'nonpayable',
-              inputs: [
-                { name: 'spender', type: 'address' },
-                { name: 'amount', type: 'uint256' },
-              ],
-              outputs: [{ type: 'bool' }],
-            },
-          ],
-          functionName: 'approve',
-          args: [this.eventManagerAddress, entryFee],
-        });
-
-        // Wait for approval to confirm
-        await this.publicClient.waitForTransactionReceipt({
-          hash: approveHash,
-        });
-
-        this.logger.log(`Token approved: ${approveHash}`);
-
-        // Then join the event
-        hash = await this.walletClient.writeContract({
-          account: this.account,
-          chain: celoSepolia,
-          address: this.eventManagerAddress,
-          abi: EVENT_MANAGER_ABI,
-          functionName: 'joinEvent',
-          args: [BigInt(eventId)],
-        });
-      }
+      // For native CELO, send value directly
+      // For ERC-20 tokens, frontend must handle approval before calling this
+      const hash = await this.walletClient.writeContract({
+        account: this.account,
+        chain: celoSepolia,
+        address: this.eventManagerAddress,
+        abi: EVENT_MANAGER_ABI,
+        functionName: 'joinEvent',
+        args: [BigInt(eventId)],
+        ...(isNativeCELO && { value: entryFee }),
+      });
 
       this.logger.log(`Join transaction sent: ${hash}`);
 
@@ -245,6 +203,62 @@ export class BlockchainService implements OnModuleInit {
       status: EVENT_STATUS[ev.status] ?? ev.status,
       entryToken: ev.entryToken,
     };
+  }
+
+  async addMatch(
+    eventId: number,
+    homeTeam: string,
+    awayTeam: string,
+    apiMatchId: string,
+    kickoffTime: number,
+    predictionDeadline: number,
+    allowScorePrediction: boolean,
+    allowOutcomePrediction: boolean,
+  ) {
+    try {
+      this.logger.log(
+        `Adding match to event ${eventId}: ${homeTeam} vs ${awayTeam}`,
+      );
+
+      const hash = await this.walletClient.writeContract({
+        account: this.account,
+        chain: celoSepolia,
+        address: this.eventManagerAddress,
+        abi: EVENT_MANAGER_ABI,
+        functionName: 'addMatch',
+        args: [
+          BigInt(eventId),
+          homeTeam,
+          awayTeam,
+          apiMatchId,
+          BigInt(kickoffTime),
+          BigInt(predictionDeadline),
+          allowScorePrediction,
+          allowOutcomePrediction,
+        ],
+      });
+
+      this.logger.log(`Match transaction sent: ${hash}`);
+
+      // Wait for transaction receipt
+      const receipt = await this.publicClient.waitForTransactionReceipt({
+        hash,
+      });
+
+      this.logger.log(`Match added: ${receipt.transactionHash}`);
+
+      return {
+        success: true,
+        transactionHash: receipt.transactionHash,
+        blockNumber: Number(receipt.blockNumber),
+        eventId,
+        homeTeam,
+        awayTeam,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to add match: ${error}`);
+      throw error;
+    }
   }
 
   async getTotalEvents(): Promise<number> {
