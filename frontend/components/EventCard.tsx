@@ -50,8 +50,10 @@ export default function EventCard({ event }: EventCardProps) {
             </p>
           </div>
           <div className="bg-gray-700/30 rounded-lg p-3">
-            <p className="text-gray-400 text-xs mb-1">Type</p>
-            <p className="text-white font-semibold">{event.eventType}</p>
+            <p className="text-gray-400 text-xs mb-1">Starts</p>
+            <p className="text-white font-semibold text-xs">
+              {formatTimestamp(event.startDate)}
+            </p>
           </div>
           <div className="bg-gray-700/30 rounded-lg p-3">
             <p className="text-gray-400 text-xs mb-1">Ends</p>
