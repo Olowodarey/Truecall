@@ -56,11 +56,43 @@ export class EventsController {
     return this.blockchain.getAllEvents();
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get a single event by ID' })
+  // Specific routes first (before :id)
+  @Post(':id/addMatch')
+  @ApiOperation({ summary: 'Add a match to an event (admin only)' })
   @ApiParam({ name: 'id', type: Number })
-  async getEvent(@Param('id', ParseIntPipe) id: number) {
-    return this.blockchain.getEvent(id);
+  async addMatch(@Param('id', ParseIntPipe) id: number, @Body() dto: any) {
+    try {
+      return await this.blockchain.addMatch(
+        id,
+        dto.homeTeam,
+        dto.awayTeam,
+        dto.apiMatchId,
+        dto.kickoffTime,
+        dto.predictionDeadline,
+        dto.allowScorePrediction,
+        dto.allowOutcomePrediction,
+      );
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : 'Failed to add match',
+      );
+    }
+  }
+
+  @Post(':id/join')
+  @ApiOperation({ summary: 'Join an event (handles approval + join)' })
+  @ApiParam({ name: 'id', type: Number })
+  async joinEvent(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: JoinEventDto,
+  ) {
+    try {
+      return await this.blockchain.joinEvent(id, dto.userAddress);
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : 'Failed to join event',
+      );
+    }
   }
 
   @Get(':id/matches')
@@ -106,22 +138,6 @@ export class EventsController {
     };
   }
 
-  @Post(':id/join')
-  @ApiOperation({ summary: 'Join an event (handles approval + join)' })
-  @ApiParam({ name: 'id', type: Number })
-  async joinEvent(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: JoinEventDto,
-  ) {
-    try {
-      return await this.blockchain.joinEvent(id, dto.userAddress);
-    } catch (error) {
-      throw new BadRequestException(
-        error instanceof Error ? error.message : 'Failed to join event',
-      );
-    }
-  }
-
   @Get(':id/claimable/:address')
   @ApiOperation({ summary: 'Get claimable prize amount for a user' })
   @ApiParam({ name: 'id', type: Number })
@@ -130,11 +146,20 @@ export class EventsController {
     @Param('id', ParseIntPipe) id: number,
     @Param('address') address: string,
   ) {
+    const event = await this.blockchain.getEvent(id);
     return {
       eventId: id,
       user: address,
       claimable: await this.blockchain.getClaimable(id, address),
-      currency: 'cUSD',
+      entryToken: event.entryToken,
     };
+  }
+
+  // Generic :id route last (catches all other :id requests)
+  @Get(':id')
+  @ApiOperation({ summary: 'Get a single event by ID' })
+  @ApiParam({ name: 'id', type: Number })
+  async getEvent(@Param('id', ParseIntPipe) id: number) {
+    return this.blockchain.getEvent(id);
   }
 }
