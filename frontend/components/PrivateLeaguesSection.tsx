@@ -8,28 +8,28 @@ const steps = [
     icon: "🔐",
     title: "Create Your League",
     description:
-      "Set your entry fee, number of rounds, and a secret invite code. Share the code with friends — only people with the code can join.",
+      "Set your entry fee, number of matches, and a secret invite code. Share the code with friends — only people with the code can join.",
   },
   {
     number: "02",
-    icon: "🔄",
-    title: "Take Turns Asking",
+    icon: "⚽",
+    title: "Predict Match Outcomes",
     description:
-      "Each round, a different player in the group submits a Bitcoin prediction question with a target price. Everyone else answers YES or NO.",
+      "For each match in the league, predict the exact score or the outcome (win/draw/loss). Everyone submits their predictions before kickoff.",
   },
   {
     number: "03",
     icon: "📊",
     title: "Resolve & Score",
     description:
-      "After the answer window closes, the creator resolves the round with the real BTC price. Correct predictions earn points on the leaderboard.",
+      "After each match finishes, the AI Oracle verifies the real result. Correct predictions earn points on the leaderboard instantly.",
   },
   {
     number: "04",
     icon: "💰",
     title: "Best Forecaster Wins",
     description:
-      "When all rounds are done, the top scorers split the prize pool. Everything is settled on-chain — no middleman, no disputes.",
+      "When all matches are done, the top scorers split the prize pool. Everything is settled on-chain — no middleman, no disputes.",
   },
 ];
 
@@ -37,8 +37,8 @@ const highlights = [
   { icon: "👥", label: "Up to 50 players" },
   { icon: "🔒", label: "Invite-only access" },
   { icon: "⛓️", label: "100% on-chain" },
-  { icon: "🎯", label: "Up to 200 rounds" },
-  { icon: "⚡", label: "STX entry fees" },
+  { icon: "⚽", label: "Multiple matches" },
+  { icon: "💰", label: "CELO entry fees" },
   { icon: "🏅", label: "Leaderboard payouts" },
 ];
 
@@ -60,15 +60,15 @@ export default function PrivateLeaguesSection() {
             Run Your Own
             <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
-              Bitcoin Prediction League
+              Football Prediction League
             </span>
           </h2>
           <p className="text-lg text-gray-300 max-w-2xl mx-auto leading-relaxed">
-            TrueCall Private Events let you create an invite only prediction
+            TrueCall Private Events let you create an invite-only prediction
             league with your friends, colleagues, or community. You set the
-            rules  entry fee, number of rounds, time windows  and the smart
-            contract handles everything else. No trust required. No admin. Just
-            Bitcoin calls and on-chain proof.
+            rules — entry fee, number of matches, prediction types — and the
+            smart contract handles everything else. No trust required. No admin.
+            Just football predictions and on-chain proof.
           </p>
         </div>
 
@@ -111,10 +111,10 @@ export default function PrivateLeaguesSection() {
         {/* Narrative callout */}
         <div className="bg-gradient-to-r from-purple-900/20 to-blue-900/20 border border-purple-500/20 rounded-2xl p-8 mb-12 text-center max-w-3xl mx-auto">
           <p className="text-gray-200 text-lg leading-relaxed">
-            Think of it like a private fantasy league  but instead of picking
-            players, your group takes turns asking Bitcoin questions. Who called
-            the top? Who predicted the dip? The leaderboard doesn't lie, and the
-            prize pool goes to whoever had the sharpest eye.
+            Think of it like a private fantasy league — but instead of picking
+            players, your group predicts match outcomes. Who called the upset?
+            Who predicted the draw? The leaderboard doesn't lie, and the prize
+            pool goes to whoever had the sharpest eye.
           </p>
         </div>
 

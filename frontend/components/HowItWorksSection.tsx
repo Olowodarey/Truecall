@@ -2,27 +2,27 @@ export default function HowItWorksSection() {
   const steps = [
     {
       number: "01",
-      title: "Join a Season",
+      title: "Join an Event",
       description:
-        "Enter a public season or private league. Each season is a competitive cycle where players answer a stream of Bitcoin prediction questions  price action, dominance, ETF flows, and on-chain signals.",
+        "Enter a public prediction event or private league. Each event features multiple football matches where you predict scores, outcomes, and more. Pay the entry fee once and compete for the entire event.",
     },
     {
       number: "02",
-      title: "Make Your Bitcoin Calls",
+      title: "Make Your Predictions",
       description:
-        "Stake STX when submitting predictions. Every call is recorded on-chain with a timestamp. No deleting wrong calls. No faking it after the fact. Just conviction, on the record.",
+        "Predict exact match scores or outcomes (win/draw/loss). Every prediction is recorded on-chain with a timestamp. No changing your mind. No faking it after the match. Just pure forecasting skill.",
     },
     {
       number: "03",
-      title: "Oracle-Verified Results",
+      title: "AI-Verified Results",
       description:
-        "Outcomes are resolved using Pyth Network oracle data  no manual winner selection, no disputes. Numeric results settle automatically. Your score updates in real time.",
+        "Match results are verified by our AI Oracle Agent using real-time football data. Scores settle automatically on-chain. Your points update instantly. No manual disputes, no delays.",
     },
     {
       number: "04",
-      title: "Win the Pool. Earn Your Badge.",
+      title: "Win Prizes & Build Reputation",
       description:
-        "Top-ranked players share the reward pool based on final leaderboard position. The best performers also unlock soulbound NFT badges  portable, on-chain proof of forecasting skill that can't be transferred or faked.",
+        "Top-ranked predictors share the prize pool based on final leaderboard position. Earn points for correct predictions: 5 pts for exact scores, 3 pts for correct outcomes. Build an on-chain reputation as a skilled forecaster.",
     },
   ];
 
@@ -42,9 +42,9 @@ export default function HowItWorksSection() {
               </span>
             </h2>
             <p className="text-xl text-gray-300 mb-12 max-w-lg mx-auto lg:mx-0">
-              Open to everyone  no invite needed. Join a public season, make
-              your Bitcoin calls, and compete against the whole community. The
-              best forecasters win the pool.
+              Open to everyone — no invite needed. Join a public event, make
+              your football predictions, and compete against the whole
+              community. The best forecasters win the prize pool.
             </p>
           </div>
 
