@@ -86,8 +86,12 @@ export default function CreateEventPage() {
     }
 
     const fee = parseFloat(entryFee);
-    if (isNaN(fee) || fee < 1) {
-      setFormError("Entry fee must be at least 1");
+    if (isNaN(fee) || fee < 0.1) {
+      setFormError("Entry fee must be at least 0.1");
+      return false;
+    }
+    if (fee > 1000000) {
+      setFormError("Entry fee is too high (max 1,000,000)");
       return false;
     }
 
@@ -98,6 +102,24 @@ export default function CreateEventPage() {
     if (startTs <= now) {
       setFormError("Start date must be in the future");
       return false;
+    }
+
+    if (endTs <= startTs) {
+      setFormError("End date must be after start date");
+      return false;
+    }
+
+    const minDuration = 60 * 60; // 1 hour minimum
+    if (endTs - startTs < minDuration) {
+      setFormError("Event must last at least 1 hour");
+      return false;
+    }
+
+    const maxDuration = 365 * 24 * 60 * 60; // 1 year maximum
+    if (endTs - startTs > maxDuration) {
+      setFormError("Event cannot last more than 1 year");
+      return false;
+    }
     }
     if (endTs <= startTs) {
       setFormError("End date must be after the start date");
