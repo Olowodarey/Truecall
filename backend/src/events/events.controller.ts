@@ -27,6 +27,31 @@ class JoinEventDto {
   userAddress: string;
 }
 
+// Response DTOs for API documentation
+class EventResponse {
+  eventId: number;
+  eventType: string;
+  creator: string;
+  eventName: string;
+  startDate: number;
+  endDate: number;
+  entryFee: string;
+  prizePool: string;
+  maxParticipants: number;
+  status: string;
+  entryToken: string;
+}
+
+class MatchResponse {
+  matchId: number;
+  eventId: number;
+  homeTeam: string;
+  awayTeam: string;
+  status: string;
+  kickoffTime: number;
+  predictionDeadline: number;
+}
+
 @ApiTags('Events')
 @Controller('events')
 export class EventsController {
