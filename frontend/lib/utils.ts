@@ -27,3 +27,40 @@ export function getTokenSymbol(address: string): string {
   // Default: show shortened address
   return shortAddress(address);
 }
+
+/** Check if an address is the admin wallet */
+export function isAdminAddress(address: string | undefined): boolean {
+  if (!address) return false;
+  return (
+    address.toLowerCase() ===
+    "0xab26c86b78dedb488bf0cb4face11b048ddefE5b".toLowerCase()
+  );
+}
+
+/** Format a number as currency with token symbol */
+export function formatCurrency(amount: string, tokenSymbol: string): string {
+  return `${amount} ${tokenSymbol}`;
+}
+
+/** Validate if a string is a valid Ethereum address */
+export function isValidAddress(address: string): boolean {
+  return /^0x[a-fA-F0-9]{40}$/.test(address);
+}
+
+/** Convert seconds to human-readable duration */
+export function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  return `${Math.floor(seconds / 86400)}d`;
+}
+
+/** Check if a timestamp is in the past */
+export function isPast(timestamp: number): boolean {
+  return timestamp * 1000 < Date.now();
+}
+
+/** Check if a timestamp is in the future */
+export function isFuture(timestamp: number): boolean {
+  return timestamp * 1000 > Date.now();
+}
