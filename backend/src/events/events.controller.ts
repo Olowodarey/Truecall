@@ -6,6 +6,7 @@ import {
   ParseIntPipe,
   Body,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { BlockchainService } from '../blockchain/blockchain.service';
@@ -29,13 +30,16 @@ class JoinEventDto {
 @ApiTags('Events')
 @Controller('events')
 export class EventsController {
+  private readonly logger = new Logger(EventsController.name);
+
   constructor(private readonly blockchain: BlockchainService) {}
 
   @Post()
   @ApiOperation({ summary: 'Create a new public event (admin only)' })
   async createEvent(@Body() dto: CreateEventDto) {
     try {
-      return await this.blockchain.createPublicEvent(
+      this.logger.log(`Creating event: ${dto.eventName}`);
+      const result = await this.blockchain.createPublicEvent(
         dto.eventName,
         dto.startDate,
         dto.endDate,
@@ -43,7 +47,10 @@ export class EventsController {
         dto.entryFee,
         dto.scoringRule,
       );
+      this.logger.log(`Event created successfully: ${result}`);
+      return result;
     } catch (error) {
+      this.logger.error(`Failed to create event: ${error}`);
       throw new BadRequestException(
         error instanceof Error ? error.message : 'Failed to create event',
       );
@@ -62,7 +69,10 @@ export class EventsController {
   @ApiParam({ name: 'id', type: Number })
   async addMatch(@Param('id', ParseIntPipe) id: number, @Body() dto: any) {
     try {
-      return await this.blockchain.addMatch(
+      this.logger.log(
+        `Adding match to event ${id}: ${dto.homeTeam} vs ${dto.awayTeam}`,
+      );
+      const result = await this.blockchain.addMatch(
         id,
         dto.homeTeam,
         dto.awayTeam,
@@ -72,7 +82,10 @@ export class EventsController {
         dto.allowScorePrediction,
         dto.allowOutcomePrediction,
       );
+      this.logger.log(`Match added successfully to event ${id}`);
+      return result;
     } catch (error) {
+      this.logger.error(`Failed to add match to event ${id}: ${error}`);
       throw new BadRequestException(
         error instanceof Error ? error.message : 'Failed to add match',
       );
