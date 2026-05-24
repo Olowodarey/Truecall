@@ -31,11 +31,40 @@ export class MatchesService {
    */
   private loadMatches(): void {
     try {
-      const filePath = path.join(__dirname, '../data/matches.json');
-      const fileContent = fs.readFileSync(filePath, 'utf-8');
+      // Try multiple possible paths for the JSON file
+      const possiblePaths = [
+        path.join(__dirname, '../data/matches.json'), // Production build
+        path.join(__dirname, '../../src/data/matches.json'), // Development
+        path.join(process.cwd(), 'src/data/matches.json'), // From project root
+        path.join(process.cwd(), 'dist/data/matches.json'), // From dist
+      ];
+
+      let fileContent: string | null = null;
+      let loadedPath: string | null = null;
+
+      for (const filePath of possiblePaths) {
+        try {
+          if (fs.existsSync(filePath)) {
+            fileContent = fs.readFileSync(filePath, 'utf-8');
+            loadedPath = filePath;
+            break;
+          }
+        } catch (e) {
+          // Continue to next path
+        }
+      }
+
+      if (!fileContent) {
+        throw new Error(
+          `Could not find matches.json in any of the expected locations: ${possiblePaths.join(', ')}`,
+        );
+      }
+
       const data = JSON.parse(fileContent);
       this.matches = data.matches;
-      this.logger.log(`Loaded ${this.matches.length} matches from JSON`);
+      this.logger.log(
+        `Loaded ${this.matches.length} matches from JSON (${loadedPath})`,
+      );
     } catch (error) {
       this.logger.error('Failed to load matches from JSON', error);
       this.matches = [];
@@ -68,15 +97,18 @@ export class MatchesService {
   }
 
   /**
-   * Get upcoming matches (within next 7 days)
+   * Get upcoming matches (within next 30 days)
    */
   getUpcomingMatches(): Match[] {
     const now = Math.floor(Date.now() / 1000);
-    const sevenDaysFromNow = now + 7 * 24 * 60 * 60;
+    const thirtyDaysFromNow = now + 30 * 24 * 60 * 60;
 
-    return this.matches.filter(
-      (m) => m.kickoffTime >= now && m.kickoffTime <= sevenDaysFromNow,
+    const upcoming = this.matches.filter(
+      (m) => m.kickoffTime >= now && m.kickoffTime <= thirtyDaysFromNow,
     );
+
+    // If no upcoming matches in 30 days, return all matches
+    return upcoming.length > 0 ? upcoming : this.matches;
   }
 
   /**
