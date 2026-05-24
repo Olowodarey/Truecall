@@ -803,13 +803,7 @@ export default function EventDetailPage() {
               matches.map((m) => (
                 <div
                   key={m.matchId}
-                  onClick={() =>
-                    hasJoined &&
-                    router.push(`/predictions?matchId=${m.matchId}`)
-                  }
-                  className={`bg-gray-800/40 border border-gray-700/50 rounded-xl p-5 transition-all ${
-                    hasJoined ? "hover:border-orange-500/40 cursor-pointer" : ""
-                  }`}
+                  className="bg-gray-800/40 border border-gray-700/50 rounded-xl p-5 transition-all"
                 >
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-4">
@@ -851,6 +845,22 @@ export default function EventDetailPage() {
                     <div className="mt-2 text-center text-white font-bold">
                       {m.finalHomeScore} – {m.finalAwayScore}
                     </div>
+                  )}
+                  {/* Predict button — only for joined users on open matches */}
+                  {hasJoined && m.status === "OPEN" && (
+                    <button
+                      onClick={() =>
+                        router.push(`/predictions?matchId=${m.matchId}`)
+                      }
+                      className="mt-3 w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 rounded-lg text-sm transition"
+                    >
+                      🎯 Predict
+                    </button>
+                  )}
+                  {!hasJoined && m.status === "OPEN" && isOpen && (
+                    <p className="mt-3 text-center text-gray-500 text-xs">
+                      Join the event to predict
+                    </p>
                   )}
                 </div>
               ))
