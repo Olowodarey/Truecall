@@ -342,15 +342,13 @@ export default function EventDetailPage() {
 
   const selectMatch = (match: any) => {
     setSelectedMatch(match);
-    const kickoffDate = new Date(match.kickoffTime * 1000);
-    const deadlineDate = new Date(match.predictionDeadline * 1000);
-
+    // Only pre-fill team names and match ID — admin sets times manually
     setMatchForm({
       homeTeam: match.homeTeam,
       awayTeam: match.awayTeam,
       apiMatchId: match.id,
-      kickoffTime: kickoffDate.toISOString().slice(0, 16),
-      predictionDeadline: deadlineDate.toISOString().slice(0, 16),
+      kickoffTime: "",
+      predictionDeadline: "",
       allowScorePrediction: true,
       allowOutcomePrediction: true,
     });
@@ -561,42 +559,42 @@ export default function EventDetailPage() {
 
                 {availableMatches.length > 0 && !selectedMatch && (
                   <div className="mb-6">
-                    <label className="block text-gray-300 text-sm mb-3 font-semibold">
-                      Select a Match
-                    </label>
-                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="text-gray-300 text-sm font-semibold">
+                        Select a Match ({availableMatches.length} available)
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setAvailableMatches([])}
+                        className="text-gray-500 hover:text-white text-xs transition"
+                      >
+                        ✕ Close
+                      </button>
+                    </div>
+                    <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                       {availableMatches.map((match) => (
                         <button
                           key={match.id}
                           type="button"
                           onClick={() => selectMatch(match)}
-                          className="w-full text-left p-3 bg-gray-700/50 hover:bg-gray-700 border border-gray-600 hover:border-orange-500 rounded-lg transition"
+                          className="w-full text-left p-3 bg-gray-700/50 hover:bg-gray-700 border border-gray-600 hover:border-orange-500 rounded-lg transition group"
                         >
                           <div className="flex justify-between items-center">
                             <div>
-                              <p className="text-white font-semibold">
+                              <p className="text-white font-semibold group-hover:text-orange-400 transition">
                                 {match.homeTeam} vs {match.awayTeam}
                               </p>
-                              <p className="text-gray-400 text-xs">
-                                {match.league} • {match.venue}
+                              <p className="text-gray-400 text-xs mt-0.5">
+                                {match.league} · {match.venue}
                               </p>
                             </div>
-                            <span className="text-gray-400 text-xs">
-                              {new Date(
-                                match.kickoffTime * 1000,
-                              ).toLocaleDateString()}
+                            <span className="text-orange-500 text-xs font-bold opacity-0 group-hover:opacity-100 transition">
+                              Select →
                             </span>
                           </div>
                         </button>
                       ))}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setAvailableMatches([])}
-                      className="w-full mt-2 text-gray-400 hover:text-white text-sm py-2 transition"
-                    >
-                      Clear Selection
-                    </button>
                   </div>
                 )}
 
@@ -695,7 +693,7 @@ export default function EventDetailPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-gray-300 text-sm mb-2">
-                        Kickoff Time
+                        Kickoff Time <span className="text-red-400">*</span>
                       </label>
                       <input
                         type="datetime-local"
@@ -707,12 +705,13 @@ export default function EventDetailPage() {
                           })
                         }
                         className="w-full px-3 py-2 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                        disabled={matchLoading || selectedMatch}
+                        disabled={matchLoading}
                       />
                     </div>
                     <div>
                       <label className="block text-gray-300 text-sm mb-2">
-                        Prediction Deadline
+                        Prediction Deadline{" "}
+                        <span className="text-red-400">*</span>
                       </label>
                       <input
                         type="datetime-local"
@@ -724,8 +723,11 @@ export default function EventDetailPage() {
                           })
                         }
                         className="w-full px-3 py-2 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                        disabled={matchLoading || selectedMatch}
+                        disabled={matchLoading}
                       />
+                      <p className="text-gray-500 text-xs mt-1">
+                        Must be before kickoff
+                      </p>
                     </div>
                   </div>
 

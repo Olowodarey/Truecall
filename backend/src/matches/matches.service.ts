@@ -9,9 +9,6 @@ export interface Match {
   league: string;
   season: string;
   round: string;
-  kickoffTime: number;
-  predictionDeadline: number;
-  status: string;
   venue: string;
   homeTeamId: string;
   awayTeamId: string;
@@ -88,27 +85,17 @@ export class MatchesService {
   }
 
   /**
-   * Get matches by status
+   * Get matches by status (no-op since status removed from data)
    */
-  getMatchesByStatus(status: string): Match[] {
-    return this.matches.filter(
-      (m) => m.status.toLowerCase() === status.toLowerCase(),
-    );
+  getMatchesByStatus(_status: string): Match[] {
+    return this.matches;
   }
 
   /**
-   * Get upcoming matches (within next 30 days)
+   * Get all matches (no timestamps - admin sets times on frontend)
    */
   getUpcomingMatches(): Match[] {
-    const now = Math.floor(Date.now() / 1000);
-    const thirtyDaysFromNow = now + 30 * 24 * 60 * 60;
-
-    const upcoming = this.matches.filter(
-      (m) => m.kickoffTime >= now && m.kickoffTime <= thirtyDaysFromNow,
-    );
-
-    // If no upcoming matches in 30 days, return all matches
-    return upcoming.length > 0 ? upcoming : this.matches;
+    return this.matches;
   }
 
   /**
@@ -175,12 +162,10 @@ export class MatchesService {
    */
   getStatistics() {
     const leagues = new Set(this.matches.map((m) => m.league));
-    const statuses = new Set(this.matches.map((m) => m.status));
 
     return {
       totalMatches: this.matches.length,
       leagues: Array.from(leagues),
-      statuses: Array.from(statuses),
       matchesByLeague: Array.from(leagues).map((league) => ({
         league,
         count: this.matches.filter((m) => m.league === league).length,

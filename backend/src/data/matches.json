@@ -7,9 +7,6 @@
       "league": "Premier League",
       "season": "2025/26",
       "round": "Week 1",
-      "kickoffTime": 1779725922,
-      "predictionDeadline": 1779725622,
-      "status": "scheduled",
       "venue": "Old Trafford",
       "homeTeamId": "man_utd",
       "awayTeamId": "liverpool"
@@ -21,9 +18,6 @@
       "league": "Premier League",
       "season": "2025/26",
       "round": "Week 1",
-      "kickoffTime": 1779733122,
-      "predictionDeadline": 1779732822,
-      "status": "scheduled",
       "venue": "Emirates Stadium",
       "homeTeamId": "arsenal",
       "awayTeamId": "chelsea"
@@ -35,9 +29,6 @@
       "league": "Premier League",
       "season": "2025/26",
       "round": "Week 1",
-      "kickoffTime": 1779740322,
-      "predictionDeadline": 1779740022,
-      "status": "scheduled",
       "venue": "Etihad Stadium",
       "homeTeamId": "man_city",
       "awayTeamId": "tottenham"
@@ -49,10 +40,7 @@
       "league": "Premier League",
       "season": "2025/26",
       "round": "Week 1",
-      "kickoffTime": 1779747522,
-      "predictionDeadline": 1779747222,
-      "status": "scheduled",
-      "venue": "St James' Park",
+      "venue": "St James Park",
       "homeTeamId": "newcastle",
       "awayTeamId": "brighton"
     },
@@ -63,9 +51,6 @@
       "league": "Premier League",
       "season": "2025/26",
       "round": "Week 1",
-      "kickoffTime": 1779754722,
-      "predictionDeadline": 1779754422,
-      "status": "scheduled",
       "venue": "Villa Park",
       "homeTeamId": "aston_villa",
       "awayTeamId": "everton"
@@ -77,9 +62,6 @@
       "league": "Premier League",
       "season": "2025/26",
       "round": "Week 1",
-      "kickoffTime": 1779761922,
-      "predictionDeadline": 1779761622,
-      "status": "scheduled",
       "venue": "Craven Cottage",
       "homeTeamId": "fulham",
       "awayTeamId": "brentford"
@@ -91,9 +73,6 @@
       "league": "Premier League",
       "season": "2025/26",
       "round": "Week 1",
-      "kickoffTime": 1779769122,
-      "predictionDeadline": 1779768822,
-      "status": "scheduled",
       "venue": "London Stadium",
       "homeTeamId": "west_ham",
       "awayTeamId": "ipswich"
@@ -105,9 +84,6 @@
       "league": "Premier League",
       "season": "2025/26",
       "round": "Week 1",
-      "kickoffTime": 1779776322,
-      "predictionDeadline": 1779776022,
-      "status": "scheduled",
       "venue": "Vitality Stadium",
       "homeTeamId": "bournemouth",
       "awayTeamId": "nottingham"
@@ -119,9 +95,6 @@
       "league": "Premier League",
       "season": "2025/26",
       "round": "Week 1",
-      "kickoffTime": 1779783522,
-      "predictionDeadline": 1779783222,
-      "status": "scheduled",
       "venue": "Molineux Stadium",
       "homeTeamId": "wolves",
       "awayTeamId": "crystal_palace"
@@ -133,9 +106,6 @@
       "league": "Premier League",
       "season": "2025/26",
       "round": "Week 1",
-      "kickoffTime": 1779790722,
-      "predictionDeadline": 1779790422,
-      "status": "scheduled",
       "venue": "King Power Stadium",
       "homeTeamId": "leicester",
       "awayTeamId": "southampton"
@@ -147,9 +117,6 @@
       "league": "La Liga",
       "season": "2025/26",
       "round": "Week 1",
-      "kickoffTime": 1779797922,
-      "predictionDeadline": 1779797622,
-      "status": "scheduled",
       "venue": "Santiago Bernabeu",
       "homeTeamId": "real_madrid",
       "awayTeamId": "barcelona"
@@ -161,9 +128,6 @@
       "league": "La Liga",
       "season": "2025/26",
       "round": "Week 1",
-      "kickoffTime": 1779805122,
-      "predictionDeadline": 1779804822,
-      "status": "scheduled",
       "venue": "Wanda Metropolitano",
       "homeTeamId": "atletico_madrid",
       "awayTeamId": "sevilla"
@@ -175,9 +139,6 @@
       "league": "Bundesliga",
       "season": "2025/26",
       "round": "Week 1",
-      "kickoffTime": 1779812322,
-      "predictionDeadline": 1779812022,
-      "status": "scheduled",
       "venue": "Allianz Arena",
       "homeTeamId": "bayern",
       "awayTeamId": "dortmund"
@@ -189,9 +150,6 @@
       "league": "Ligue 1",
       "season": "2025/26",
       "round": "Week 1",
-      "kickoffTime": 1779819522,
-      "predictionDeadline": 1779819222,
-      "status": "scheduled",
       "venue": "Parc des Princes",
       "homeTeamId": "psg",
       "awayTeamId": "marseille"
@@ -203,9 +161,6 @@
       "league": "Serie A",
       "season": "2025/26",
       "round": "Week 1",
-      "kickoffTime": 1779826722,
-      "predictionDeadline": 1779826422,
-      "status": "scheduled",
       "venue": "San Siro",
       "homeTeamId": "ac_milan",
       "awayTeamId": "inter_milan"
@@ -217,9 +172,6 @@
       "league": "Serie A",
       "season": "2025/26",
       "round": "Week 1",
-      "kickoffTime": 1779833922,
-      "predictionDeadline": 1779833622,
-      "status": "scheduled",
       "venue": "Allianz Stadium",
       "homeTeamId": "juventus",
       "awayTeamId": "roma"
@@ -231,9 +183,6 @@
       "league": "Eredivisie",
       "season": "2025/26",
       "round": "Week 1",
-      "kickoffTime": 1779841122,
-      "predictionDeadline": 1779840822,
-      "status": "scheduled",
       "venue": "Johan Cruyff Arena",
       "homeTeamId": "ajax",
       "awayTeamId": "psv"
@@ -245,9 +194,6 @@
       "league": "Primeira Liga",
       "season": "2025/26",
       "round": "Week 1",
-      "kickoffTime": 1779848322,
-      "predictionDeadline": 1779848022,
-      "status": "scheduled",
       "venue": "Estadio da Luz",
       "homeTeamId": "benfica",
       "awayTeamId": "porto"
@@ -259,9 +205,6 @@
       "league": "Scottish Premiership",
       "season": "2025/26",
       "round": "Week 1",
-      "kickoffTime": 1779855522,
-      "predictionDeadline": 1779855222,
-      "status": "scheduled",
       "venue": "Celtic Park",
       "homeTeamId": "celtic",
       "awayTeamId": "rangers"
@@ -273,9 +216,6 @@
       "league": "Super Lig",
       "season": "2025/26",
       "round": "Week 1",
-      "kickoffTime": 1779862722,
-      "predictionDeadline": 1779862422,
-      "status": "scheduled",
       "venue": "Turk Telekom Stadium",
       "homeTeamId": "galatasaray",
       "awayTeamId": "fenerbahce"
