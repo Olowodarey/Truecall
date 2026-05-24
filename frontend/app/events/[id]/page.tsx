@@ -77,6 +77,9 @@ export default function EventDetailPage() {
 
   // Add match form state
   const [showAddMatch, setShowAddMatch] = useState(false);
+  const [availableMatches, setAvailableMatches] = useState<any[]>([]);
+  const [loadingMatches, setLoadingMatches] = useState(false);
+  const [selectedMatch, setSelectedMatch] = useState<any>(null);
   const [matchForm, setMatchForm] = useState({
     homeTeam: "",
     awayTeam: "",
@@ -301,6 +304,7 @@ export default function EventDetailPage() {
         allowScorePrediction: true,
         allowOutcomePrediction: true,
       });
+      setSelectedMatch(null);
       setShowAddMatch(false);
       load();
     } catch (err) {
@@ -309,6 +313,39 @@ export default function EventDetailPage() {
     } finally {
       setMatchLoading(false);
     }
+  };
+
+  const loadAvailableMatches = async () => {
+    setLoadingMatches(true);
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/matches/upcoming`,
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableMatches(data);
+      }
+    } catch (err) {
+      console.error("Failed to load matches:", err);
+    } finally {
+      setLoadingMatches(false);
+    }
+  };
+
+  const selectMatch = (match: any) => {
+    setSelectedMatch(match);
+    const kickoffDate = new Date(match.kickoffTime * 1000);
+    const deadlineDate = new Date(match.predictionDeadline * 1000);
+
+    setMatchForm({
+      homeTeam: match.homeTeam,
+      awayTeam: match.awayTeam,
+      apiMatchId: match.id,
+      kickoffTime: kickoffDate.toISOString().slice(0, 16),
+      predictionDeadline: deadlineDate.toISOString().slice(0, 16),
+      allowScorePrediction: true,
+      allowOutcomePrediction: true,
+    });
   };
 
   if (loading)
@@ -497,6 +534,97 @@ export default function EventDetailPage() {
             {showAddMatch && isAdmin && (
               <div className="bg-gray-800/60 border border-orange-500/30 rounded-xl p-6 mb-6">
                 <h3 className="text-white font-bold text-lg mb-4">Add Match</h3>
+
+                {/* Available Matches Selector */}
+                {availableMatches.length === 0 && !selectedMatch && (
+                  <div className="mb-6">
+                    <button
+                      type="button"
+                      onClick={() => loadAvailableMatches()}
+                      disabled={loadingMatches}
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg transition disabled:opacity-50 mb-4"
+                    >
+                      {loadingMatches
+                        ? "Loading matches..."
+                        : "📋 Load Available Matches"}
+                    </button>
+                  </div>
+                )}
+
+                {availableMatches.length > 0 && !selectedMatch && (
+                  <div className="mb-6">
+                    <label className="block text-gray-300 text-sm mb-3 font-semibold">
+                      Select a Match
+                    </label>
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {availableMatches.map((match) => (
+                        <button
+                          key={match.id}
+                          type="button"
+                          onClick={() => selectMatch(match)}
+                          className="w-full text-left p-3 bg-gray-700/50 hover:bg-gray-700 border border-gray-600 hover:border-orange-500 rounded-lg transition"
+                        >
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <p className="text-white font-semibold">
+                                {match.homeTeam} vs {match.awayTeam}
+                              </p>
+                              <p className="text-gray-400 text-xs">
+                                {match.league} • {match.venue}
+                              </p>
+                            </div>
+                            <span className="text-gray-400 text-xs">
+                              {new Date(
+                                match.kickoffTime * 1000,
+                              ).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setAvailableMatches([])}
+                      className="w-full mt-2 text-gray-400 hover:text-white text-sm py-2 transition"
+                    >
+                      Clear Selection
+                    </button>
+                  </div>
+                )}
+
+                {selectedMatch && (
+                  <div className="mb-6 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                    <p className="text-green-400 text-sm font-semibold mb-2">
+                      ✅ Selected Match
+                    </p>
+                    <p className="text-white font-bold">
+                      {selectedMatch.homeTeam} vs {selectedMatch.awayTeam}
+                    </p>
+                    <p className="text-gray-400 text-xs">
+                      {selectedMatch.league} • {selectedMatch.venue}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedMatch(null);
+                        setAvailableMatches([]);
+                        setMatchForm({
+                          homeTeam: "",
+                          awayTeam: "",
+                          apiMatchId: "",
+                          kickoffTime: "",
+                          predictionDeadline: "",
+                          allowScorePrediction: true,
+                          allowOutcomePrediction: true,
+                        });
+                      }}
+                      className="text-xs text-gray-400 hover:text-white mt-2 underline"
+                    >
+                      Change Selection
+                    </button>
+                  </div>
+                )}
+
                 <form onSubmit={handleAddMatch} className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -514,7 +642,7 @@ export default function EventDetailPage() {
                         }
                         placeholder="e.g. Manchester United"
                         className="w-full px-3 py-2 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                        disabled={matchLoading}
+                        disabled={matchLoading || selectedMatch}
                       />
                     </div>
                     <div>
@@ -532,7 +660,7 @@ export default function EventDetailPage() {
                         }
                         placeholder="e.g. Liverpool"
                         className="w-full px-3 py-2 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                        disabled={matchLoading}
+                        disabled={matchLoading || selectedMatch}
                       />
                     </div>
                   </div>
@@ -552,7 +680,7 @@ export default function EventDetailPage() {
                       }
                       placeholder="e.g. match_12345"
                       className="w-full px-3 py-2 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      disabled={matchLoading}
+                      disabled={matchLoading || selectedMatch}
                     />
                   </div>
 
@@ -571,7 +699,7 @@ export default function EventDetailPage() {
                           })
                         }
                         className="w-full px-3 py-2 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                        disabled={matchLoading}
+                        disabled={matchLoading || selectedMatch}
                       />
                     </div>
                     <div>
@@ -588,7 +716,7 @@ export default function EventDetailPage() {
                           })
                         }
                         className="w-full px-3 py-2 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                        disabled={matchLoading}
+                        disabled={matchLoading || selectedMatch}
                       />
                     </div>
                   </div>
