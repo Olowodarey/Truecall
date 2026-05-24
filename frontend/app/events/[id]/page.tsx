@@ -318,12 +318,20 @@ export default function EventDetailPage() {
   const loadAvailableMatches = async () => {
     setLoadingMatches(true);
     try {
+      console.log(
+        "Fetching matches from:",
+        `${process.env.NEXT_PUBLIC_API_URL}/matches/upcoming`,
+      );
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/matches/upcoming`,
       );
+      console.log("Response status:", response.status);
       if (response.ok) {
         const data = await response.json();
+        console.log("Loaded matches:", data);
         setAvailableMatches(data);
+      } else {
+        console.error("Failed to load matches:", response.statusText);
       }
     } catch (err) {
       console.error("Failed to load matches:", err);
@@ -536,7 +544,7 @@ export default function EventDetailPage() {
                 <h3 className="text-white font-bold text-lg mb-4">Add Match</h3>
 
                 {/* Available Matches Selector */}
-                {availableMatches.length === 0 && !selectedMatch && (
+                {!selectedMatch && availableMatches.length === 0 && (
                   <div className="mb-6">
                     <button
                       type="button"
