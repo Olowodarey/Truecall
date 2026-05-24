@@ -120,11 +120,6 @@ export default function CreateEventPage() {
       setFormError("Event cannot last more than 1 year");
       return false;
     }
-    }
-    if (endTs <= startTs) {
-      setFormError("End date must be after the start date");
-      return false;
-    }
 
     return true;
   };

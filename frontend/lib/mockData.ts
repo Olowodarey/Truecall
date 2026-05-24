@@ -36,6 +36,9 @@ export const mockMatches: TrueCallMatch[] = [
     predictionDeadline: Math.floor(Date.now() / 1000) + 6300, // 1h 45m from now
     allowScorePrediction: true,
     allowOutcomePrediction: true,
+    finalHomeScore: 0,
+    finalAwayScore: 0,
+    verifiedAt: 0,
   },
   {
     matchId: 2,
@@ -48,6 +51,9 @@ export const mockMatches: TrueCallMatch[] = [
     predictionDeadline: Math.floor(Date.now() / 1000) + 9900, // 2h 45m from now
     allowScorePrediction: true,
     allowOutcomePrediction: true,
+    finalHomeScore: 0,
+    finalAwayScore: 0,
+    verifiedAt: 0,
   },
 ];
 
@@ -56,22 +62,27 @@ export const mockMatches: TrueCallMatch[] = [
  */
 export const mockLeaderboard: LeaderboardEntry[] = [
   {
+    rank: 1,
     user: "0x1234567890123456789012345678901234567890",
     points: 15,
   },
   {
+    rank: 2,
     user: "0x0987654321098765432109876543210987654321",
     points: 12,
   },
   {
+    rank: 3,
     user: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
     points: 10,
   },
   {
+    rank: 4,
     user: "0xfedcbafedcbafedcbafedcbafedcbafedcbafed",
     points: 8,
   },
   {
+    rank: 5,
     user: "0x1111111111111111111111111111111111111111",
     points: 5,
   },
@@ -118,6 +129,7 @@ export function createMockLeaderboardEntry(
  */
 export function createMockLeaderboard(count: number = 5): LeaderboardEntry[] {
   return Array.from({ length: count }, (_, i) => ({
+    rank: i + 1,
     user: `0x${String(i).padStart(40, "0")}`,
     points: Math.max(0, 20 - i * 3),
   }));
