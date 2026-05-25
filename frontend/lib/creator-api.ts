@@ -52,7 +52,7 @@ export interface CreatorPrediction {
 
 // ─── Events ───────────────────────────────────────────────────────────────────
 
-export const fetchCreatorEvents = (): Promise<CreatorEvent[]> => get("/");
+export const fetchCreatorEvents = (): Promise<CreatorEvent[]> => get("");
 
 export const fetchCreatorEvent = (id: number): Promise<CreatorEvent> =>
   get(`/${id}`);

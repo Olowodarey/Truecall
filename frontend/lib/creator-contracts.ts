@@ -82,4 +82,40 @@ export const CREATOR_EVENT_MANAGER_ABI = [
     ],
     outputs: [{ type: "bool" }],
   },
+  // ─── Admin writes ─────────────────────────────────────────────────────────
+  {
+    type: "function",
+    name: "setCreationFee",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "amount", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "withdrawFees",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "pendingFees",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "treasury",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "address" }],
+  },
+  {
+    type: "function",
+    name: "nextEventId",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
 ] as const;

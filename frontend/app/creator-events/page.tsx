@@ -18,7 +18,7 @@ export default function CreatorEventsPage() {
   useEffect(() => {
     fetchCreatorEvents()
       .then(setEvents)
-      .catch(() => setError("Failed to load events"))
+      .catch((e) => setError(e?.message ?? "Failed to load events"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -34,21 +34,32 @@ export default function CreatorEventsPage() {
               Invite-code prediction events · Free to join · Winners on-chain
             </p>
           </div>
-          {isConnected ? (
-            <button
-              onClick={() => router.push("/creator-events/create")}
-              className="bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold py-2.5 px-5 rounded-lg transition text-sm"
-            >
-              + Create Event
-            </button>
-          ) : (
-            <button
-              onClick={connectWallet}
-              className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2.5 px-5 rounded-lg transition text-sm"
-            >
-              Connect Wallet
-            </button>
-          )}
+          <div className="flex items-center gap-3">
+            {address?.toLowerCase() ===
+              "0xab26c86b78dedb488bf0cb4face11b048ddefe5b" && (
+              <button
+                onClick={() => router.push("/creator-events/admin")}
+                className="bg-gray-700 hover:bg-gray-600 text-gray-300 font-bold py-2 px-4 rounded-lg transition text-sm"
+              >
+                ⚙️ Admin
+              </button>
+            )}
+            {isConnected ? (
+              <button
+                onClick={() => router.push("/creator-events/create")}
+                className="bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold py-2.5 px-5 rounded-lg transition text-sm"
+              >
+                + Create Event
+              </button>
+            ) : (
+              <button
+                onClick={connectWallet}
+                className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2.5 px-5 rounded-lg transition text-sm"
+              >
+                Connect Wallet
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Content */}
