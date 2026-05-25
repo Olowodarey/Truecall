@@ -4,6 +4,7 @@ import { BlockchainModule } from './blockchain/blockchain.module';
 import { EventsModule } from './events/events.module';
 import { MatchesModule } from './matches/matches.module';
 import { LeaderboardModule } from './leaderboard/leaderboard.module';
+import { CreatorEventsModule } from './creator-events/creator-events.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { LeaderboardModule } from './leaderboard/leaderboard.module';
     EventsModule,
     MatchesModule,
     LeaderboardModule,
+    CreatorEventsModule,
   ],
 })
 export class AppModule {}
