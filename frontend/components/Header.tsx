@@ -42,6 +42,12 @@ export default function Header() {
               >
                 Private Events
               </Link>
+              <Link
+                href="/creator-events"
+                className="text-gray-300 hover:text-white transition-colors"
+              >
+                Creator Events
+              </Link>
             </div>
           </div>
           <div className="flex items-center space-x-2">

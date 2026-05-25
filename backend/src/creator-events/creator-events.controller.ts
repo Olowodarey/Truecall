@@ -26,10 +26,6 @@ class VerifyBatchDto {
   users: string[];
 }
 
-class WithdrawFeesDto {
-  token: string; // token address or "native" for CELO
-}
-
 class AddMatchDto {
   homeTeam: string;
   awayTeam: string;
@@ -208,11 +204,11 @@ export class CreatorEventsController {
 
   @Post('admin/withdraw-fees')
   @ApiOperation({
-    summary: 'Admin: withdraw accumulated creation fees to treasury',
+    summary: 'Admin: withdraw all accumulated CELO fees to treasury',
   })
-  async withdrawFees(@Body() dto: WithdrawFeesDto) {
+  async withdrawFees() {
     try {
-      return await this.svc.withdrawFees(dto.token);
+      return await this.svc.withdrawFees();
     } catch (e) {
       throw new BadRequestException(
         e instanceof Error ? e.message : 'Failed to withdraw fees',

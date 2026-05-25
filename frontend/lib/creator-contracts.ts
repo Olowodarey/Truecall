@@ -1,20 +1,17 @@
 // CreatorEventManager — Celo Sepolia
-// Proxy: 0x34ef9AebB8354cbc45ED67086F74B722aD959787
+// Proxy: 0xD360E9eF6bF50A357c77fA17474a4838c2379B3f
+// Fee:   native CELO only (no ERC-20, no approval needed)
 
 export const CREATOR_EVENT_MANAGER_ADDRESS = (process.env
   .NEXT_PUBLIC_CREATOR_EVENT_MANAGER ??
-  "0x34ef9AebB8354cbc45ED67086F74B722aD959787") as `0x${string}`;
-
-// Celo Sepolia testnet cUSD
-export const CUSD_ADDRESS = (process.env.NEXT_PUBLIC_CUSD ??
-  "0x874069Fa1Eb16D44d622F2e0Ca25eeA172369bC1") as `0x${string}`;
+  "0xD360E9eF6bF50A357c77fA17474a4838c2379B3f") as `0x${string}`;
 
 export const CREATOR_EVENT_MANAGER_ABI = [
-  // createEvent — payable (native CELO fee) or nonpayable (ERC-20 fee)
+  // ─── Write ────────────────────────────────────────────────────────────────
   {
     type: "function",
     name: "createEvent",
-    stateMutability: "payable",
+    stateMutability: "payable", // send CELO with this call
     inputs: [
       { name: "eventName", type: "string" },
       { name: "inviteCodeHash", type: "bytes32" },
@@ -59,15 +56,14 @@ export const CREATOR_EVENT_MANAGER_ABI = [
     ],
     outputs: [],
   },
+
+  // ─── Read ─────────────────────────────────────────────────────────────────
   {
     type: "function",
     name: "creationFee",
     stateMutability: "view",
     inputs: [],
-    outputs: [
-      { name: "token", type: "address" },
-      { name: "amount", type: "uint256" },
-    ],
+    outputs: [{ type: "uint256" }], // wei amount of native CELO
   },
   {
     type: "function",
@@ -85,29 +81,5 @@ export const CREATOR_EVENT_MANAGER_ABI = [
       { name: "user", type: "address" },
     ],
     outputs: [{ type: "bool" }],
-  },
-] as const;
-
-// Minimal ERC-20 ABI for approve
-export const ERC20_APPROVE_ABI = [
-  {
-    type: "function",
-    name: "approve",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "spender", type: "address" },
-      { name: "amount", type: "uint256" },
-    ],
-    outputs: [{ type: "bool" }],
-  },
-  {
-    type: "function",
-    name: "allowance",
-    stateMutability: "view",
-    inputs: [
-      { name: "owner", type: "address" },
-      { name: "spender", type: "address" },
-    ],
-    outputs: [{ type: "uint256" }],
   },
 ] as const;

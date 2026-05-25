@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@/contexts/WalletContext";
 import {
@@ -8,33 +8,55 @@ import {
   useWaitForTransactionReceipt,
   useChainId,
   useSwitchChain,
-  useReadContract,
 } from "wagmi";
-import { keccak256, toBytes, parseUnits } from "viem";
+import { keccak256, toBytes, formatEther } from "viem";
 import { celoSepolia } from "@/lib/wagmi";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import {
   CREATOR_EVENT_MANAGER_ADDRESS,
   CREATOR_EVENT_MANAGER_ABI,
-  ERC20_APPROVE_ABI,
 } from "@/lib/creator-contracts";
 import { fetchCreationFee } from "@/lib/creator-api";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface FixtureMatch {
+  id: string;
+  homeTeam: string;
+  awayTeam: string;
+  league: string;
+  venue: string;
+}
+
+interface MatchRow {
+  homeTeam: string;
+  awayTeam: string;
+  apiMatchId: string;
+  kickoffTime: string;
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function nowPlusHours(h: number) {
   const d = new Date(Date.now() + h * 3600 * 1000);
-  return d.toISOString().slice(0, 16); // "YYYY-MM-DDTHH:MM"
+  return d.toISOString().slice(0, 16);
 }
 
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+function emptyRow(offsetHours = 24): MatchRow {
+  return {
+    homeTeam: "",
+    awayTeam: "",
+    apiMatchId: "",
+    kickoffTime: nowPlusHours(offsetHours),
+  };
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function CreateCreatorEventPage() {
   const router = useRouter();
-  const { isConnected, address, connectWallet } = useWallet();
+  const { isConnected, connectWallet } = useWallet();
   const chainId = useChainId();
   const { switchChainAsync } = useSwitchChain();
   const isWrongNetwork = chainId !== celoSepolia.id;
@@ -42,163 +64,166 @@ export default function CreateCreatorEventPage() {
   // Form state
   const [eventName, setEventName] = useState("");
   const [inviteCode, setInviteCode] = useState("");
-  const [matches, setMatches] = useState([
-    {
-      homeTeam: "",
-      awayTeam: "",
-      apiMatchId: "",
-      kickoffTime: nowPlusHours(24),
-    },
-  ]);
+  const [matches, setMatches] = useState<MatchRow[]>([emptyRow(24)]);
   const [formError, setFormError] = useState<string | null>(null);
-  const [step, setStep] = useState<"idle" | "approving" | "creating">("idle");
   const [successTxHash, setSuccessTxHash] = useState<string | null>(null);
 
-  // Fee config from backend
-  const [feeConfig, setFeeConfig] = useState<{
-    token: string;
-    amount: string;
-    amountRaw: string;
-  } | null>(null);
+  // Fee from contract (in wei)
+  const [feeWei, setFeeWei] = useState<bigint>(BigInt(0));
+  const [feeDisplay, setFeeDisplay] = useState<string>("...");
 
   useEffect(() => {
     fetchCreationFee()
-      .then(setFeeConfig)
-      .catch(() => {});
+      .then((f) => {
+        const wei = BigInt(f.amountRaw);
+        setFeeWei(wei);
+        setFeeDisplay(`${formatEther(wei)} CELO`);
+      })
+      .catch(() => setFeeDisplay("fee unavailable"));
   }, []);
 
-  const isNativeFee = !feeConfig || feeConfig.token === ZERO_ADDRESS;
-  const feeAmount = feeConfig ? BigInt(feeConfig.amountRaw) : BigInt(0);
+  // Fixture picker state
+  const [fixtures, setFixtures] = useState<FixtureMatch[]>([]);
+  const [fixturesLoading, setFixturesLoading] = useState(false);
+  const [fixturesLoaded, setFixturesLoaded] = useState(false);
+  const [search, setSearch] = useState("");
+  const [activePickerIndex, setActivePickerIndex] = useState<number | null>(
+    null,
+  );
 
-  // wagmi hooks
+  // Freeze args at submit time to avoid stale closure issues
+  const pendingArgsRef = useRef<{
+    eventNameTrimmed: string;
+    inviteCodeHash: `0x${string}`;
+    homeTeams: string[];
+    awayTeams: string[];
+    apiMatchIds: string[];
+    kickoffTimes: bigint[];
+  } | null>(null);
+
+  // wagmi — single write, no approval needed (native CELO)
   const {
-    writeContract: approve,
-    data: approveTx,
-    isPending: approvePending,
-    reset: resetApprove,
+    writeContract,
+    data: txHash,
+    isPending,
+    error: writeError,
+    reset,
   } = useWriteContract();
-  const { isLoading: approveMining, isSuccess: approveDone } =
-    useWaitForTransactionReceipt({ hash: approveTx });
+  const { isLoading: mining, isSuccess: done } = useWaitForTransactionReceipt({
+    hash: txHash,
+  });
 
-  const {
-    writeContract: createEvent,
-    data: createTx,
-    isPending: createPending,
-    error: createError,
-    reset: resetCreate,
-  } = useWriteContract();
-  const { isLoading: createMining, isSuccess: createDone } =
-    useWaitForTransactionReceipt({ hash: createTx });
-
-  const busy = approvePending || approveMining || createPending || createMining;
-
-  // After approval confirmed → send createEvent
-  useEffect(() => {
-    if (approveDone) {
-      setStep("creating");
-      sendCreateEvent();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [approveDone]);
+  const busy = isPending || mining;
 
   useEffect(() => {
-    if (createDone && createTx) {
-      setSuccessTxHash(createTx);
-    }
-  }, [createDone, createTx]);
+    if (done && txHash) setSuccessTxHash(txHash);
+  }, [done, txHash]);
 
-  // ── Match helpers ────────────────────────────────────────────────────────────
+  // ── Load fixtures ─────────────────────────────────────────────────────────
+
+  const loadFixtures = async () => {
+    if (fixturesLoaded) return;
+    setFixturesLoading(true);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/matches/upcoming`,
+      );
+      if (res.ok) {
+        setFixtures(await res.json());
+        setFixturesLoaded(true);
+      }
+    } catch {
+      /* silently fail */
+    } finally {
+      setFixturesLoading(false);
+    }
+  };
+
+  const filteredFixtures = fixtures.filter(
+    (f) =>
+      search === "" ||
+      f.homeTeam.toLowerCase().includes(search.toLowerCase()) ||
+      f.awayTeam.toLowerCase().includes(search.toLowerCase()) ||
+      f.league.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  // ── Match row helpers ─────────────────────────────────────────────────────
 
   const addMatchRow = () => {
     if (matches.length >= 5) return;
-    setMatches([
-      ...matches,
-      {
-        homeTeam: "",
-        awayTeam: "",
-        apiMatchId: "",
-        kickoffTime: nowPlusHours(24 * (matches.length + 1)),
-      },
-    ]);
+    setMatches([...matches, emptyRow(24 * (matches.length + 1))]);
   };
 
   const removeMatchRow = (i: number) => {
     setMatches(matches.filter((_, idx) => idx !== i));
+    if (activePickerIndex === i) setActivePickerIndex(null);
   };
 
-  const updateMatch = (i: number, field: string, value: string) => {
+  const updateMatch = (i: number, field: keyof MatchRow, value: string) =>
     setMatches(
       matches.map((m, idx) => (idx === i ? { ...m, [field]: value } : m)),
     );
+
+  const selectFixture = (i: number, f: FixtureMatch) => {
+    updateMatch(i, "homeTeam", f.homeTeam);
+    updateMatch(i, "awayTeam", f.awayTeam);
+    updateMatch(i, "apiMatchId", f.id);
+    setActivePickerIndex(null);
+    setSearch("");
   };
 
-  // ── Validation ───────────────────────────────────────────────────────────────
+  const openPicker = (i: number) => {
+    setActivePickerIndex(activePickerIndex === i ? null : i);
+    setSearch("");
+    loadFixtures();
+  };
+
+  // ── Validation ────────────────────────────────────────────────────────────
 
   const validate = () => {
     setFormError(null);
-    if (!eventName.trim())
-      return (setFormError("Event name is required"), false);
-    if (!inviteCode.trim())
-      return (setFormError("Invite code is required"), false);
-    if (inviteCode.trim().length < 4)
-      return (setFormError("Invite code must be at least 4 characters"), false);
-    if (matches.length === 0)
-      return (setFormError("Add at least one match"), false);
+    if (!eventName.trim()) {
+      setFormError("Event name is required");
+      return false;
+    }
+    if (!inviteCode.trim()) {
+      setFormError("Invite code is required");
+      return false;
+    }
+    if (inviteCode.trim().length < 4) {
+      setFormError("Invite code must be at least 4 characters");
+      return false;
+    }
+    if (matches.length === 0) {
+      setFormError("Add at least one match");
+      return false;
+    }
 
     const now = Math.floor(Date.now() / 1000);
     for (let i = 0; i < matches.length; i++) {
       const m = matches[i];
-      if (!m.homeTeam.trim() || !m.awayTeam.trim())
-        return (setFormError(`Match ${i + 1}: team names are required`), false);
-      if (!m.kickoffTime)
-        return (
-          setFormError(`Match ${i + 1}: kickoff time is required`),
-          false
-        );
-      const kickoffTs = Math.floor(new Date(m.kickoffTime).getTime() / 1000);
-      if (kickoffTs <= now)
-        return (
-          setFormError(`Match ${i + 1}: kickoff must be in the future`),
-          false
-        );
+      if (!m.homeTeam.trim() || !m.awayTeam.trim()) {
+        setFormError(`Match ${i + 1}: team names are required`);
+        return false;
+      }
+      if (!m.kickoffTime) {
+        setFormError(`Match ${i + 1}: kickoff time is required`);
+        return false;
+      }
+      if (Math.floor(new Date(m.kickoffTime).getTime() / 1000) <= now) {
+        setFormError(`Match ${i + 1}: kickoff must be in the future`);
+        return false;
+      }
     }
     return true;
   };
 
-  // ── Submit ───────────────────────────────────────────────────────────────────
-
-  const sendCreateEvent = () => {
-    const inviteCodeHash = keccak256(toBytes(inviteCode.trim()));
-    const homeTeams = matches.map((m) => m.homeTeam.trim());
-    const awayTeams = matches.map((m) => m.awayTeam.trim());
-    const apiMatchIds = matches.map(
-      (m) => m.apiMatchId.trim() || `match-${Date.now()}`,
-    );
-    const kickoffTimes = matches.map((m) =>
-      BigInt(Math.floor(new Date(m.kickoffTime).getTime() / 1000)),
-    );
-
-    createEvent({
-      address: CREATOR_EVENT_MANAGER_ADDRESS,
-      abi: CREATOR_EVENT_MANAGER_ABI,
-      functionName: "createEvent",
-      args: [
-        eventName.trim(),
-        inviteCodeHash,
-        homeTeams,
-        awayTeams,
-        apiMatchIds,
-        kickoffTimes,
-      ],
-      ...(isNativeFee && { value: feeAmount }),
-    });
-  };
+  // ── Submit ────────────────────────────────────────────────────────────────
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
-    resetApprove();
-    resetCreate();
+    reset();
 
     if (isWrongNetwork) {
       try {
@@ -208,23 +233,40 @@ export default function CreateCreatorEventPage() {
       }
     }
 
-    if (isNativeFee) {
-      // Native CELO — send directly
-      setStep("creating");
-      sendCreateEvent();
-    } else {
-      // ERC-20 — approve first
-      setStep("approving");
-      approve({
-        address: feeConfig!.token as `0x${string}`,
-        abi: ERC20_APPROVE_ABI,
-        functionName: "approve",
-        args: [CREATOR_EVENT_MANAGER_ADDRESS, feeAmount],
-      });
-    }
+    // Freeze args now
+    pendingArgsRef.current = {
+      eventNameTrimmed: eventName.trim(),
+      inviteCodeHash: keccak256(toBytes(inviteCode.trim())),
+      homeTeams: matches.map((m) => m.homeTeam.trim()),
+      awayTeams: matches.map((m) => m.awayTeam.trim()),
+      apiMatchIds: matches.map(
+        (m) => m.apiMatchId.trim() || `match-${Date.now()}`,
+      ),
+      kickoffTimes: matches.map((m) =>
+        BigInt(Math.floor(new Date(m.kickoffTime).getTime() / 1000)),
+      ),
+    };
+
+    const args = pendingArgsRef.current;
+
+    // Send CELO directly — no approval needed
+    writeContract({
+      address: CREATOR_EVENT_MANAGER_ADDRESS,
+      abi: CREATOR_EVENT_MANAGER_ABI,
+      functionName: "createEvent",
+      args: [
+        args.eventNameTrimmed,
+        args.inviteCodeHash,
+        args.homeTeams,
+        args.awayTeams,
+        args.apiMatchIds,
+        args.kickoffTimes,
+      ],
+      value: feeWei, // native CELO fee
+    });
   };
 
-  // ── Guards ───────────────────────────────────────────────────────────────────
+  // ── Guards ────────────────────────────────────────────────────────────────
 
   if (!isConnected)
     return (
@@ -261,7 +303,7 @@ export default function CreateCreatorEventPage() {
             <h2 className="text-3xl font-bold text-white mb-2">
               Event Created!
             </h2>
-            <p className="text-green-400 font-medium mb-1">
+            <p className="text-green-400 font-medium mb-2">
               Transaction confirmed on Celo Sepolia
             </p>
             <p className="text-gray-400 text-sm mb-2">
@@ -291,16 +333,9 @@ export default function CreateCreatorEventPage() {
                 onClick={() => {
                   setEventName("");
                   setInviteCode("");
-                  setMatches([
-                    {
-                      homeTeam: "",
-                      awayTeam: "",
-                      apiMatchId: "",
-                      kickoffTime: nowPlusHours(24),
-                    },
-                  ]);
+                  setMatches([emptyRow(24)]);
                   setSuccessTxHash(null);
-                  setStep("idle");
+                  reset();
                 }}
                 className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg transition"
               >
@@ -312,6 +347,8 @@ export default function CreateCreatorEventPage() {
         <Footer />
       </div>
     );
+
+  // ── Main form ─────────────────────────────────────────────────────────────
 
   return (
     <div className="relative pt-20 min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 pb-20">
@@ -327,16 +364,14 @@ export default function CreateCreatorEventPage() {
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-white mb-2">Create Event</h1>
           <p className="text-gray-400 text-sm">
-            Pay the creation fee · Share your invite code · Joining is free
+            Pay the creation fee in CELO · Share your invite code · Joining is
+            free
           </p>
-          {feeConfig && (
-            <div className="mt-3 inline-flex items-center gap-2 bg-orange-500/10 border border-orange-500/30 rounded-full px-4 py-1.5">
-              <span className="text-orange-400 text-sm font-bold">
-                Creation fee: {feeConfig.amount}{" "}
-                {feeConfig.token === ZERO_ADDRESS ? "CELO" : "tokens"}
-              </span>
-            </div>
-          )}
+          <div className="mt-3 inline-flex items-center gap-2 bg-orange-500/10 border border-orange-500/30 rounded-full px-4 py-1.5">
+            <span className="text-orange-400 text-sm font-bold">
+              Creation fee: {feeDisplay}
+            </span>
+          </div>
         </div>
 
         <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl border border-gray-700 p-8">
@@ -369,7 +404,7 @@ export default function CreateCreatorEventPage() {
                 type="text"
                 value={inviteCode}
                 onChange={(e) => {
-                  setInviteCode(e.target.value);
+                  setInviteCode(e.target.value.toUpperCase());
                   setFormError(null);
                 }}
                 placeholder="e.g. MYCODE2025"
@@ -409,21 +444,80 @@ export default function CreateCreatorEventPage() {
                     key={i}
                     className="bg-gray-900/50 border border-gray-700/50 rounded-xl p-4 space-y-3"
                   >
+                    {/* Row header */}
                     <div className="flex items-center justify-between">
                       <span className="text-gray-400 text-xs font-bold uppercase">
                         Match {i + 1}
                       </span>
-                      {matches.length > 1 && (
+                      <div className="flex items-center gap-3">
                         <button
                           type="button"
-                          onClick={() => removeMatchRow(i)}
+                          onClick={() => openPicker(i)}
                           disabled={busy}
-                          className="text-gray-500 hover:text-red-400 text-xs transition"
+                          className="text-xs text-blue-400 hover:text-blue-300 font-semibold transition disabled:opacity-50"
                         >
-                          Remove
+                          📋{" "}
+                          {activePickerIndex === i ? "Close" : "Pick from list"}
                         </button>
-                      )}
+                        {matches.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeMatchRow(i)}
+                            disabled={busy}
+                            className="text-gray-500 hover:text-red-400 text-xs transition"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
                     </div>
+
+                    {/* Fixture picker */}
+                    {activePickerIndex === i && (
+                      <div className="bg-gray-800 border border-gray-600 rounded-lg overflow-hidden">
+                        <div className="p-2 border-b border-gray-700">
+                          <input
+                            type="text"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder="Search team or league…"
+                            autoFocus
+                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          />
+                        </div>
+                        {fixturesLoading ? (
+                          <div className="flex justify-center py-6">
+                            <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-orange-500" />
+                          </div>
+                        ) : (
+                          <div className="max-h-56 overflow-y-auto">
+                            {filteredFixtures.length === 0 ? (
+                              <p className="text-gray-500 text-sm text-center py-4">
+                                No matches found
+                              </p>
+                            ) : (
+                              filteredFixtures.map((f) => (
+                                <button
+                                  key={f.id}
+                                  type="button"
+                                  onClick={() => selectFixture(i, f)}
+                                  className="w-full text-left px-4 py-3 hover:bg-gray-700 border-b border-gray-700/50 last:border-0 transition group"
+                                >
+                                  <p className="text-white text-sm font-semibold group-hover:text-orange-400 transition">
+                                    {f.homeTeam} vs {f.awayTeam}
+                                  </p>
+                                  <p className="text-gray-400 text-xs mt-0.5">
+                                    {f.league} · {f.venue}
+                                  </p>
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Team inputs */}
                     <div className="grid grid-cols-2 gap-3">
                       <input
                         type="text"
@@ -446,19 +540,19 @@ export default function CreateCreatorEventPage() {
                         className="px-3 py-2 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm disabled:opacity-50"
                       />
                     </div>
+
+                    {/* API ID + Kickoff */}
                     <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <input
-                          type="text"
-                          value={m.apiMatchId}
-                          onChange={(e) =>
-                            updateMatch(i, "apiMatchId", e.target.value)
-                          }
-                          placeholder="API Match ID (optional)"
-                          disabled={busy}
-                          className="w-full px-3 py-2 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm disabled:opacity-50"
-                        />
-                      </div>
+                      <input
+                        type="text"
+                        value={m.apiMatchId}
+                        onChange={(e) =>
+                          updateMatch(i, "apiMatchId", e.target.value)
+                        }
+                        placeholder="API Match ID (auto-filled)"
+                        disabled={busy}
+                        className="px-3 py-2 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm disabled:opacity-50"
+                      />
                       <div>
                         <input
                           type="datetime-local"
@@ -480,12 +574,12 @@ export default function CreateCreatorEventPage() {
             </div>
 
             {/* Error */}
-            {(formError || createError) && (
+            {(formError || writeError) && (
               <div className="p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-sm flex items-start gap-2">
                 <span>⚠️</span>
                 <span>
                   {formError ??
-                    createError?.message?.split(".")[0] ??
+                    writeError?.message?.split(".")[0] ??
                     "Transaction failed"}
                 </span>
               </div>
@@ -494,29 +588,25 @@ export default function CreateCreatorEventPage() {
             {/* Status */}
             {busy && (
               <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg text-blue-400 text-sm text-center">
-                {step === "approving"
-                  ? approvePending
-                    ? "⏳ Confirm token approval in wallet…"
-                    : "⏳ Waiting for approval confirmation…"
-                  : createPending
-                    ? "⏳ Confirm event creation in wallet…"
-                    : "⏳ Waiting for transaction confirmation…"}
+                {isPending
+                  ? "⏳ Confirm in wallet…"
+                  : "⏳ Waiting for confirmation…"}
               </div>
             )}
 
             {/* Submit */}
             <button
               type="submit"
-              disabled={busy}
+              disabled={busy || feeWei === BigInt(0)}
               className="w-full bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold py-3.5 px-6 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {busy ? (
                 <>
                   <span className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white" />
-                  {step === "approving" ? "Approving…" : "Creating event…"}
+                  Creating event…
                 </>
               ) : (
-                `Create Event${feeConfig ? ` · ${feeConfig.amount} ${feeConfig.token === ZERO_ADDRESS ? "CELO" : "tokens"}` : ""}`
+                `Create Event · ${feeDisplay}`
               )}
             </button>
           </form>

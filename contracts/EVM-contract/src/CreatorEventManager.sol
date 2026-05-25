@@ -6,17 +6,15 @@ import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/Pau
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /// @title CreatorEventManager
 /// @author TrueCall Team
 /// @notice Creator-focused prediction event contract.
 ///
 ///  Flow:
-///  1. Admin sets a creation fee (any ERC-20 on Celo) via `setCreationFee`.
-///  2. Creator calls `createEvent`, pays the creation fee (held in contract),
-///     supplies an invite-code hash and match details.
+///  1. Admin sets a creation fee in native CELO via `setCreationFee`.
+///  2. Creator calls `createEvent` and sends the CELO fee with the tx.
+///     Fee is held in the contract until admin withdraws.
 ///  3. Anyone with the plain-text invite code calls `joinEvent` for FREE.
 ///  4. Joined users call `submitPrediction` per match.
 ///     address + prediction + block.timestamp stored immutably on-chain.
@@ -24,7 +22,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 ///     Contract scans all participants, records every exact-score winner
 ///     with their original prediction timestamp — immutable, on-chain.
 ///  6. Anyone can call `getMatchWinners` to see the verified winner list.
-///  7. Admin calls `withdrawFees` to pull all accumulated creation fees.
+///  7. Admin calls `withdrawFees` to pull all accumulated CELO to treasury.
 ///
 ///  Anti-cheat guarantees:
 ///  - `submittedAt` is set to `block.timestamp` on first prediction, never updated.
@@ -39,8 +37,6 @@ contract CreatorEventManager is
     UUPSUpgradeable,
     ReentrancyGuard
 {
-    using SafeERC20 for IERC20;
-
     // ─── Constants ────────────────────────────────────────────────────────────
 
     /// @notice Maximum number of matches allowed per event
@@ -50,11 +46,6 @@ contract CreatorEventManager is
     uint256 public constant MAX_PARTICIPANTS_PER_EVENT = 500;
 
     // ─── Structs ──────────────────────────────────────────────────────────────
-
-    struct CreationFeeConfig {
-        address token;  // ERC-20 token address
-        uint256 amount; // Fee amount in token's native decimals
-    }
 
     struct Event {
         uint256 eventId;
@@ -70,12 +61,12 @@ contract CreatorEventManager is
         uint256 eventId;
         string  homeTeam;
         string  awayTeam;
-        string  apiMatchId;    // External API reference used by the AI agent
+        string  apiMatchId;  // External API reference used by the AI agent
         uint256 kickoffTime;
         MatchStatus status;
         uint8   finalHomeScore;
         uint8   finalAwayScore;
-        uint256 verifiedAt;    // block.timestamp when AI agent submitted result
+        uint256 verifiedAt;  // block.timestamp when AI agent submitted result
     }
 
     struct Prediction {
@@ -105,7 +96,7 @@ contract CreatorEventManager is
 
     // ─── Events ───────────────────────────────────────────────────────────────
 
-    event CreationFeeUpdated(address indexed token, uint256 amount);
+    event CreationFeeUpdated(uint256 amount);
     event TreasuryUpdated(address indexed treasury);
     event AIAgentUpdated(address indexed agent);
     event AddressVerified(address indexed user);
@@ -152,8 +143,7 @@ contract CreatorEventManager is
     );
 
     event EventCancelled(uint256 indexed eventId);
-
-    event FeesWithdrawn(address indexed token, address indexed to, uint256 amount);
+    event FeesWithdrawn(address indexed to, uint256 amount);
 
     // ─── Errors ───────────────────────────────────────────────────────────────
 
@@ -166,7 +156,6 @@ contract CreatorEventManager is
     error NotJoined();
     error EventNotOpen();
     error MatchNotOpen();
-    error MatchNotVerified();
     error DeadlinePassed();
     error KickoffInPast();
     error AlreadyPredicted();
@@ -174,24 +163,23 @@ contract CreatorEventManager is
     error OnlyCreator();
     error ArrayLengthMismatch();
     error NothingToWithdraw();
-    error MatchNotInEvent();
     error EventMatchLimitReached();
     error EventFull();
+    error InsufficientFee();
 
     // ─── State ────────────────────────────────────────────────────────────────
 
-    /// @notice AI Oracle Agent — only address allowed to submit match results
-    address public aiOracleAgent;
+    /// @notice Creation fee in native CELO (wei). Set by admin, applies to all future events.
+    uint256 public creationFee;
+
+    /// @notice Accumulated CELO fees pending withdrawal by admin
+    uint256 public pendingFees;
 
     /// @notice Treasury — receives withdrawn fees
     address public treasury;
 
-    /// @notice Creation fee config (token + amount), set by admin
-    CreationFeeConfig public creationFee;
-
-    /// @notice Total creation fees accumulated per token, pending withdrawal
-    /// @dev token address => accumulated amount
-    mapping(address => uint256) public pendingFees;
+    /// @notice AI Oracle Agent — only address allowed to submit match results
+    address public aiOracleAgent;
 
     /// @notice Auto-incrementing event ID counter
     uint256 public nextEventId;
@@ -205,7 +193,7 @@ contract CreatorEventManager is
     /// @notice matchId => Match
     mapping(uint256 => Match) public matches;
 
-    /// @notice eventId => matchId[] (all matches in this event)
+    /// @notice eventId => matchId[]
     mapping(uint256 => uint256[]) private _eventMatches;
 
     /// @notice matchId => user => Prediction
@@ -217,15 +205,13 @@ contract CreatorEventManager is
     /// @notice eventId => participants list (ordered by join time)
     mapping(uint256 => address[]) private _participants;
 
-    /// @notice matchId => verified winners list (set by AI agent, immutable after)
+    /// @notice matchId => verified winners list (immutable after AI agent sets it)
     mapping(uint256 => Winner[]) private _matchWinners;
 
-    /// @notice matchId => user => is a verified winner for this match
+    /// @notice matchId => user => is a verified winner
     mapping(uint256 => mapping(address => bool)) private _isMatchWinner;
 
-    /// @notice Tracks whether an address has completed Twitter/social verification.
-    ///         Set by admin (backend) after OAuth is confirmed off-chain.
-    /// @dev address => is verified
+    /// @notice address => has completed social verification (set by admin after OAuth)
     mapping(address => bool) public isVerified;
 
     // ─── Storage gap for future upgrades ─────────────────────────────────────
@@ -268,23 +254,20 @@ contract CreatorEventManager is
 
     // ─── UUPS Upgrade Authorization ───────────────────────────────────────────
 
-    /// @dev Only owner can authorize upgrades
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
-    /// @notice Accept native CELO transfers
+    /// @notice Accept native CELO
     receive() external payable {}
 
     // ─── Admin Configuration ──────────────────────────────────────────────────
 
-    /// @notice Set or update the creation fee.
-    ///         Accepts any ERC-20 token on Celo (cUSD, USDT, cEUR, CELO, etc.)
-    /// @param token  ERC-20 token address
-    /// @param amount Fee amount in token's native decimals (e.g. 1e18 = 1 token)
-    function setCreationFee(address token, uint256 amount) external onlyOwner {
-        if (token == address(0)) revert ZeroAddress();
+    /// @notice Admin sets the creation fee in native CELO.
+    ///         Applies to all events created after this call.
+    /// @param amount Fee in wei (e.g. 1e18 = 1 CELO, 1e17 = 0.1 CELO)
+    function setCreationFee(uint256 amount) external onlyOwner {
         if (amount == 0) revert ZeroAmount();
-        creationFee = CreationFeeConfig({token: token, amount: amount});
-        emit CreationFeeUpdated(token, amount);
+        creationFee = amount;
+        emit CreationFeeUpdated(amount);
     }
 
     /// @notice Update treasury address
@@ -306,17 +289,14 @@ contract CreatorEventManager is
 
     // ─── Verification Registry ────────────────────────────────────────────────
 
-    /// @notice Admin marks an address as verified (called after Twitter OAuth off-chain).
-    ///         Your backend handles the OAuth flow, then calls this once confirmed.
-    /// @param user Address to verify
+    /// @notice Admin marks an address as verified (called after Twitter OAuth off-chain)
     function verifyAddress(address user) external onlyOwner {
         if (user == address(0)) revert ZeroAddress();
         isVerified[user] = true;
         emit AddressVerified(user);
     }
 
-    /// @notice Admin can batch-verify multiple addresses in one tx (gas efficient).
-    /// @param users Array of addresses to verify
+    /// @notice Admin batch-verifies multiple addresses in one tx
     function verifyAddressBatch(address[] calldata users) external onlyOwner {
         for (uint256 i = 0; i < users.length; i++) {
             if (users[i] == address(0)) revert ZeroAddress();
@@ -325,8 +305,7 @@ contract CreatorEventManager is
         }
     }
 
-    /// @notice Admin revokes verification (e.g. Twitter account delinked or banned).
-    /// @param user Address to unverify
+    /// @notice Admin revokes verification
     function unverifyAddress(address user) external onlyOwner {
         isVerified[user] = false;
         emit AddressUnverified(user);
@@ -334,33 +313,23 @@ contract CreatorEventManager is
 
     // ─── Fee Withdrawal ───────────────────────────────────────────────────────
 
-    /// @notice Admin withdraws all accumulated creation fees to the treasury.
-    ///         Pass address(0) to withdraw native CELO, or an ERC-20 token address.
-    /// @param token address(0) for native CELO, or any ERC-20 token address
-    function withdrawFees(address token) external onlyOwner nonReentrant {
-        uint256 amount = pendingFees[token];
+    /// @notice Admin withdraws all accumulated CELO fees to treasury
+    function withdrawFees() external onlyOwner nonReentrant {
+        uint256 amount = pendingFees;
         if (amount == 0) revert NothingToWithdraw();
 
-        pendingFees[token] = 0;
+        pendingFees = 0;
+        (bool ok, ) = payable(treasury).call{value: amount}("");
+        require(ok, "CELO transfer failed");
 
-        if (token == address(0)) {
-            // Native CELO
-            (bool ok, ) = payable(treasury).call{value: amount}("");
-            require(ok, "CELO transfer failed");
-        } else {
-            // ERC-20
-            IERC20(token).safeTransfer(treasury, amount);
-        }
-
-        emit FeesWithdrawn(token, treasury, amount);
+        emit FeesWithdrawn(treasury, amount);
     }
 
     // ─── Event Creation ───────────────────────────────────────────────────────
 
-    /// @notice Creator creates a new prediction event and pays the creation fee.
-    ///         The fee is held in this contract until admin calls `withdrawFees`.
-    ///         Joining the event is FREE — users only need the invite code.
-    ///         Each match controls its own prediction window via its kickoff time.
+    /// @notice Creator creates a new prediction event by paying the CELO creation fee.
+    ///         Fee is held in the contract until admin calls `withdrawFees`.
+    ///         Joining is FREE — users only need the invite code.
     ///
     /// @param eventName      Human-readable name, e.g. "UCL Final Night"
     /// @param inviteCodeHash keccak256(plain-text invite code) — store code off-chain
@@ -377,7 +346,8 @@ contract CreatorEventManager is
         string[] calldata apiMatchIds,
         uint256[] calldata kickoffTimes
     ) external payable nonReentrant whenNotPaused returns (uint256 eventId) {
-        if (creationFee.token == address(0)) revert NoCreationFeeSet();
+        if (creationFee == 0) revert NoCreationFeeSet();
+        if (msg.value < creationFee) revert InsufficientFee();
         if (inviteCodeHash == bytes32(0)) revert InvalidInviteCode();
         if (
             homeTeams.length == 0 ||
@@ -386,21 +356,14 @@ contract CreatorEventManager is
             homeTeams.length != kickoffTimes.length
         ) revert ArrayLengthMismatch();
 
-        // Collect creation fee — held in contract, withdrawn by admin later
-        if (creationFee.token == address(0)) {
-            // Native CELO
-            require(msg.value >= creationFee.amount, "Insufficient CELO sent");
-            // Refund any excess
-            if (msg.value > creationFee.amount) {
-                (bool ok, ) = payable(msg.sender).call{value: msg.value - creationFee.amount}("");
-                require(ok, "Refund failed");
-            }
-        } else {
-            // ERC-20 token
-            require(msg.value == 0, "Do not send CELO for ERC-20 fee");
-            IERC20(creationFee.token).safeTransferFrom(msg.sender, address(this), creationFee.amount);
+        // Hold fee in contract
+        pendingFees += creationFee;
+
+        // Refund any excess CELO sent
+        if (msg.value > creationFee) {
+            (bool ok, ) = payable(msg.sender).call{value: msg.value - creationFee}("");
+            require(ok, "Refund failed");
         }
-        pendingFees[creationFee.token] += creationFee.amount;
 
         // Create event record
         eventId = nextEventId++;
@@ -423,16 +386,8 @@ contract CreatorEventManager is
 
     // ─── Match Management ─────────────────────────────────────────────────────
 
-    /// @notice Creator adds a match to their event after it has been created.
+    /// @notice Creator adds a match to their event (max 5 total).
     ///         Only the event creator can call this.
-    ///         Must be called before the prediction deadline passes.
-    ///
-    /// @param eventId    Target event (must be owned by msg.sender)
-    /// @param homeTeam   Home team name
-    /// @param awayTeam   Away team name
-    /// @param apiMatchId External API match ID (used by AI agent to fetch result)
-    /// @param kickoffTime Unix timestamp of match kickoff (must be in the future)
-    /// @return matchId   The newly created match ID
     function addMatch(
         uint256 eventId,
         string calldata homeTeam,
@@ -452,9 +407,7 @@ contract CreatorEventManager is
     // ─── Joining ──────────────────────────────────────────────────────────────
 
     /// @notice Join an event for FREE using the invite code.
-    ///         Must join before the prediction deadline.
-    /// @param eventId    Target event
-    /// @param inviteCode Plain-text invite code (hashed on-chain for verification)
+    ///         Joiner must be socially verified (Twitter OAuth).
     function joinEvent(
         uint256 eventId,
         string calldata inviteCode
@@ -477,11 +430,7 @@ contract CreatorEventManager is
 
     /// @notice Submit a score prediction for a match.
     ///         One prediction per user per match — immutable once submitted.
-    ///         `submittedAt` is recorded as `block.timestamp` and NEVER changed.
-    ///
-    /// @param matchId   Target match
-    /// @param homeScore Predicted home team score
-    /// @param awayScore Predicted away team score
+    ///         `submittedAt` is `block.timestamp` and NEVER changed.
     function submitPrediction(
         uint256 matchId,
         uint8   homeScore,
@@ -500,7 +449,7 @@ contract CreatorEventManager is
         pred.homeScore   = homeScore;
         pred.awayScore   = awayScore;
         pred.submitted   = true;
-        pred.submittedAt = block.timestamp; // immutable — anti-cheat proof
+        pred.submittedAt = block.timestamp;
 
         emit PredictionSubmitted(
             matchId, eventId, msg.sender, homeScore, awayScore, block.timestamp
@@ -509,14 +458,8 @@ contract CreatorEventManager is
 
     // ─── AI Oracle Agent ──────────────────────────────────────────────────────
 
-    /// @notice AI Oracle Agent submits the verified correct score for a match.
-    ///         The contract scans all participants, finds everyone who predicted
-    ///         the exact score, and records them as verified winners with their
-    ///         original prediction timestamp. This list is immutable.
-    ///
-    /// @param matchId   Target match
-    /// @param homeScore Correct home score
-    /// @param awayScore Correct away score
+    /// @notice AI Oracle Agent submits the verified correct score.
+    ///         Contract records all exact-score winners with their timestamps.
     function submitMatchResult(
         uint256 matchId,
         uint8   homeScore,
@@ -536,7 +479,6 @@ contract CreatorEventManager is
         address[] memory participants = _participants[eventId];
         uint256 winnersFound = 0;
 
-        // Scan all participants — record exact-score winners on-chain
         for (uint256 i = 0; i < participants.length; i++) {
             address user = participants[i];
             Prediction storage pred = predictions[matchId][user];
@@ -548,7 +490,7 @@ contract CreatorEventManager is
             ) {
                 _matchWinners[matchId].push(Winner({
                     user:        user,
-                    submittedAt: pred.submittedAt // original timestamp — tiebreaker proof
+                    submittedAt: pred.submittedAt
                 }));
                 _isMatchWinner[matchId][user] = true;
                 winnersFound++;
@@ -562,17 +504,14 @@ contract CreatorEventManager is
 
     // ─── Creator: Cancel Event ────────────────────────────────────────────────
 
-    /// @notice Creator can cancel an event before any match result is submitted.
-    ///         No refunds needed — joining was free.
-    ///         Creation fee is NOT refunded (already counted as platform revenue).
-    /// @param eventId Target event
+    /// @notice Creator cancels an event before any match result is submitted.
+    ///         Creation fee is NOT refunded — it's platform revenue.
     function cancelEvent(uint256 eventId) external {
         Event storage ev = events[eventId];
 
         if (ev.creator != msg.sender) revert OnlyCreator();
         if (ev.status != EventStatus.OPEN) revert EventNotOpen();
 
-        // Block cancellation once any match has a result
         uint256[] memory matchIds = _eventMatches[eventId];
         for (uint256 i = 0; i < matchIds.length; i++) {
             if (matches[matchIds[i]].status == MatchStatus.VERIFIED) revert MatchNotOpen();
@@ -584,65 +523,44 @@ contract CreatorEventManager is
 
     // ─── Views ────────────────────────────────────────────────────────────────
 
-    /// @notice Get all verified winners for a match, ordered by insertion (first found first).
-    ///         Each entry includes the winner's address and their prediction timestamp.
     function getMatchWinners(uint256 matchId) external view returns (Winner[] memory) {
         return _matchWinners[matchId];
     }
 
-    /// @notice Check if a specific user is a verified winner for a match
     function isMatchWinner(uint256 matchId, address user) external view returns (bool) {
         return _isMatchWinner[matchId][user];
     }
 
-    /// @notice Get all participants for an event
     function getParticipants(uint256 eventId) external view returns (address[] memory) {
         return _participants[eventId];
     }
 
-    /// @notice Get participant count for an event
     function getParticipantCount(uint256 eventId) external view returns (uint256) {
         return _participants[eventId].length;
     }
 
-    /// @notice Get all match IDs for an event
     function getEventMatches(uint256 eventId) external view returns (uint256[] memory) {
         return _eventMatches[eventId];
     }
 
-    /// @notice Get a user's prediction for a match
     function getPrediction(uint256 matchId, address user)
-        external
-        view
-        returns (
-            uint8   homeScore,
-            uint8   awayScore,
-            bool    submitted,
-            uint256 submittedAt
-        )
+        external view
+        returns (uint8 homeScore, uint8 awayScore, bool submitted, uint256 submittedAt)
     {
         Prediction memory p = predictions[matchId][user];
         return (p.homeScore, p.awayScore, p.submitted, p.submittedAt);
     }
 
-    /// @notice Check if a user has joined an event
     function hasJoined(uint256 eventId, address user) external view returns (bool) {
         return _hasJoined[eventId][user];
     }
 
-    /// @notice Get full event details
     function getEvent(uint256 eventId) external view returns (Event memory) {
         return events[eventId];
     }
 
-    /// @notice Get full match details
     function getMatch(uint256 matchId) external view returns (Match memory) {
         return matches[matchId];
-    }
-
-    /// @notice Get pending fee balance for a given token
-    function getPendingFees(address token) external view returns (uint256) {
-        return pendingFees[token];
     }
 
     // ─── Internal Helpers ─────────────────────────────────────────────────────

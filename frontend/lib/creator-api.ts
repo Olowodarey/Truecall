@@ -96,7 +96,6 @@ export const fetchVerificationStatus = (
 // ─── Fee ──────────────────────────────────────────────────────────────────────
 
 export const fetchCreationFee = (): Promise<{
-  token: string;
-  amount: string;
-  amountRaw: string;
+  amount: string; // formatted CELO e.g. "0.1"
+  amountRaw: string; // wei string
 }> => get("/fee");

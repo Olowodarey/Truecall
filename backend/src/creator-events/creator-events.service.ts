@@ -5,9 +5,6 @@ import {
   createWalletClient,
   http,
   formatUnits,
-  parseUnits,
-  keccak256,
-  toBytes,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { CREATOR_EVENT_MANAGER_ABI } from '../abi/CreatorEventManager.abi';
@@ -198,12 +195,11 @@ export class CreatorEventsService implements OnModuleInit {
       address: this.contractAddress,
       abi: CREATOR_EVENT_MANAGER_ABI,
       functionName: 'creationFee',
-    })) as unknown as [string, bigint];
+    })) as bigint;
 
     return {
-      token: fee[0],
-      amount: formatUnits(fee[1], 18),
-      amountRaw: fee[1].toString(),
+      amount: formatUnits(fee, 18), // e.g. "0.1"
+      amountRaw: fee.toString(), // wei string for frontend BigInt conversion
     };
   }
 
@@ -248,19 +244,14 @@ export class CreatorEventsService implements OnModuleInit {
     return { success: true, transactionHash: receipt.transactionHash, user };
   }
 
-  async withdrawFees(token: string) {
-    const tokenAddress =
-      token === 'native'
-        ? '0x0000000000000000000000000000000000000000'
-        : (token as `0x${string}`);
-
+  async withdrawFees() {
     const hash = await this.walletClient.writeContract({
       account: this.account,
       chain: celoSepolia,
       address: this.contractAddress,
       abi: CREATOR_EVENT_MANAGER_ABI,
       functionName: 'withdrawFees',
-      args: [tokenAddress],
+      args: [],
     });
     const receipt = await this.publicClient.waitForTransactionReceipt({ hash });
     return { success: true, transactionHash: receipt.transactionHash };

@@ -1,6 +1,6 @@
 // ABI for CreatorEventManager — Celo Sepolia
-// Proxy: 0x34ef9AebB8354cbc45ED67086F74B722aD959787
-// Impl:  0x2Eb442F39E6678fbA52053199bB009E4072DC5F3
+// Proxy: 0xD360E9eF6bF50A357c77fA17474a4838c2379B3f
+// Fee:   native CELO only
 
 export const CREATOR_EVENT_MANAGER_ABI = [
   // ─── Write ────────────────────────────────────────────────────────────────
@@ -95,17 +95,14 @@ export const CREATOR_EVENT_MANAGER_ABI = [
     type: 'function',
     name: 'withdrawFees',
     stateMutability: 'nonpayable',
-    inputs: [{ name: 'token', type: 'address' }],
+    inputs: [], // no args — always sends to treasury
     outputs: [],
   },
   {
     type: 'function',
     name: 'setCreationFee',
     stateMutability: 'nonpayable',
-    inputs: [
-      { name: 'token', type: 'address' },
-      { name: 'amount', type: 'uint256' },
-    ],
+    inputs: [{ name: 'amount', type: 'uint256' }], // wei, native CELO
     outputs: [],
   },
 
@@ -249,16 +246,13 @@ export const CREATOR_EVENT_MANAGER_ABI = [
     name: 'creationFee',
     stateMutability: 'view',
     inputs: [],
-    outputs: [
-      { name: 'token', type: 'address' },
-      { name: 'amount', type: 'uint256' },
-    ],
+    outputs: [{ type: 'uint256' }], // wei, native CELO
   },
   {
     type: 'function',
     name: 'pendingFees',
     stateMutability: 'view',
-    inputs: [{ name: 'token', type: 'address' }],
+    inputs: [],
     outputs: [{ type: 'uint256' }],
   },
 
@@ -320,9 +314,13 @@ export const CREATOR_EVENT_MANAGER_ABI = [
   },
   {
     type: 'event',
+    name: 'CreationFeeUpdated',
+    inputs: [{ name: 'amount', type: 'uint256', indexed: false }],
+  },
+  {
+    type: 'event',
     name: 'FeesWithdrawn',
     inputs: [
-      { name: 'token', type: 'address', indexed: true },
       { name: 'to', type: 'address', indexed: true },
       { name: 'amount', type: 'uint256', indexed: false },
     ],
