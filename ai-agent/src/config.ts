@@ -6,14 +6,28 @@ function required(key: string): string {
   return val;
 }
 
+function optional(key: string, defaultVal: string): string {
+  return process.env[key] ?? defaultVal;
+}
+
 export const config = {
   // Celo
   celoRpcUrl: required("CELO_RPC_URL"),
   agentPrivateKey: required("AGENT_PRIVATE_KEY") as `0x${string}`,
-  eventManagerAddress: required("EVENT_MANAGER_ADDRESS") as `0x${string}`,
+  eventManagerAddress: optional(
+    "EVENT_MANAGER_ADDRESS",
+    "0x0000000000000000000000000000000000000000",
+  ) as `0x${string}`,
+  creatorEventManagerAddress: optional(
+    "CREATOR_EVENT_MANAGER_ADDRESS",
+    "0xD360E9eF6bF50A357c77fA17474a4838c2379B3f",
+  ) as `0x${string}`,
 
-  // API-Football
-  apiFootballKey: required("API_FOOTBALL_KEY"),
+  // Backend API (for fetching match results)
+  backendApiUrl: optional("BACKEND_API_URL", "http://localhost:3001/api"),
+
+  // API-Football (optional for testing with JSON data)
+  apiFootballKey: optional("API_FOOTBALL_KEY", "test-key"),
   apiFootballBaseUrl:
     process.env.API_FOOTBALL_BASE_URL ?? "https://v3.football.api-sports.io",
 

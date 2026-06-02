@@ -10,7 +10,10 @@
       "venue": "Old Trafford",
       "homeTeamId": "man_utd",
       "awayTeamId": "liverpool",
-      "kickoffTime": 1780588414
+      "kickoffTime": 1748752800,
+      "finalHomeScore": 1,
+      "finalAwayScore": 2,
+      "status": "FT"
     },
     {
       "id": "match_002",
