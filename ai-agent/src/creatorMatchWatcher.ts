@@ -49,9 +49,7 @@ let lastScannedBlock: bigint = 0n;
 /**
  * Fetch match result from backend API
  */
-async function fetchMatchResultFromBackend(
-  apiMatchId: string,
-): Promise<{
+async function fetchMatchResultFromBackend(apiMatchId: string): Promise<{
   homeScore: number;
   awayScore: number;
   isFinished: boolean;
@@ -99,21 +97,39 @@ async function fetchMatchResultFromBackend(
 function getMatchResultFromJson(
   apiMatchId: string,
 ): { homeScore: number; awayScore: number; isFinished: boolean } | null {
-  const match = matchDataService.getByApiId(apiMatchId);
+  const match = matchDataService.getByApiId(apiMatchId) as any;
 
   if (!match) {
     return null;
   }
 
-  // For testing: if kickoff time has passed, use hardcoded results
+  // For testing: if kickoff time has passed, check for actual results in JSON
   const now = Math.floor(Date.now() / 1000);
   if (match.kickoffTime <= now) {
-    // Generate deterministic result based on match ID for testing
+    // If the JSON has actual scores, use them
+    if (
+      match.finalHomeScore !== undefined &&
+      match.finalAwayScore !== undefined
+    ) {
+      logger.info("Using match result from JSON data", {
+        apiMatchId,
+        homeScore: match.finalHomeScore,
+        awayScore: match.finalAwayScore,
+      });
+
+      return {
+        homeScore: match.finalHomeScore,
+        awayScore: match.finalAwayScore,
+        isFinished: true,
+      };
+    }
+
+    // Otherwise generate deterministic result based on match ID for testing
     const hash = hashCode(apiMatchId);
     const homeScore = Math.abs(hash % 4);
     const awayScore = Math.abs((hash / 4) % 4);
 
-    logger.info("Using test result from JSON", {
+    logger.info("Using generated test result from JSON", {
       apiMatchId,
       homeScore,
       awayScore,
@@ -199,11 +215,16 @@ async function processTrackedMatches(): Promise<void> {
       continue;
     }
 
+    // Get the actual kickoff time from JSON (may be different from contract if testing)
+    const jsonMatch = matchDataService.getByApiId(match.apiMatchId);
+    const actualKickoffTime =
+      jsonMatch?.kickoffTime ?? Number(match.kickoffTime);
+
     // Skip if match hasn't kicked off yet
-    if (Number(match.kickoffTime) > now) {
+    if (actualKickoffTime > now) {
       logger.debug("Match not kicked off yet", {
         matchId: key,
-        kickoffTime: new Date(Number(match.kickoffTime) * 1000).toISOString(),
+        kickoffTime: new Date(actualKickoffTime * 1000).toISOString(),
       });
       continue;
     }

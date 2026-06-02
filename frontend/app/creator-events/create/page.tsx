@@ -171,8 +171,28 @@ export default function CreateCreatorEventPage() {
       matches.map((m, idx) => {
         if (idx !== i) return m;
 
+        // Convert UTC timestamp to Nigerian time (WAT = GMT+1)
         const kickoffDate = new Date((f.kickoffTime ?? 0) * 1000);
-        const isoString = kickoffDate.toISOString().slice(0, 16);
+
+        // Get components in Nigerian timezone (Africa/Lagos)
+        const nigerianTimeStr = kickoffDate.toLocaleString("en-US", {
+          timeZone: "Africa/Lagos",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        });
+
+        // Parse the Nigerian time string to extract components
+        // Format will be: MM/DD/YYYY, HH:mm
+        const [datePart, timePart] = nigerianTimeStr.split(", ");
+        const [month, day, year] = datePart.split("/");
+        const [hours, minutes] = timePart.split(":");
+
+        // Format for datetime-local input: YYYY-MM-DDTHH:mm
+        const isoString = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T${hours.padStart(2, "0")}:${minutes.padStart(2, "0")}`;
 
         return {
           ...m,
@@ -226,7 +246,19 @@ export default function CreateCreatorEventPage() {
         setFormError(`Match ${i + 1}: kickoff time is required`);
         return false;
       }
-      if (Math.floor(new Date(m.kickoffTime).getTime() / 1000) <= now) {
+
+      // Parse datetime-local as Nigerian time (WAT = UTC+1)
+      const [datePart, timePart] = m.kickoffTime.split("T");
+      const [year, month, day] = datePart.split("-");
+      const [hours, minutes] = timePart.split(":");
+
+      // Create date in Nigerian timezone
+      const nigerianDate = new Date(
+        `${year}-${month}-${day}T${hours}:${minutes}:00+01:00`,
+      );
+      const kickoffTs = Math.floor(nigerianDate.getTime() / 1000);
+
+      if (kickoffTs <= now) {
         setFormError(`Match ${i + 1}: kickoff must be in the future`);
         return false;
       }
@@ -258,9 +290,18 @@ export default function CreateCreatorEventPage() {
       apiMatchIds: matches.map(
         (m) => m.apiMatchId.trim() || `match-${Date.now()}`,
       ),
-      kickoffTimes: matches.map((m) =>
-        BigInt(Math.floor(new Date(m.kickoffTime).getTime() / 1000)),
-      ),
+      kickoffTimes: matches.map((m) => {
+        // Parse datetime-local as Nigerian time (WAT = UTC+1)
+        const [datePart, timePart] = m.kickoffTime.split("T");
+        const [year, month, day] = datePart.split("-");
+        const [hours, minutes] = timePart.split(":");
+
+        // Create date in Nigerian timezone
+        const nigerianDate = new Date(
+          `${year}-${month}-${day}T${hours}:${minutes}:00+01:00`,
+        );
+        return BigInt(Math.floor(nigerianDate.getTime() / 1000));
+      }),
     };
 
     const args = pendingArgsRef.current;

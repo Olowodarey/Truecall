@@ -34,6 +34,17 @@ function nowPlusHours(h: number) {
   return d.toISOString().slice(0, 16);
 }
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface FixtureMatch {
+  id: string;
+  homeTeam: string;
+  awayTeam: string;
+  league: string;
+  venue: string;
+  kickoffTime?: number;
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function CreatorEventDetailPage() {
@@ -82,6 +93,13 @@ export default function CreatorEventDetailPage() {
     kickoffTime: nowPlusHours(24),
   });
   const [addMatchError, setAddMatchError] = useState<string | null>(null);
+
+  // Fixture picker state for add match
+  const [fixtures, setFixtures] = useState<FixtureMatch[]>([]);
+  const [fixturesLoading, setFixturesLoading] = useState(false);
+  const [fixturesLoaded, setFixturesLoaded] = useState(false);
+  const [search, setSearch] = useState("");
+  const [showFixturePicker, setShowFixturePicker] = useState(false);
 
   // Winners modal
   const [winnersMatchId, setWinnersMatchId] = useState<number | null>(null);
@@ -258,13 +276,94 @@ export default function CreatorEventDetailPage() {
 
   // ── Add Match ────────────────────────────────────────────────────────────────
 
+  const loadFixtures = async () => {
+    if (fixturesLoaded) return;
+    setFixturesLoading(true);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/matches/upcoming`,
+      );
+      if (res.ok) {
+        setFixtures(await res.json());
+        setFixturesLoaded(true);
+      }
+    } catch {
+      /* silently fail */
+    } finally {
+      setFixturesLoading(false);
+    }
+  };
+
+  const filteredFixtures = fixtures.filter(
+    (f) =>
+      search === "" ||
+      f.homeTeam.toLowerCase().includes(search.toLowerCase()) ||
+      f.awayTeam.toLowerCase().includes(search.toLowerCase()) ||
+      f.league.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  const selectFixture = (f: FixtureMatch) => {
+    // Convert Unix timestamp to Nigerian time (WAT = GMT+1)
+    const kickoffDate = new Date((f.kickoffTime ?? 0) * 1000);
+
+    // Get components in Nigerian timezone (Africa/Lagos)
+    const nigerianTimeStr = kickoffDate.toLocaleString("en-US", {
+      timeZone: "Africa/Lagos",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+
+    // Parse the Nigerian time string to extract components
+    // Format will be: MM/DD/YYYY, HH:mm
+    const [datePart, timePart] = nigerianTimeStr.split(", ");
+    const [month, day, year] = datePart.split("/");
+    const [hours, minutes] = timePart.split(":");
+
+    // Format for datetime-local input: YYYY-MM-DDTHH:mm
+    const isoString = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T${hours.padStart(2, "0")}:${minutes.padStart(2, "0")}`;
+
+    setNewMatch({
+      homeTeam: f.homeTeam,
+      awayTeam: f.awayTeam,
+      apiMatchId: f.id,
+      kickoffTime: isoString,
+    });
+    setShowFixturePicker(false);
+    setSearch("");
+  };
+
+  const openFixturePicker = () => {
+    setShowFixturePicker(!showFixturePicker);
+    setSearch("");
+    loadFixtures();
+  };
+
   const handleAddMatch = async () => {
     setAddMatchError(null);
     if (!newMatch.homeTeam.trim() || !newMatch.awayTeam.trim())
       return setAddMatchError("Team names are required");
-    const kickoffTs = Math.floor(
-      new Date(newMatch.kickoffTime).getTime() / 1000,
+
+    // Parse the datetime-local value as if it's Nigerian time (WAT = GMT+1)
+    // Format: YYYY-MM-DDTHH:mm
+    const datetimeLocal = newMatch.kickoffTime;
+
+    // When user enters time in datetime-local, treat it as Nigerian time
+    // We need to convert Nigerian time to UTC for the blockchain
+    // WAT is UTC+1, so subtract 1 hour (3600 seconds)
+    const [datePart, timePart] = datetimeLocal.split("T");
+    const [year, month, day] = datePart.split("-");
+    const [hours, minutes] = timePart.split(":");
+
+    // Create date in Nigerian timezone
+    const nigerianDate = new Date(
+      `${year}-${month}-${day}T${hours}:${minutes}:00+01:00`,
     );
+    const kickoffTs = Math.floor(nigerianDate.getTime() / 1000);
+
     if (kickoffTs <= Math.floor(Date.now() / 1000))
       return setAddMatchError("Kickoff must be in the future");
     resetAddMatch();
@@ -477,7 +576,68 @@ export default function CreatorEventDetailPage() {
           {/* Add match form */}
           {showAddMatch && isCreator && (
             <div className="bg-gray-800/60 border border-orange-500/30 rounded-xl p-5 mb-5">
-              <h3 className="text-white font-bold mb-4">Add Match</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-white font-bold">Add Match</h3>
+                <button
+                  type="button"
+                  onClick={openFixturePicker}
+                  disabled={addMatchPending || addMatchMining}
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1.5 px-3 rounded-lg text-sm transition disabled:opacity-50 flex items-center gap-1"
+                >
+                  {showFixturePicker ? "✕ Close" : "📋 Load Matches"}
+                </button>
+              </div>
+
+              {/* Fixture picker */}
+              {showFixturePicker && (
+                <div className="bg-gray-900/50 border border-gray-600 rounded-lg overflow-hidden mb-4">
+                  <div className="p-3 border-b border-gray-700">
+                    <input
+                      type="text"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="Search team or league…"
+                      autoFocus
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  {fixturesLoading ? (
+                    <div className="flex justify-center py-6">
+                      <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-orange-500" />
+                    </div>
+                  ) : (
+                    <div className="max-h-72 overflow-y-auto">
+                      {filteredFixtures.length === 0 ? (
+                        <p className="text-gray-500 text-sm text-center py-4">
+                          {search ? "No matches found" : "Loading matches..."}
+                        </p>
+                      ) : (
+                        <div className="divide-y divide-gray-700">
+                          {filteredFixtures.map((f) => (
+                            <button
+                              key={f.id}
+                              type="button"
+                              onClick={() => selectFixture(f)}
+                              className="w-full text-left px-4 py-3 hover:bg-gray-700 transition group border-b border-gray-700/50 last:border-0"
+                            >
+                              <p className="text-white text-sm font-semibold group-hover:text-orange-400 transition">
+                                {f.homeTeam}{" "}
+                                <span className="text-gray-400">vs</span>{" "}
+                                {f.awayTeam}
+                              </p>
+                              <p className="text-gray-400 text-xs mt-1">
+                                {f.league} · {f.venue}
+                              </p>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Team inputs */}
               <div className="grid grid-cols-2 gap-3 mb-3">
                 <input
                   type="text"
