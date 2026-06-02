@@ -1,7 +1,9 @@
 'use client';
 
 import React from 'react';
-import Antigravity from './Antigravity';
+import dynamic from 'next/dynamic';
+
+const Antigravity = dynamic(() => import('./Antigravity'), { ssr: false });
 
 interface UnifiedBackgroundProps {
   variant?: 'hero' | 'section' | 'minimal';

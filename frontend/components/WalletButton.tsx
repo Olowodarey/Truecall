@@ -1,11 +1,28 @@
 "use client";
 
 import { useWallet } from "@/contexts/WalletContext";
+import { useEffect, useState } from "react";
 
 export default function WalletButton() {
   const { isConnected, address, connectWallet, disconnectWallet } = useWallet();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const fmt = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+
+  if (!mounted) {
+    return (
+      <button
+        disabled
+        className="bg-orange-500/50 text-white px-4 py-2 rounded-lg transition-colors text-sm font-medium cursor-not-allowed"
+      >
+        Connect Wallet
+      </button>
+    );
+  }
 
   if (isConnected && address) {
     return (
