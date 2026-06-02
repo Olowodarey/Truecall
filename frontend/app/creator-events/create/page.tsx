@@ -27,6 +27,7 @@ interface FixtureMatch {
   awayTeam: string;
   league: string;
   venue: string;
+  kickoffTime?: number; // Unix timestamp from backend
 }
 
 interface MatchRow {
@@ -165,9 +166,24 @@ export default function CreateCreatorEventPage() {
     );
 
   const selectFixture = (i: number, f: FixtureMatch) => {
-    updateMatch(i, "homeTeam", f.homeTeam);
-    updateMatch(i, "awayTeam", f.awayTeam);
-    updateMatch(i, "apiMatchId", f.id);
+    // Update all fields in one state update to avoid batching issues
+    setMatches(
+      matches.map((m, idx) => {
+        if (idx !== i) return m;
+
+        const kickoffDate = new Date((f.kickoffTime ?? 0) * 1000);
+        const isoString = kickoffDate.toISOString().slice(0, 16);
+
+        return {
+          ...m,
+          homeTeam: f.homeTeam,
+          awayTeam: f.awayTeam,
+          apiMatchId: f.id,
+          kickoffTime: isoString,
+        };
+      }),
+    );
+
     setActivePickerIndex(null);
     setSearch("");
   };
@@ -444,7 +460,6 @@ export default function CreateCreatorEventPage() {
                     key={i}
                     className="bg-gray-900/50 border border-gray-700/50 rounded-xl p-4 space-y-3"
                   >
-                    {/* Row header */}
                     <div className="flex items-center justify-between">
                       <span className="text-gray-400 text-xs font-bold uppercase">
                         Match {i + 1}
@@ -456,8 +471,9 @@ export default function CreateCreatorEventPage() {
                           disabled={busy}
                           className="text-xs text-blue-400 hover:text-blue-300 font-semibold transition disabled:opacity-50"
                         >
-                          📋{" "}
-                          {activePickerIndex === i ? "Close" : "Pick from list"}
+                          {activePickerIndex === i
+                            ? "✕ Close"
+                            : "📋 Select Match"}
                         </button>
                         {matches.length > 1 && (
                           <button
@@ -475,7 +491,7 @@ export default function CreateCreatorEventPage() {
                     {/* Fixture picker */}
                     {activePickerIndex === i && (
                       <div className="bg-gray-800 border border-gray-600 rounded-lg overflow-hidden">
-                        <div className="p-2 border-b border-gray-700">
+                        <div className="p-3 border-b border-gray-700">
                           <input
                             type="text"
                             value={search}
@@ -490,27 +506,33 @@ export default function CreateCreatorEventPage() {
                             <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-orange-500" />
                           </div>
                         ) : (
-                          <div className="max-h-56 overflow-y-auto">
+                          <div className="max-h-72 overflow-y-auto">
                             {filteredFixtures.length === 0 ? (
                               <p className="text-gray-500 text-sm text-center py-4">
-                                No matches found
+                                {search
+                                  ? "No matches found"
+                                  : "Loading matches..."}
                               </p>
                             ) : (
-                              filteredFixtures.map((f) => (
-                                <button
-                                  key={f.id}
-                                  type="button"
-                                  onClick={() => selectFixture(i, f)}
-                                  className="w-full text-left px-4 py-3 hover:bg-gray-700 border-b border-gray-700/50 last:border-0 transition group"
-                                >
-                                  <p className="text-white text-sm font-semibold group-hover:text-orange-400 transition">
-                                    {f.homeTeam} vs {f.awayTeam}
-                                  </p>
-                                  <p className="text-gray-400 text-xs mt-0.5">
-                                    {f.league} · {f.venue}
-                                  </p>
-                                </button>
-                              ))
+                              <div className="divide-y divide-gray-700">
+                                {filteredFixtures.map((f) => (
+                                  <button
+                                    key={f.id}
+                                    type="button"
+                                    onClick={() => selectFixture(i, f)}
+                                    className="w-full text-left px-4 py-3 hover:bg-gray-700 transition group border-b border-gray-700/50 last:border-0"
+                                  >
+                                    <p className="text-white text-sm font-semibold group-hover:text-orange-400 transition">
+                                      {f.homeTeam}{" "}
+                                      <span className="text-gray-400">vs</span>{" "}
+                                      {f.awayTeam}
+                                    </p>
+                                    <p className="text-gray-400 text-xs mt-1">
+                                      {f.league} · {f.venue}
+                                    </p>
+                                  </button>
+                                ))}
+                              </div>
                             )}
                           </div>
                         )}
