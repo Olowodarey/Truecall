@@ -9,7 +9,8 @@
       "round": "Week 1",
       "venue": "Old Trafford",
       "homeTeamId": "man_utd",
-      "awayTeamId": "liverpool"
+      "awayTeamId": "liverpool",
+      "kickoffTime": 1780588414
     },
     {
       "id": "match_002",
@@ -20,7 +21,8 @@
       "round": "Week 1",
       "venue": "Emirates Stadium",
       "homeTeamId": "arsenal",
-      "awayTeamId": "chelsea"
+      "awayTeamId": "chelsea",
+      "kickoffTime": 1780674814
     },
     {
       "id": "match_003",
@@ -31,7 +33,8 @@
       "round": "Week 1",
       "venue": "Etihad Stadium",
       "homeTeamId": "man_city",
-      "awayTeamId": "tottenham"
+      "awayTeamId": "tottenham",
+      "kickoffTime": 1780761214
     },
     {
       "id": "match_004",
@@ -42,7 +45,8 @@
       "round": "Week 1",
       "venue": "St James Park",
       "homeTeamId": "newcastle",
-      "awayTeamId": "brighton"
+      "awayTeamId": "brighton",
+      "kickoffTime": 1780847614
     },
     {
       "id": "match_005",
@@ -53,87 +57,35 @@
       "round": "Week 1",
       "venue": "Villa Park",
       "homeTeamId": "aston_villa",
-      "awayTeamId": "everton"
+      "awayTeamId": "everton",
+      "kickoffTime": 1780934014
     },
     {
       "id": "match_006",
-      "homeTeam": "Fulham",
-      "awayTeam": "Brentford",
-      "league": "Premier League",
-      "season": "2025/26",
-      "round": "Week 1",
-      "venue": "Craven Cottage",
-      "homeTeamId": "fulham",
-      "awayTeamId": "brentford"
-    },
-    {
-      "id": "match_007",
-      "homeTeam": "West Ham",
-      "awayTeam": "Ipswich Town",
-      "league": "Premier League",
-      "season": "2025/26",
-      "round": "Week 1",
-      "venue": "London Stadium",
-      "homeTeamId": "west_ham",
-      "awayTeamId": "ipswich"
-    },
-    {
-      "id": "match_008",
-      "homeTeam": "Bournemouth",
-      "awayTeam": "Nottingham Forest",
-      "league": "Premier League",
-      "season": "2025/26",
-      "round": "Week 1",
-      "venue": "Vitality Stadium",
-      "homeTeamId": "bournemouth",
-      "awayTeamId": "nottingham"
-    },
-    {
-      "id": "match_009",
-      "homeTeam": "Wolverhampton",
-      "awayTeam": "Crystal Palace",
-      "league": "Premier League",
-      "season": "2025/26",
-      "round": "Week 1",
-      "venue": "Molineux Stadium",
-      "homeTeamId": "wolves",
-      "awayTeamId": "crystal_palace"
-    },
-    {
-      "id": "match_010",
-      "homeTeam": "Leicester City",
-      "awayTeam": "Southampton",
-      "league": "Premier League",
-      "season": "2025/26",
-      "round": "Week 1",
-      "venue": "King Power Stadium",
-      "homeTeamId": "leicester",
-      "awayTeamId": "southampton"
-    },
-    {
-      "id": "match_011",
       "homeTeam": "Real Madrid",
       "awayTeam": "Barcelona",
       "league": "La Liga",
       "season": "2025/26",
       "round": "Week 1",
-      "venue": "Santiago Bernabeu",
+      "venue": "Santiago Bernabéu",
       "homeTeamId": "real_madrid",
-      "awayTeamId": "barcelona"
+      "awayTeamId": "barcelona",
+      "kickoffTime": 1781020414
     },
     {
-      "id": "match_012",
-      "homeTeam": "Atletico Madrid",
-      "awayTeam": "Sevilla",
-      "league": "La Liga",
+      "id": "match_007",
+      "homeTeam": "PSG",
+      "awayTeam": "Monaco",
+      "league": "Ligue 1",
       "season": "2025/26",
       "round": "Week 1",
-      "venue": "Wanda Metropolitano",
-      "homeTeamId": "atletico_madrid",
-      "awayTeamId": "sevilla"
+      "venue": "Parc des Princes",
+      "homeTeamId": "psg",
+      "awayTeamId": "monaco",
+      "kickoffTime": 1781106814
     },
     {
-      "id": "match_013",
+      "id": "match_008",
       "homeTeam": "Bayern Munich",
       "awayTeam": "Borussia Dortmund",
       "league": "Bundesliga",
@@ -141,84 +93,32 @@
       "round": "Week 1",
       "venue": "Allianz Arena",
       "homeTeamId": "bayern",
-      "awayTeamId": "dortmund"
+      "awayTeamId": "dortmund",
+      "kickoffTime": 1781193214
     },
     {
-      "id": "match_014",
-      "homeTeam": "Paris Saint-Germain",
-      "awayTeam": "Marseille",
-      "league": "Ligue 1",
-      "season": "2025/26",
-      "round": "Week 1",
-      "venue": "Parc des Princes",
-      "homeTeamId": "psg",
-      "awayTeamId": "marseille"
-    },
-    {
-      "id": "match_015",
-      "homeTeam": "AC Milan",
-      "awayTeam": "Inter Milan",
+      "id": "match_009",
+      "homeTeam": "Inter Milan",
+      "awayTeam": "AC Milan",
       "league": "Serie A",
       "season": "2025/26",
       "round": "Week 1",
       "venue": "San Siro",
-      "homeTeamId": "ac_milan",
-      "awayTeamId": "inter_milan"
+      "homeTeamId": "inter",
+      "awayTeamId": "ac_milan",
+      "kickoffTime": 1781279614
     },
     {
-      "id": "match_016",
-      "homeTeam": "Juventus",
-      "awayTeam": "Roma",
-      "league": "Serie A",
+      "id": "match_010",
+      "homeTeam": "Liverpool",
+      "awayTeam": "Manchester United",
+      "league": "Premier League",
       "season": "2025/26",
-      "round": "Week 1",
-      "venue": "Allianz Stadium",
-      "homeTeamId": "juventus",
-      "awayTeamId": "roma"
-    },
-    {
-      "id": "match_017",
-      "homeTeam": "Ajax",
-      "awayTeam": "PSV Eindhoven",
-      "league": "Eredivisie",
-      "season": "2025/26",
-      "round": "Week 1",
-      "venue": "Johan Cruyff Arena",
-      "homeTeamId": "ajax",
-      "awayTeamId": "psv"
-    },
-    {
-      "id": "match_018",
-      "homeTeam": "Benfica",
-      "awayTeam": "Porto",
-      "league": "Primeira Liga",
-      "season": "2025/26",
-      "round": "Week 1",
-      "venue": "Estadio da Luz",
-      "homeTeamId": "benfica",
-      "awayTeamId": "porto"
-    },
-    {
-      "id": "match_019",
-      "homeTeam": "Celtic",
-      "awayTeam": "Rangers",
-      "league": "Scottish Premiership",
-      "season": "2025/26",
-      "round": "Week 1",
-      "venue": "Celtic Park",
-      "homeTeamId": "celtic",
-      "awayTeamId": "rangers"
-    },
-    {
-      "id": "match_020",
-      "homeTeam": "Galatasaray",
-      "awayTeam": "Fenerbahce",
-      "league": "Super Lig",
-      "season": "2025/26",
-      "round": "Week 1",
-      "venue": "Turk Telekom Stadium",
-      "homeTeamId": "galatasaray",
-      "awayTeamId": "fenerbahce"
+      "round": "Week 2",
+      "venue": "Anfield",
+      "homeTeamId": "liverpool",
+      "awayTeamId": "man_utd",
+      "kickoffTime": 1781366014
     }
   ]
 }
