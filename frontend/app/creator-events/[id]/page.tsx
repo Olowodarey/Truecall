@@ -48,6 +48,7 @@ export default function CreatorEventDetailPage() {
   const [event, setEvent] = useState<CreatorEvent | null>(null);
   const [matches, setMatches] = useState<CreatorMatch[]>([]);
   const [hasJoined, setHasJoined] = useState(false);
+  const [isVerified, setIsVerified] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -127,8 +128,16 @@ export default function CreatorEventDetailPage() {
       setMatches(ms);
 
       if (address) {
-        const joined = await fetchCreatorHasJoined(eventId, address);
+        const [joined, verified] = await Promise.all([
+          fetchCreatorHasJoined(eventId, address),
+          fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}/creator-events/verify/status/${address}`,
+          )
+            .then((r) => r.json())
+            .catch(() => ({ verified: false })),
+        ]);
         setHasJoined(joined.joined);
+        setIsVerified(verified.verified ?? false);
       }
     } catch {
       setError("Failed to load event");
@@ -140,12 +149,16 @@ export default function CreatorEventDetailPage() {
   useEffect(() => {
     load();
   }, [load]);
+
   useEffect(() => {
-    if (joinDone) {
-      setInviteCode("");
-      load();
+    if (joinDone && joinTx) {
+      // Wait a moment for blockchain to be indexed
+      setTimeout(() => {
+        setInviteCode("");
+        load();
+      }, 1500);
     }
-  }, [joinDone, load]);
+  }, [joinDone, joinTx, load]);
   useEffect(() => {
     if (predictDone) {
       setPredictMatchId(null);
@@ -365,7 +378,20 @@ export default function CreatorEventDetailPage() {
             <div className="bg-green-500/10 border border-green-500/30 text-green-400 p-4 rounded-xl text-center font-medium">
               ✅ You have joined — predict on matches below
             </div>
-          ) : isOpen && !isCreator ? (
+          ) : !isVerified ? (
+            <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-xl p-5">
+              <h3 className="text-white font-bold mb-2">
+                Verification Required
+              </h3>
+              <p className="text-gray-400 text-sm mb-4">
+                You need to be socially verified (Twitter) to join events.
+                Contact admin to verify your address.
+              </p>
+              <p className="text-gray-500 text-xs font-mono break-all">
+                {address}
+              </p>
+            </div>
+          ) : isOpen ? (
             <div className="bg-blue-900/20 border border-blue-500/30 rounded-xl p-5">
               <h3 className="text-white font-bold mb-3">
                 Join with Invite Code
