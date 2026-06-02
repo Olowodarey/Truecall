@@ -49,6 +49,17 @@ export default function CreatorEventDetailPage() {
   const [matches, setMatches] = useState<CreatorMatch[]>([]);
   const [hasJoined, setHasJoined] = useState(false);
   const [isVerified, setIsVerified] = useState(false);
+  const [userPredictions, setUserPredictions] = useState<
+    Record<
+      number,
+      {
+        homeScore: number;
+        awayScore: number;
+        submitted: boolean;
+        submittedAt: number;
+      }
+    >
+  >({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -138,6 +149,22 @@ export default function CreatorEventDetailPage() {
         ]);
         setHasJoined(joined.joined);
         setIsVerified(verified.verified ?? false);
+
+        // Fetch predictions for all matches
+        const predictions: Record<number, any> = {};
+        for (const match of ms) {
+          try {
+            const pred = await fetch(
+              `${process.env.NEXT_PUBLIC_API_URL}/creator-events/match/${match.matchId}/prediction/${address}`,
+            ).then((r) => r.json());
+            if (pred && pred.submitted) {
+              predictions[match.matchId] = pred;
+            }
+          } catch {
+            // Silently continue
+          }
+        }
+        setUserPredictions(predictions);
       }
     } catch {
       setError("Failed to load event");
@@ -580,8 +607,27 @@ export default function CreatorEventDetailPage() {
                       </div>
                     )}
 
-                    {/* Predict form */}
-                    {canPredict && predictMatchId === m.matchId ? (
+                    {/* Already predicted */}
+                    {userPredictions[m.matchId] ? (
+                      <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-4 mt-2">
+                        <p className="text-green-400 text-sm font-semibold mb-3">
+                          ✅ Your prediction submitted
+                        </p>
+                        <div className="text-center text-2xl font-bold text-white mb-2">
+                          {userPredictions[m.matchId].homeScore} –{" "}
+                          {userPredictions[m.matchId].awayScore}
+                        </div>
+                        <p className="text-gray-400 text-xs">
+                          Predicted{" "}
+                          {formatDistanceToNow(
+                            new Date(
+                              userPredictions[m.matchId].submittedAt * 1000,
+                            ),
+                            { addSuffix: true },
+                          )}
+                        </p>
+                      </div>
+                    ) : canPredict && predictMatchId === m.matchId ? (
                       <div className="bg-gray-900/50 rounded-lg p-4 mt-2">
                         <p className="text-gray-300 text-sm font-semibold mb-3">
                           Your prediction
