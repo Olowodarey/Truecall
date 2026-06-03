@@ -1,26 +1,20 @@
 import "dotenv/config";
 import { logger } from "./utils/logger";
-import { startMatchWatcher } from "./matchWatcher";
 import { startCreatorMatchWatcher } from "./creatorMatchWatcher";
 
 /**
  * TrueCall AI Agent
  *
  * Responsibilities:
- *  1. Watch EventManager for MatchAdded events (original events)
- *  2. Watch CreatorEventManager for MatchAdded events (creator events) ← NEW
- *  3. Poll API-Football until each match reaches "FT" (full time)
- *  4. Submit verified scores to both contracts
- *
- * For Creator Events (new):
- *  - Fetch results from backend API or JSON data
- *  - Automatically submit to contract
- *  - Contract calculates winners on-chain
+ *  1. Watch CreatorEventManager for MatchAdded events
+ *  2. Fetch results from backend API or JSON data
+ *  3. Submit verified scores to contract
+ *  4. Contract calculates winners on-chain automatically
  */
 async function main(): Promise<void> {
   logger.info("─────────────────────────────────────────");
   logger.info("  TrueCall AI Agent v2.0.0");
-  logger.info("  (Supporting Creator Events)");
+  logger.info("  (Creator Events Only)");
   logger.info("─────────────────────────────────────────");
 
   // Graceful shutdown
@@ -40,8 +34,8 @@ async function main(): Promise<void> {
     });
   });
 
-  // Start both watchers
-  await Promise.all([startMatchWatcher(), startCreatorMatchWatcher()]);
+  // Start creator match watcher
+  await startCreatorMatchWatcher();
 }
 
 main().catch((err) => {

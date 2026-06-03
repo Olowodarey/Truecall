@@ -3,7 +3,6 @@
 import Link from "next/link";
 import Image from "next/image";
 import WalletButton from "./WalletButton";
-import { UserRound } from "lucide-react";
 
 export default function Header() {
   return (
@@ -25,39 +24,20 @@ export default function Header() {
           <div>
             <div className="hidden md:flex items-center space-x-6">
               <Link
-                href="/events"
+                href="/creator-events"
                 className="text-gray-300 hover:text-white transition-colors"
               >
                 Events
               </Link>
               <Link
-                href="/create-event"
+                href="/creator-events/create"
                 className="text-gray-300 hover:text-white transition-colors"
               >
                 Create Event
               </Link>
-              <Link
-                href="/private-events"
-                className="text-gray-300 hover:text-white transition-colors"
-              >
-                Private Events
-              </Link>
-              <Link
-                href="/creator-events"
-                className="text-gray-300 hover:text-white transition-colors"
-              >
-                Creator Events
-              </Link>
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            <Link
-              href="/profile"
-              className="text-gray-300 hover:text-white transition-colors"
-            >
-              <UserRound />
-            </Link>
-
             <WalletButton />
           </div>
         </nav>

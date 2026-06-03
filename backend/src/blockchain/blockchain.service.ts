@@ -1,15 +1,7 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  createPublicClient,
-  createWalletClient,
-  http,
-  formatUnits,
-  parseUnits,
-} from 'viem';
+import { createPublicClient, createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { EVENT_MANAGER_ABI } from '../abi/EventManager.abi';
-import { LEADERBOARD_ABI } from '../abi/Leaderboard.abi';
 
 // Celo Sepolia chain definition
 const celoSepolia = {
@@ -22,20 +14,17 @@ const celoSepolia = {
   },
 } as const;
 
-// ─── Status label helpers ─────────────────────────────────────────────────────
-
-const EVENT_STATUS = ['OPEN', 'RESOLVED', 'CANCELLED'] as const;
-const MATCH_STATUS = ['OPEN', 'LOCKED', 'VERIFIED', 'DISPUTED'] as const;
-const EVENT_TYPE = ['PUBLIC', 'PRIVATE'] as const;
-const OUTCOME_LABEL = ['HOME_WIN', 'DRAW', 'AWAY_WIN'] as const;
-
+/**
+ * Blockchain Service - Basic Celo Sepolia connection
+ *
+ * Note: This service now only provides basic blockchain client access.
+ * For Creator Events, use CreatorEventsService which has its own contract client.
+ */
 @Injectable()
 export class BlockchainService implements OnModuleInit {
   private readonly logger = new Logger(BlockchainService.name);
-  private publicClient: ReturnType<typeof createPublicClient>;
-  private walletClient: ReturnType<typeof createWalletClient>;
-  private eventManagerAddress: `0x${string}`;
-  private leaderboardAddress: `0x${string}`;
+  public publicClient: ReturnType<typeof createPublicClient>;
+  public walletClient: ReturnType<typeof createWalletClient>;
   private account: ReturnType<typeof privateKeyToAccount>;
 
   constructor(private config: ConfigService) {}
@@ -44,12 +33,9 @@ export class BlockchainService implements OnModuleInit {
     const rpcUrl = this.config.get<string>('CELO_RPC_URL')!;
     const privateKey = this.config.get<string>('PRIVATE_KEY')! as `0x${string}`;
 
-    this.eventManagerAddress = this.config.get<string>(
+    const eventManagerAddress = this.config.get<string>(
       'EVENT_MANAGER_ADDRESS',
-    )! as `0x${string}`;
-    this.leaderboardAddress = this.config.get<string>(
-      'LEADERBOARD_ADDRESS',
-    )! as `0x${string}`;
+    );
 
     this.account = privateKeyToAccount(privateKey);
 
@@ -65,388 +51,13 @@ export class BlockchainService implements OnModuleInit {
     }) as any;
 
     this.logger.log(`Connected to Celo Sepolia`);
-    this.logger.log(`EventManager: ${this.eventManagerAddress}`);
+    if (eventManagerAddress) {
+      this.logger.log(`EventManager: ${eventManagerAddress}`);
+    }
     this.logger.log(`Admin Account: ${this.account.address}`);
   }
 
-  // ─── Events ────────────────────────────────────────────────────────────────
-
-  async createPublicEvent(
-    eventName: string,
-    startDate: number,
-    endDate: number,
-    entryToken: string,
-    entryFee: string, // in token units
-    scoringRule: number,
-  ) {
-    try {
-      this.logger.log(`Creating event: ${eventName}`);
-
-      const feeBigInt = parseUnits(entryFee, 18);
-
-      // Use address(0) for native CELO, or the provided token address
-      const tokenAddress =
-        entryToken === 'native'
-          ? '0x0000000000000000000000000000000000000000'
-          : (entryToken as `0x${string}`);
-
-      const hash = await this.walletClient.writeContract({
-        account: this.account,
-        chain: celoSepolia,
-        address: this.eventManagerAddress,
-        abi: EVENT_MANAGER_ABI,
-        functionName: 'createPublicEvent',
-        args: [
-          eventName,
-          BigInt(startDate),
-          BigInt(endDate),
-          tokenAddress,
-          feeBigInt,
-          scoringRule,
-        ],
-      });
-
-      this.logger.log(`Transaction sent: ${hash}`);
-
-      // Wait for transaction receipt
-      const receipt = await this.publicClient.waitForTransactionReceipt({
-        hash,
-      });
-
-      this.logger.log(`Transaction confirmed: ${receipt.transactionHash}`);
-
-      return {
-        success: true,
-        transactionHash: receipt.transactionHash,
-        blockNumber: Number(receipt.blockNumber),
-        eventName,
-        startDate,
-        endDate,
-        entryToken,
-        entryFee,
-        scoringRule,
-      };
-    } catch (error) {
-      this.logger.error(`Failed to create event: ${error}`);
-      throw error;
-    }
-  }
-
-  async joinEvent(eventId: number, userAddress: string) {
-    try {
-      this.logger.log(`Joining event ${eventId} for user ${userAddress}`);
-
-      const ev = await this.publicClient.readContract({
-        address: this.eventManagerAddress,
-        abi: EVENT_MANAGER_ABI,
-        functionName: 'getEvent',
-        args: [BigInt(eventId)],
-      });
-
-      const entryFee = (ev as any).entryFee as bigint;
-      const entryToken = (ev as any).entryToken as `0x${string}`;
-      const isNativeCELO =
-        entryToken === '0x0000000000000000000000000000000000000000';
-
-      // For native CELO, send value directly
-      // For ERC-20 tokens, frontend must handle approval before calling this
-      const hash = await this.walletClient.writeContract({
-        account: this.account,
-        chain: celoSepolia,
-        address: this.eventManagerAddress,
-        abi: EVENT_MANAGER_ABI,
-        functionName: 'joinEvent',
-        args: [BigInt(eventId)],
-        ...(isNativeCELO && { value: entryFee }),
-      });
-
-      this.logger.log(`Join transaction sent: ${hash}`);
-
-      // Wait for transaction receipt
-      const receipt = await this.publicClient.waitForTransactionReceipt({
-        hash,
-      });
-
-      this.logger.log(`Join confirmed: ${receipt.transactionHash}`);
-
-      return {
-        success: true,
-        transactionHash: receipt.transactionHash,
-        blockNumber: Number(receipt.blockNumber),
-        eventId,
-        userAddress,
-      };
-    } catch (error) {
-      this.logger.error(`Failed to join event: ${error}`);
-      throw error;
-    }
-  }
-
-  async getEvent(eventId: number) {
-    const ev = await this.publicClient.readContract({
-      address: this.eventManagerAddress,
-      abi: EVENT_MANAGER_ABI,
-      functionName: 'getEvent',
-      args: [BigInt(eventId)],
-    });
-
-    return {
-      eventId: Number(ev.eventId),
-      eventType: EVENT_TYPE[ev.eventType] ?? ev.eventType,
-      creator: ev.creator,
-      eventName: ev.eventName,
-      startDate: Number(ev.startDate),
-      endDate: Number(ev.endDate),
-      entryFee: formatUnits(ev.entryFee, 18),
-      prizePool: formatUnits(ev.prizePool, 18),
-      maxParticipants: Number(ev.maxParticipants),
-      status: EVENT_STATUS[ev.status] ?? ev.status,
-      entryToken: ev.entryToken,
-    };
-  }
-
-  async addMatch(
-    eventId: number,
-    homeTeam: string,
-    awayTeam: string,
-    apiMatchId: string,
-    kickoffTime: number,
-    predictionDeadline: number,
-    allowScorePrediction: boolean,
-    allowOutcomePrediction: boolean,
-  ) {
-    try {
-      this.logger.log(
-        `Adding match to event ${eventId}: ${homeTeam} vs ${awayTeam}`,
-      );
-
-      const hash = await this.walletClient.writeContract({
-        account: this.account,
-        chain: celoSepolia,
-        address: this.eventManagerAddress,
-        abi: EVENT_MANAGER_ABI,
-        functionName: 'addMatch',
-        args: [
-          BigInt(eventId),
-          homeTeam,
-          awayTeam,
-          apiMatchId,
-          BigInt(kickoffTime),
-          BigInt(predictionDeadline),
-          allowScorePrediction,
-          allowOutcomePrediction,
-        ],
-      });
-
-      this.logger.log(`Match transaction sent: ${hash}`);
-
-      // Wait for transaction receipt
-      const receipt = await this.publicClient.waitForTransactionReceipt({
-        hash,
-      });
-
-      this.logger.log(`Match added: ${receipt.transactionHash}`);
-
-      return {
-        success: true,
-        transactionHash: receipt.transactionHash,
-        blockNumber: Number(receipt.blockNumber),
-        eventId,
-        homeTeam,
-        awayTeam,
-      };
-    } catch (error) {
-      this.logger.error(`Failed to add match: ${error}`);
-      throw error;
-    }
-  }
-
-  async getTotalEvents(): Promise<number> {
-    const next = await this.publicClient.readContract({
-      address: this.eventManagerAddress,
-      abi: EVENT_MANAGER_ABI,
-      functionName: 'nextEventId',
-    });
-    return Number(next);
-  }
-
-  async getAllEvents() {
-    const total = await this.getTotalEvents();
-    const events = await Promise.all(
-      Array.from({ length: total }, (_, i) => this.getEvent(i)),
-    );
-    return events;
-  }
-
-  // ─── Matches ───────────────────────────────────────────────────────────────
-
-  async getMatch(matchId: number) {
-    const m = await this.publicClient.readContract({
-      address: this.eventManagerAddress,
-      abi: EVENT_MANAGER_ABI,
-      functionName: 'getMatch',
-      args: [BigInt(matchId)],
-    });
-
-    return {
-      matchId: Number(m.matchId),
-      eventId: Number(m.eventId),
-      homeTeam: m.homeTeam,
-      awayTeam: m.awayTeam,
-      apiMatchId: m.apiMatchId,
-      kickoffTime: Number(m.kickoffTime),
-      predictionDeadline: Number(m.predictionDeadline),
-      status: MATCH_STATUS[m.status] ?? m.status,
-      finalHomeScore: m.finalHomeScore,
-      finalAwayScore: m.finalAwayScore,
-      verifiedAt: Number(m.verifiedAt),
-      allowScorePrediction: m.allowScorePrediction,
-      allowOutcomePrediction: m.allowOutcomePrediction,
-    };
-  }
-
-  async getEventMatches(eventId: number) {
-    const matchIds = await this.publicClient.readContract({
-      address: this.eventManagerAddress,
-      abi: EVENT_MANAGER_ABI,
-      functionName: 'getEventMatches',
-      args: [BigInt(eventId)],
-    });
-
-    return Promise.all(
-      (matchIds as bigint[]).map((id) => this.getMatch(Number(id))),
-    );
-  }
-
-  // ─── Participants ──────────────────────────────────────────────────────────
-
-  async getParticipants(eventId: number): Promise<string[]> {
-    const participants = await this.publicClient.readContract({
-      address: this.eventManagerAddress,
-      abi: EVENT_MANAGER_ABI,
-      functionName: 'getParticipants',
-      args: [BigInt(eventId)],
-    });
-    return participants as string[];
-  }
-
-  async getParticipantCount(eventId: number): Promise<number> {
-    const count = await this.publicClient.readContract({
-      address: this.eventManagerAddress,
-      abi: EVENT_MANAGER_ABI,
-      functionName: 'getParticipantCount',
-      args: [BigInt(eventId)],
-    });
-    return Number(count);
-  }
-
-  async hasJoined(eventId: number, user: string): Promise<boolean> {
-    return this.publicClient.readContract({
-      address: this.eventManagerAddress,
-      abi: EVENT_MANAGER_ABI,
-      functionName: 'hasJoined',
-      args: [BigInt(eventId), user as `0x${string}`],
-    }) as Promise<boolean>;
-  }
-
-  // ─── Predictions ───────────────────────────────────────────────────────────
-
-  async getPrediction(matchId: number, user: string) {
-    const p = (await this.publicClient.readContract({
-      address: this.eventManagerAddress,
-      abi: EVENT_MANAGER_ABI,
-      functionName: 'getPrediction',
-      args: [BigInt(matchId), user as `0x${string}`],
-    })) as unknown as any[];
-
-    return {
-      homeScore: p[0],
-      awayScore: p[1],
-      hasScorePrediction: p[2],
-      outcome: OUTCOME_LABEL[p[3]] ?? p[3],
-      hasOutcomePrediction: p[4],
-      submittedAt: Number(p[5]),
-      scorePointsEarned: Number(p[6]),
-      outcomePointsEarned: Number(p[7]),
-      totalPoints: Number(p[6]) + Number(p[7]),
-    };
-  }
-
-  // ─── Winners ───────────────────────────────────────────────────────────────
-
-  async getWinners(eventId: number): Promise<string[]> {
-    const winners = (await this.publicClient.readContract({
-      address: this.eventManagerAddress,
-      abi: EVENT_MANAGER_ABI,
-      functionName: 'getWinners',
-      args: [BigInt(eventId)],
-    })) as unknown as string[];
-    return winners.filter(
-      (w) => w !== '0x0000000000000000000000000000000000000000',
-    );
-  }
-
-  async getClaimable(eventId: number, user: string): Promise<string> {
-    const amount = (await this.publicClient.readContract({
-      address: this.eventManagerAddress,
-      abi: EVENT_MANAGER_ABI,
-      functionName: 'claimable',
-      args: [BigInt(eventId), user as `0x${string}`],
-    })) as bigint;
-    return formatUnits(amount, 18);
-  }
-
-  // ─── Leaderboard ───────────────────────────────────────────────────────────
-
-  async getEventLeaderboard(eventId: number, limit = 10) {
-    const entries = (await this.publicClient.readContract({
-      address: this.leaderboardAddress,
-      abi: LEADERBOARD_ABI,
-      functionName: 'getTopN',
-      args: [BigInt(eventId), BigInt(limit)],
-    })) as any[];
-
-    return entries.map((e, i) => ({
-      rank: i + 1,
-      user: e.user,
-      points: Number(e.points),
-      firstSubmission: Number(e.firstSubmission),
-    }));
-  }
-
-  async getUserEventRank(eventId: number, user: string) {
-    const result = (await this.publicClient.readContract({
-      address: this.leaderboardAddress,
-      abi: LEADERBOARD_ABI,
-      functionName: 'getUserEventRank',
-      args: [BigInt(eventId), user as `0x${string}`],
-    })) as [bigint, bigint];
-
-    return { rank: Number(result[0]), points: Number(result[1]) };
-  }
-
-  async getGlobalLeaderboard(limit = 10) {
-    const entries = (await this.publicClient.readContract({
-      address: this.leaderboardAddress,
-      abi: LEADERBOARD_ABI,
-      functionName: 'getGlobalTopN',
-      args: [BigInt(limit)],
-    })) as any[];
-
-    return entries.map((e, i) => ({
-      rank: i + 1,
-      user: e.user,
-      points: Number(e.points),
-    }));
-  }
-
-  async getGlobalPoints(user: string): Promise<number> {
-    const points = (await this.publicClient.readContract({
-      address: this.leaderboardAddress,
-      abi: LEADERBOARD_ABI,
-      functionName: 'getGlobalPoints',
-      args: [user as `0x${string}`],
-    })) as bigint;
-    return Number(points);
+  getAccount() {
+    return this.account;
   }
 }
