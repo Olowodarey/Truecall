@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiParam } from '@nestjs/swagger';
 import { CreatorEventsService } from './creator-events.service';
+import { UsersService } from '../users/users.service';
 
 // ─── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -40,7 +41,10 @@ class AddMatchDto {
 export class CreatorEventsController {
   private readonly logger = new Logger(CreatorEventsController.name);
 
-  constructor(private readonly svc: CreatorEventsService) {}
+  constructor(
+    private readonly svc: CreatorEventsService,
+    private readonly usersService: UsersService,
+  ) {}
 
   // ── Events ──────────────────────────────────────────────────────────────────
 
@@ -113,15 +117,30 @@ export class CreatorEventsController {
 
   @Get('match/:matchId/winners')
   @ApiOperation({
-    summary: 'Get verified winners for a match (with timestamps)',
+    summary: 'Get verified winners for a match (with Twitter handles)',
   })
   @ApiParam({ name: 'matchId', type: Number })
   async getMatchWinners(@Param('matchId', ParseIntPipe) matchId: number) {
     const winners = await this.svc.getMatchWinners(matchId);
+
+    // Enrich with Twitter data
+    const addresses = winners.map((w) => w.user);
+    const profiles = this.usersService.getProfilesByAddresses(addresses);
+
+    const enrichedWinners = winners.map((w) => {
+      const profile = profiles.get(w.user);
+      return {
+        user: w.user,
+        submittedAt: w.submittedAt,
+        twitterHandle: profile?.twitterHandle || null,
+        twitterAvatar: profile?.twitterAvatar || null,
+      };
+    });
+
     return {
       matchId,
-      count: winners.length,
-      winners,
+      count: enrichedWinners.length,
+      winners: enrichedWinners,
     };
   }
 

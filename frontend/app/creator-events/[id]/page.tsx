@@ -947,23 +947,43 @@ export default function CreatorEventDetailPage() {
                                   ? "🥉"
                                   : `${i + 1}.`}
                           </span>
-                          <div>
-                            <p className="text-white font-mono text-sm">
-                              {w.user.slice(0, 6)}…{w.user.slice(-4)}
+                          <div className="flex items-center gap-2">
+                            {w.twitterAvatar && (
+                              <img
+                                src={w.twitterAvatar}
+                                alt="Twitter avatar"
+                                className="w-8 h-8 rounded-full"
+                              />
+                            )}
+                            <div>
+                              {w.twitterHandle ? (
+                                <div className="flex items-center gap-2">
+                                  <p className="text-blue-400 font-semibold text-sm">
+                                    @{w.twitterHandle}
+                                  </p>
+                                  <span className="text-green-500 text-xs">
+                                    ✓
+                                  </span>
+                                </div>
+                              ) : (
+                                <p className="text-white font-mono text-sm">
+                                  {w.user.slice(0, 6)}…{w.user.slice(-4)}
+                                </p>
+                              )}
                               {address?.toLowerCase() ===
                                 w.user.toLowerCase() && (
-                                <span className="ml-2 text-xs bg-orange-500/30 text-orange-400 px-1.5 py-0.5 rounded font-bold">
+                                <span className="text-xs bg-orange-500/30 text-orange-400 px-1.5 py-0.5 rounded font-bold">
                                   YOU
                                 </span>
                               )}
-                            </p>
-                            <p className="text-gray-500 text-xs">
-                              Predicted{" "}
-                              {formatDistanceToNow(
-                                new Date(w.submittedAt * 1000),
-                                { addSuffix: true },
-                              )}
-                            </p>
+                              <p className="text-gray-500 text-xs">
+                                Predicted{" "}
+                                {formatDistanceToNow(
+                                  new Date(w.submittedAt * 1000),
+                                  { addSuffix: true },
+                                )}
+                              </p>
+                            </div>
                           </div>
                         </div>
                         <span className="text-green-400 text-xs font-bold">

@@ -39,6 +39,8 @@ export interface CreatorMatch {
 export interface MatchWinner {
   user: string;
   submittedAt: number; // original prediction timestamp
+  twitterHandle?: string | null;
+  twitterAvatar?: string | null;
 }
 
 export interface CreatorPrediction {

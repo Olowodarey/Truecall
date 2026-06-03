@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import WalletButton from "./WalletButton";
+import { UserRound } from "lucide-react";
 
 export default function Header() {
   return (
@@ -38,6 +39,14 @@ export default function Header() {
             </div>
           </div>
           <div className="flex items-center space-x-2">
+            <Link
+              href="/profile"
+              className="text-gray-300 hover:text-white transition-colors"
+              title="Profile & Twitter Verification"
+            >
+              <UserRound className="w-5 h-5" />
+            </Link>
+
             <WalletButton />
           </div>
         </nav>
