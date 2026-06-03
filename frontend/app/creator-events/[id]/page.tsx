@@ -778,12 +778,12 @@ export default function CreatorEventDetailPage() {
                           {userPredictions[m.matchId].awayScore}
                         </div>
                         <p className="text-gray-400 text-xs">
-                          Predicted{" "}
-                          {formatDistanceToNow(
+                          Predicted on{" "}
+                          {format(
                             new Date(
                               userPredictions[m.matchId].submittedAt * 1000,
                             ),
-                            { addSuffix: true },
+                            "MMM d, yyyy 'at' HH:mm",
                           )}
                         </p>
                       </div>

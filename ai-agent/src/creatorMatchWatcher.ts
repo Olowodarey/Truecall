@@ -215,16 +215,17 @@ async function processTrackedMatches(): Promise<void> {
       continue;
     }
 
-    // Get the actual kickoff time from JSON (may be different from contract if testing)
-    const jsonMatch = matchDataService.getByApiId(match.apiMatchId);
-    const actualKickoffTime =
-      jsonMatch?.kickoffTime ?? Number(match.kickoffTime);
+    // Use the kickoff time from the contract (source of truth)
+    // The contract kickoffTime is what matters for when to submit results
+    const contractKickoffTime = Number(match.kickoffTime);
 
-    // Skip if match hasn't kicked off yet
-    if (actualKickoffTime > now) {
+    // Skip if match hasn't kicked off yet (based on contract time)
+    if (contractKickoffTime > now) {
       logger.debug("Match not kicked off yet", {
         matchId: key,
-        kickoffTime: new Date(actualKickoffTime * 1000).toISOString(),
+        kickoffTime: new Date(contractKickoffTime * 1000).toISOString(),
+        contractKickoffTime,
+        now,
       });
       continue;
     }

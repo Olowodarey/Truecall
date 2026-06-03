@@ -1,5 +1,6 @@
 import { http, createConfig } from "wagmi";
 import { defineChain } from "viem";
+import { injected } from "wagmi/connectors";
 
 // Celo Sepolia testnet
 export const celoSepolia = defineChain({
@@ -25,6 +26,11 @@ export const celoSepolia = defineChain({
 
 export const wagmiConfig = createConfig({
   chains: [celoSepolia],
+  connectors: [
+    injected({
+      target: "metaMask",
+    }),
+  ],
   transports: {
     [celoSepolia.id]: http(
       process.env.NEXT_PUBLIC_CELO_RPC ??
