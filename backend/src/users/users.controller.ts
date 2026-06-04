@@ -35,9 +35,10 @@ export class UsersController {
 
   @Get('profiles')
   @ApiOperation({ summary: 'Get multiple user profiles' })
-  getProfiles(@Query('addresses') addresses: string) {
+  async getProfiles(@Query('addresses') addresses: string) {
     const addressList = addresses.split(',').map((a) => a.trim());
-    const profiles = this.usersService.getProfilesByAddresses(addressList);
+    const profiles =
+      await this.usersService.getProfilesByAddresses(addressList);
     return Object.fromEntries(profiles);
   }
 
@@ -106,7 +107,23 @@ export class UsersController {
         throw new Error('Failed to fetch Twitter profile (empty data)');
       }
 
-      // Step 3: Link to wallet
+      // Step 3: Check if this Twitter account is already linked to another wallet
+      const duplicateCheck =
+        await this.usersService.isTwitterIdLinkedToAnotherWallet(
+          twitterUser.id,
+          address,
+        );
+
+      if (duplicateCheck.isLinked) {
+        this.logger.warn(
+          `Twitter @${twitterUser.username} (ID: ${twitterUser.id}) is already linked to ${duplicateCheck.linkedAddress}`,
+        );
+        throw new BadRequestException(
+          `This Twitter account (@${twitterUser.username}) is already linked to another wallet address (${duplicateCheck.linkedAddress?.slice(0, 6)}...${duplicateCheck.linkedAddress?.slice(-4)}). Please unlink it first or use a different Twitter account.`,
+        );
+      }
+
+      // Step 4: Link to wallet
       const profile = this.usersService.linkTwitter(
         address,
         twitterUser.username,
@@ -118,7 +135,7 @@ export class UsersController {
         `Twitter linked via XDK: @${twitterUser.username} → ${address}`,
       );
 
-      // Step 4: Verify address on-chain (so they can join events)
+      // Step 5: Verify address on-chain (so they can join events)
       try {
         this.logger.log(`Verifying address on-chain: ${address}`);
         await this.creatorEventsService.verifyAddress(address);
@@ -168,10 +185,30 @@ export class UsersController {
       twitterId?: string;
     },
   ) {
-    const profile = this.usersService.linkTwitter(
+    const twitterId = body.twitterId || 'manual_' + Date.now();
+
+    // Check if this Twitter ID is already linked to another wallet
+    if (body.twitterId) {
+      const duplicateCheck =
+        await this.usersService.isTwitterIdLinkedToAnotherWallet(
+          body.twitterId,
+          body.address,
+        );
+
+      if (duplicateCheck.isLinked) {
+        this.logger.warn(
+          `Manual link attempt: Twitter ID ${body.twitterId} is already linked to ${duplicateCheck.linkedAddress}`,
+        );
+        throw new BadRequestException(
+          `This Twitter account is already linked to another wallet address (${duplicateCheck.linkedAddress?.slice(0, 6)}...${duplicateCheck.linkedAddress?.slice(-4)}).`,
+        );
+      }
+    }
+
+    const profile = await this.usersService.linkTwitter(
       body.address,
       body.twitterHandle,
-      body.twitterId || 'manual_' + Date.now(),
+      twitterId,
     );
 
     // Verify on-chain
@@ -206,14 +243,30 @@ export class UsersController {
   @Get('twitter/verify-status/:address')
   @ApiOperation({ summary: 'Check if wallet address has Twitter verified' })
   @ApiParam({ name: 'address', type: String })
-  getTwitterVerifyStatus(@Param('address') address: string) {
-    const profile = this.usersService.getProfile(address);
+  async getTwitterVerifyStatus(@Param('address') address: string) {
+    const profile = await this.usersService.getProfile(address);
     const verified = !!(profile?.twitterHandle && profile?.twitterId);
 
     return {
       verified,
       twitterHandle: profile?.twitterHandle || null,
       twitterAvatar: profile?.twitterAvatar || null,
+    };
+  }
+
+  @Get('twitter/linked-addresses/:twitterId')
+  @ApiOperation({
+    summary: 'Get all wallet addresses linked to a Twitter ID (admin)',
+  })
+  @ApiParam({ name: 'twitterId', type: String })
+  async getLinkedAddresses(@Param('twitterId') twitterId: string) {
+    const addresses =
+      await this.usersService.getAddressesByTwitterId(twitterId);
+
+    return {
+      twitterId,
+      count: addresses.length,
+      addresses,
     };
   }
 }

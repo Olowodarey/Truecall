@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import * as fs from 'fs';
-import * as path from 'path';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { User } from './user.entity';
 
 export interface UserProfile {
   address: string;
@@ -13,101 +14,167 @@ export interface UserProfile {
 @Injectable()
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
-  private readonly dataPath = path.join(__dirname, '../../data/users.json');
-  private users: Map<string, UserProfile> = new Map();
 
-  constructor() {
-    this.loadUsers();
+  constructor(
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+  ) {}
+
+  async getProfile(address: string): Promise<UserProfile | null> {
+    const user = await this.userRepository.findOne({
+      where: { address: address.toLowerCase() },
+    });
+
+    if (!user) return null;
+
+    return {
+      address: user.address,
+      twitterHandle: user.twitterHandle || undefined,
+      twitterId: user.twitterId || undefined,
+      twitterAvatar: user.twitterAvatar || undefined,
+      verifiedAt: user.verifiedAt ? Number(user.verifiedAt) : undefined,
+    };
   }
 
-  private loadUsers() {
-    try {
-      if (fs.existsSync(this.dataPath)) {
-        const data = fs.readFileSync(this.dataPath, 'utf-8');
-        const usersArray: UserProfile[] = JSON.parse(data);
-        this.users = new Map(
-          usersArray.map((u) => [u.address.toLowerCase(), u]),
-        );
-        this.logger.log(`Loaded ${this.users.size} user profiles`);
-      } else {
-        this.logger.log('No users.json found, starting fresh');
-        this.saveUsers();
-      }
-    } catch (error) {
-      this.logger.error('Error loading users', error);
-      this.users = new Map();
-    }
+  async getAllProfiles(): Promise<UserProfile[]> {
+    const users = await this.userRepository.find();
+    return users.map((user) => ({
+      address: user.address,
+      twitterHandle: user.twitterHandle || undefined,
+      twitterId: user.twitterId || undefined,
+      twitterAvatar: user.twitterAvatar || undefined,
+      verifiedAt: user.verifiedAt ? Number(user.verifiedAt) : undefined,
+    }));
   }
 
-  private saveUsers() {
-    try {
-      const dir = path.dirname(this.dataPath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      const usersArray = Array.from(this.users.values());
-      fs.writeFileSync(this.dataPath, JSON.stringify(usersArray, null, 2));
-      this.logger.log(`Saved ${usersArray.length} user profiles`);
-    } catch (error) {
-      this.logger.error('Error saving users', error);
-    }
-  }
-
-  getProfile(address: string): UserProfile | null {
-    return this.users.get(address.toLowerCase()) || null;
-  }
-
-  getAllProfiles(): UserProfile[] {
-    return Array.from(this.users.values());
-  }
-
-  linkTwitter(
+  async linkTwitter(
     address: string,
     twitterHandle: string,
     twitterId: string,
     twitterAvatar?: string,
-  ): UserProfile {
+  ): Promise<UserProfile> {
     const normalizedAddress = address.toLowerCase();
-    const existing = this.users.get(normalizedAddress);
 
-    const profile: UserProfile = {
-      ...existing,
-      address: address, // keep original case
-      twitterHandle,
-      twitterId,
-      twitterAvatar,
-      verifiedAt: Date.now(),
-    };
+    // Find or create user
+    let user = await this.userRepository.findOne({
+      where: { address: normalizedAddress },
+    });
 
-    this.users.set(normalizedAddress, profile);
-    this.saveUsers();
+    if (!user) {
+      user = this.userRepository.create({
+        address: normalizedAddress,
+      });
+    }
+
+    // Update Twitter data
+    user.twitterHandle = twitterHandle;
+    user.twitterId = twitterId;
+    user.twitterAvatar = twitterAvatar || null;
+    user.verifiedAt = Date.now();
+
+    await this.userRepository.save(user);
+
     this.logger.log(`Linked Twitter @${twitterHandle} to ${address}`);
-    return profile;
+
+    return {
+      address: user.address,
+      twitterHandle: user.twitterHandle || undefined,
+      twitterId: user.twitterId || undefined,
+      twitterAvatar: user.twitterAvatar || undefined,
+      verifiedAt: user.verifiedAt ? Number(user.verifiedAt) : undefined,
+    };
   }
 
-  unlinkTwitter(address: string): boolean {
+  async unlinkTwitter(address: string): Promise<boolean> {
     const normalizedAddress = address.toLowerCase();
-    const existing = this.users.get(normalizedAddress);
-    if (!existing) return false;
 
-    const profile: UserProfile = {
-      address: existing.address,
-    };
+    const user = await this.userRepository.findOne({
+      where: { address: normalizedAddress },
+    });
 
-    this.users.set(normalizedAddress, profile);
-    this.saveUsers();
+    if (!user) return false;
+
+    // Remove Twitter data
+    user.twitterHandle = null;
+    user.twitterId = null;
+    user.twitterAvatar = null;
+    user.verifiedAt = null;
+
+    await this.userRepository.save(user);
+
     this.logger.log(`Unlinked Twitter from ${address}`);
     return true;
   }
 
-  getProfilesByAddresses(addresses: string[]): Map<string, UserProfile> {
+  async getProfilesByAddresses(
+    addresses: string[],
+  ): Promise<Map<string, UserProfile>> {
     const result = new Map<string, UserProfile>();
-    addresses.forEach((addr) => {
-      const profile = this.getProfile(addr);
-      if (profile) {
-        result.set(addr, profile);
-      }
+
+    const normalizedAddresses = addresses.map((addr) => addr.toLowerCase());
+
+    const users = await this.userRepository
+      .createQueryBuilder('user')
+      .where('user.address IN (:...addresses)', {
+        addresses: normalizedAddresses,
+      })
+      .getMany();
+
+    users.forEach((user) => {
+      result.set(user.address, {
+        address: user.address,
+        twitterHandle: user.twitterHandle || undefined,
+        twitterId: user.twitterId || undefined,
+        twitterAvatar: user.twitterAvatar || undefined,
+        verifiedAt: user.verifiedAt ? Number(user.verifiedAt) : undefined,
+      });
     });
+
     return result;
+  }
+
+  /**
+   * Check if a Twitter ID is already linked to a different wallet address
+   * @returns { isLinked: boolean, linkedAddress?: string, linkedHandle?: string }
+   */
+  async isTwitterIdLinkedToAnotherWallet(
+    twitterId: string,
+    currentAddress: string,
+  ): Promise<{
+    isLinked: boolean;
+    linkedAddress?: string;
+    linkedHandle?: string;
+  }> {
+    const normalizedCurrentAddress = currentAddress.toLowerCase();
+
+    // Find user with this Twitter ID that's not the current address
+    const user = await this.userRepository
+      .createQueryBuilder('user')
+      .where('user.twitterId = :twitterId', { twitterId })
+      .andWhere('LOWER(user.address) != :address', {
+        address: normalizedCurrentAddress,
+      })
+      .getOne();
+
+    if (user) {
+      return {
+        isLinked: true,
+        linkedAddress: user.address,
+        linkedHandle: user.twitterHandle || undefined,
+      };
+    }
+
+    return { isLinked: false };
+  }
+
+  /**
+   * Get all addresses linked to a specific Twitter ID
+   */
+  async getAddressesByTwitterId(twitterId: string): Promise<string[]> {
+    const users = await this.userRepository.find({
+      where: { twitterId },
+    });
+
+    return users.map((user) => user.address);
   }
 }

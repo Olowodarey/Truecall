@@ -125,7 +125,7 @@ export class CreatorEventsController {
 
     // Enrich with Twitter data
     const addresses = winners.map((w) => w.user);
-    const profiles = this.usersService.getProfilesByAddresses(addresses);
+    const profiles = await this.usersService.getProfilesByAddresses(addresses);
 
     const enrichedWinners = winners.map((w) => {
       const profile = profiles.get(w.user);
