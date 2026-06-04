@@ -1,19 +1,10 @@
 import type { NextConfig } from "next";
 
-const BACKEND_URL =
-  process.env.BACKEND_URL || "http://localhost:3001";
-
 const nextConfig: NextConfig = {
   serverExternalPackages: ["@stacks/connect"],
   outputFileTracingRoot: process.cwd(),
-  async rewrites() {
-    return [
-      {
-        source: "/api/:path*",
-        destination: `${BACKEND_URL}/api/:path*`,
-      },
-    ];
-  },
+  // Removed rewrites - we're using API route handlers instead
+  // API routes in app/api/ will proxy to backend using NEXT_PUBLIC_API_URL
 };
 
 export default nextConfig;

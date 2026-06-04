@@ -213,7 +213,8 @@ export default function ProfilePage() {
       if (event.data.type === "TWITTER_AUTH_SUCCESS") {
         window.removeEventListener("message", handleMessage);
         setLinking(false);
-        loadProfile();
+        // Small delay to avoid race condition where profile may not yet be committed in DB
+        setTimeout(() => loadProfile(), 500);
       } else if (event.data.type === "TWITTER_AUTH_ERROR") {
         window.removeEventListener("message", handleMessage);
         setLinking(false);
