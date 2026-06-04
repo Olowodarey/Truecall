@@ -84,16 +84,37 @@ export default function CreatorEventsPage() {
 
   useEffect(() => {
     if (address) {
-      fetch(`/api/users/twitter/verify-status/${address}`)
-        .then((r) => r.json())
-        .then((data) => {
-          setIsVerified(data.verified ?? false);
-          setTwitterHandle(data.twitterHandle);
-        })
-        .catch(() => {
-          setIsVerified(false);
-          setTwitterHandle(null);
-        });
+      const checkVerification = () => {
+        fetch(`/api/users/twitter/verify-status/${address}`)
+          .then((r) => r.json())
+          .then((data) => {
+            setIsVerified(data.verified ?? false);
+            setTwitterHandle(data.twitterHandle);
+          })
+          .catch(() => {
+            setIsVerified(false);
+            setTwitterHandle(null);
+          });
+      };
+
+      // Check initially
+      checkVerification();
+
+      // Re-check when page becomes visible (user comes back from profile)
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === "visible") {
+          checkVerification();
+        }
+      };
+
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+
+      return () => {
+        document.removeEventListener(
+          "visibilitychange",
+          handleVisibilityChange,
+        );
+      };
     }
   }, [address]);
 
