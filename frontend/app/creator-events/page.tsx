@@ -52,7 +52,7 @@ export default function CreatorEventsPage() {
 
         setEvents(enriched);
       } catch (e) {
-        setError(e?.message ?? "Failed to load events");
+        setError(e instanceof Error ? e.message : "Failed to load events");
       } finally {
         setLoading(false);
       }
@@ -280,9 +280,11 @@ export default function CreatorEventsPage() {
                         className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
                           ev.status === "OPEN"
                             ? "bg-green-500/10 text-green-400 border-green-500/30"
-                            : ev.status === "COMPLETED"
+                            : (ev.status as string) === "COMPLETED"
                               ? "bg-blue-500/10 text-blue-400 border-blue-500/30"
-                              : "bg-gray-500/10 text-gray-400 border-gray-500/30"
+                              : (ev.status as string) === "CANCELLED"
+                                ? "bg-red-500/10 text-red-400 border-red-500/30"
+                                : "bg-gray-500/10 text-gray-400 border-gray-500/30"
                         }`}
                       >
                         {ev.status}
