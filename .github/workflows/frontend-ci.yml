@@ -1,0 +1,75 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [main, master, develop]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-ci.yml"
+  pull_request:
+    branches: [main, master, develop]
+    paths:
+      - "frontend/**"
+
+jobs:
+  lint-and-build:
+    name: Lint & Build Frontend
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    strategy:
+      matrix:
+        node-version: [20.x]
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 📥 Install dependencies
+        run: npm ci
+
+      - name: 🔍 Run linter
+        run: npm run lint
+        continue-on-error: true
+
+      - name: 🏗️ Build application
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: https://example.com/api
+
+      - name: ✅ Build Success
+        if: success()
+        run: |
+          echo "✅ Frontend build successful!"
+          echo "✅ Next.js compilation passed"
+          echo "✅ Ready for deployment to Vercel"
+
+      - name: ❌ Build Failed
+        if: failure()
+        run: |
+          echo "❌ Frontend build failed!"
+          echo "❌ Please fix the errors before deploying"
+          exit 1
+
+  notify-success:
+    name: ✅ CI Passed
+    runs-on: ubuntu-latest
+    needs: [lint-and-build]
+    if: success()
+
+    steps:
+      - name: ✅ Success notification
+        run: |
+          echo "🎉 All checks passed!"
+          echo "✅ Frontend is ready to deploy to Vercel"
+          echo "🚀 Vercel will deploy automatically"

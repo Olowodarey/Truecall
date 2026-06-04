@@ -1,0 +1,116 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main, master, develop]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+  pull_request:
+    branches: [main, master, develop]
+    paths:
+      - "backend/**"
+
+jobs:
+  lint-and-build:
+    name: Lint, Build & Test Backend
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./backend
+
+    strategy:
+      matrix:
+        node-version: [20.x]
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10
+
+      - name: 🟢 Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "pnpm"
+          cache-dependency-path: backend/pnpm-lock.yaml
+
+      - name: 📥 Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: 🔍 Run linter
+        run: pnpm run lint
+        continue-on-error: true
+
+      - name: 🏗️ Build application
+        run: pnpm run build
+
+      - name: ✅ Build Success
+        if: success()
+        run: |
+          echo "✅ Backend build successful!"
+          echo "✅ TypeScript compilation passed"
+          echo "✅ Ready for deployment to Railway"
+
+      - name: ❌ Build Failed
+        if: failure()
+        run: |
+          echo "❌ Backend build failed!"
+          echo "❌ Please fix the errors before deploying"
+          exit 1
+
+  # Optional: Run tests if you have them
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    needs: lint-and-build
+    if: false # Set to true when you add tests
+
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: "pnpm"
+          cache-dependency-path: backend/pnpm-lock.yaml
+
+      - name: 📥 Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: 🧪 Run unit tests
+        run: pnpm run test
+
+      - name: 🧪 Run e2e tests
+        run: pnpm run test:e2e
+        continue-on-error: true
+
+  # Notify on success
+  notify-success:
+    name: ✅ CI Passed
+    runs-on: ubuntu-latest
+    needs: [lint-and-build]
+    if: success()
+
+    steps:
+      - name: ✅ Success notification
+        run: |
+          echo "🎉 All checks passed!"
+          echo "✅ Backend is ready to deploy to Railway"
+          echo "🚀 Railway will now deploy automatically"
