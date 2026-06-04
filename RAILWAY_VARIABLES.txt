@@ -1,0 +1,45 @@
+# ========================================
+# RAILWAY BACKEND ENVIRONMENT VARIABLES
+# ========================================
+# Copy these to Railway Dashboard → Backend Service → Variables Tab
+# Add each variable name and value separately
+# ========================================
+
+# Server Configuration
+PORT=3001
+NODE_ENV=production
+
+# Celo Mainnet Configuration
+CELO_RPC_URL=https://forno.celo.org
+CREATOR_EVENT_MANAGER_ADDRESS=0x8A18Da2A173b3951c797a438102345cF92838880
+
+# Admin Wallet Private Key (for contract verification)
+PRIVATE_KEY=0x099ed87cfc479955af2c232113b8a6d5b081e0e20843647fc33aef38080c4b37
+
+# Database Configuration - Use Railway's Reference Variables
+# IMPORTANT: Use these EXACT values with the dollar signs and curly braces
+DATABASE_HOST=${{Postgres.PGHOST}}
+DATABASE_PORT=${{Postgres.PGPORT}}
+DATABASE_USERNAME=${{Postgres.PGUSER}}
+DATABASE_PASSWORD=${{Postgres.PGPASSWORD}}
+DATABASE_NAME=${{Postgres.PGDATABASE}}
+
+# Twitter OAuth Configuration
+TWITTER_CLIENT_ID=ZGFtYjlOY2ZlRTF3ZDFYMGJVTHo6MTpjaQ
+TWITTER_CLIENT_SECRET=ILJz43XueQPaASnDygRaHns5VmAV78FtbvVlwa_W7WkYkUsuj1
+
+# IMPORTANT: Update this with your Vercel frontend URL after deployment!
+# Replace "your-vercel-app.vercel.app" with your actual Vercel URL
+TWITTER_REDIRECT_URI=https://your-vercel-app.vercel.app/profile/twitter/callback
+
+# Legacy Contract Addresses (if needed for other features)
+TRUECALL_ADDRESS=0x2D69622798DC1F6B09339d4eaEEE0c342a98fa8D
+EVENT_MANAGER_ADDRESS=0xD905DCc072A1FeD3A5E63434D921C4ed6a6c1B33
+LEADERBOARD_ADDRESS=0xb4410D9CC489bc5b1AD45a4f6611B13aA4742B06
+
+# ========================================
+# TOTAL: 17 VARIABLES
+# ========================================
+
+
+https://truecall.vercel.app/profile/twitter/callback

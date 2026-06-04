@@ -9,13 +9,13 @@ import {
 import { privateKeyToAccount } from 'viem/accounts';
 import { CREATOR_EVENT_MANAGER_ABI } from '../abi/CreatorEventManager.abi';
 
-const celoSepolia = {
-  id: 11142220,
-  name: 'Celo Sepolia',
+const celoMainnet = {
+  id: 42220,
+  name: 'Celo',
   nativeCurrency: { name: 'CELO', symbol: 'CELO', decimals: 18 },
   rpcUrls: {
-    default: { http: ['https://forno.celo-sepolia.celo-testnet.org'] },
-    public: { http: ['https://forno.celo-sepolia.celo-testnet.org'] },
+    default: { http: ['https://forno.celo.org'] },
+    public: { http: ['https://forno.celo.org'] },
   },
 } as const;
 
@@ -43,12 +43,12 @@ export class CreatorEventsService implements OnModuleInit {
     this.account = privateKeyToAccount(privateKey);
 
     this.publicClient = createPublicClient({
-      chain: celoSepolia,
+      chain: celoMainnet,
       transport: http(rpcUrl),
     }) as any;
 
     this.walletClient = createWalletClient({
-      chain: celoSepolia,
+      chain: celoMainnet,
       transport: http(rpcUrl),
       account: this.account,
     }) as any;
@@ -208,7 +208,7 @@ export class CreatorEventsService implements OnModuleInit {
   async verifyAddress(user: string) {
     const hash = await this.walletClient.writeContract({
       account: this.account,
-      chain: celoSepolia,
+      chain: celoMainnet,
       address: this.contractAddress,
       abi: CREATOR_EVENT_MANAGER_ABI,
       functionName: 'verifyAddress',
@@ -221,7 +221,7 @@ export class CreatorEventsService implements OnModuleInit {
   async verifyAddressBatch(users: string[]) {
     const hash = await this.walletClient.writeContract({
       account: this.account,
-      chain: celoSepolia,
+      chain: celoMainnet,
       address: this.contractAddress,
       abi: CREATOR_EVENT_MANAGER_ABI,
       functionName: 'verifyAddressBatch',
@@ -234,7 +234,7 @@ export class CreatorEventsService implements OnModuleInit {
   async unverifyAddress(user: string) {
     const hash = await this.walletClient.writeContract({
       account: this.account,
-      chain: celoSepolia,
+      chain: celoMainnet,
       address: this.contractAddress,
       abi: CREATOR_EVENT_MANAGER_ABI,
       functionName: 'unverifyAddress',
@@ -247,7 +247,7 @@ export class CreatorEventsService implements OnModuleInit {
   async withdrawFees(recipient: string) {
     const hash = await this.walletClient.writeContract({
       account: this.account,
-      chain: celoSepolia,
+      chain: celoMainnet,
       address: this.contractAddress,
       abi: CREATOR_EVENT_MANAGER_ABI,
       functionName: 'withdrawFees',
@@ -271,7 +271,7 @@ export class CreatorEventsService implements OnModuleInit {
     );
     const hash = await this.walletClient.writeContract({
       account: this.account,
-      chain: celoSepolia,
+      chain: celoMainnet,
       address: this.contractAddress,
       abi: CREATOR_EVENT_MANAGER_ABI,
       functionName: 'submitMatchResult',

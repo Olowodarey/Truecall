@@ -9,7 +9,7 @@ import {
   useChainId,
   useSwitchChain,
 } from "wagmi";
-import { celoSepolia } from "@/lib/wagmi";
+import { celo } from "@/lib/wagmi";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import {
@@ -54,7 +54,7 @@ export default function CreatorEventDetailPage() {
   const { isConnected, address, connectWallet } = useWallet();
   const chainId = useChainId();
   const { switchChainAsync } = useSwitchChain();
-  const isWrongNetwork = chainId !== celoSepolia.id;
+  const isWrongNetwork = chainId !== celo.id;
 
   const [event, setEvent] = useState<CreatorEvent | null>(null);
   const [matches, setMatches] = useState<CreatorMatch[]>([]);
@@ -256,7 +256,7 @@ export default function CreatorEventDetailPage() {
 
     if (isWrongNetwork) {
       try {
-        await switchChainAsync({ chainId: celoSepolia.id });
+        await switchChainAsync({ chainId: celo.id });
       } catch {
         return;
       }
@@ -282,7 +282,7 @@ export default function CreatorEventDetailPage() {
 
     if (isWrongNetwork) {
       try {
-        await switchChainAsync({ chainId: celoSepolia.id });
+        await switchChainAsync({ chainId: celo.id });
       } catch {
         return;
       }
@@ -390,7 +390,7 @@ export default function CreatorEventDetailPage() {
 
     if (isWrongNetwork) {
       try {
-        await switchChainAsync({ chainId: celoSepolia.id });
+        await switchChainAsync({ chainId: celo.id });
       } catch {
         return;
       }

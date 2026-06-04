@@ -38,10 +38,10 @@ export function useContractWrite(options?: UseContractWriteOptions) {
       }
 
       // Check and switch network if needed
-      if (chainId !== celoSepolia.id) {
+      if (chainId !== celo.id) {
         setIsWrongNetwork(true);
         try {
-          await switchChainAsync({ chainId: celoSepolia.id });
+          await switchChainAsync({ chainId: celo.id });
           setIsWrongNetwork(false);
         } catch (err) {
           throw new Error("Failed to switch network");

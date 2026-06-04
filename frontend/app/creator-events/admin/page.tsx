@@ -11,7 +11,7 @@ import {
   useSwitchChain,
 } from "wagmi";
 import { formatEther, parseEther } from "viem";
-import { celoSepolia } from "@/lib/wagmi";
+import { celo } from "@/lib/wagmi";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import {
@@ -30,7 +30,7 @@ export default function CreatorAdminPage() {
   const { isConnected, address, connectWallet } = useWallet();
   const chainId = useChainId();
   const { switchChainAsync } = useSwitchChain();
-  const isWrongNetwork = chainId !== celoSepolia.id;
+  const isWrongNetwork = chainId !== celo.id;
   const isAdmin = address?.toLowerCase() === ADMIN.toLowerCase();
 
   // ── On-chain reads ────────────────────────────────────────────────────────
@@ -101,7 +101,7 @@ export default function CreatorAdminPage() {
 
     if (isWrongNetwork) {
       try {
-        await switchChainAsync({ chainId: celoSepolia.id });
+        await switchChainAsync({ chainId: celo.id });
       } catch {
         return;
       }
@@ -164,7 +164,7 @@ export default function CreatorAdminPage() {
 
     if (isWrongNetwork) {
       try {
-        await switchChainAsync({ chainId: celoSepolia.id });
+        await switchChainAsync({ chainId: celo.id });
       } catch {
         return;
       }
@@ -246,7 +246,7 @@ export default function CreatorAdminPage() {
           <p className="text-gray-400 text-sm mt-1">
             Manage fees for{" "}
             <a
-              href={`https://celo-sepolia.blockscout.com/address/${CREATOR_EVENT_MANAGER_ADDRESS}`}
+              href={`https://celoscan.io/address/${CREATOR_EVENT_MANAGER_ADDRESS}`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-orange-400 hover:text-orange-300 font-mono text-xs"
@@ -371,7 +371,7 @@ export default function CreatorAdminPage() {
                 <span>✅ Fee updated to {newFee || "?"} CELO</span>
                 {setFeeTx && (
                   <a
-                    href={`https://celo-sepolia.blockscout.com/tx/${setFeeTx}`}
+                    href={`https://celoscan.io/tx/${setFeeTx}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-xs text-gray-400 hover:text-orange-400 underline"
@@ -466,7 +466,7 @@ export default function CreatorAdminPage() {
                 <span>✅ Fees withdrawn successfully</span>
                 {withdrawTx && (
                   <a
-                    href={`https://celo-sepolia.blockscout.com/tx/${withdrawTx}`}
+                    href={`https://celoscan.io/tx/${withdrawTx}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-xs text-gray-400 hover:text-orange-400 underline"
@@ -488,7 +488,7 @@ export default function CreatorAdminPage() {
             <div className="flex justify-between">
               <span className="text-gray-500">Proxy</span>
               <a
-                href={`https://celo-sepolia.blockscout.com/address/${CREATOR_EVENT_MANAGER_ADDRESS}`}
+                href={`https://celoscan.io/address/${CREATOR_EVENT_MANAGER_ADDRESS}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-orange-400 hover:text-orange-300"
@@ -498,7 +498,7 @@ export default function CreatorAdminPage() {
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Network</span>
-              <span className="text-gray-300">Celo Sepolia Testnet</span>
+              <span className="text-gray-300">Celo Mainnet</span>
             </div>
           </div>
         </div>

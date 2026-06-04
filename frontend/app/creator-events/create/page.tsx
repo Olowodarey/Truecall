@@ -10,7 +10,7 @@ import {
   useSwitchChain,
 } from "wagmi";
 import { keccak256, toBytes, formatEther } from "viem";
-import { celoSepolia } from "@/lib/wagmi";
+import { celo } from "@/lib/wagmi";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import {
@@ -60,7 +60,7 @@ export default function CreateCreatorEventPage() {
   const { isConnected, connectWallet } = useWallet();
   const chainId = useChainId();
   const { switchChainAsync } = useSwitchChain();
-  const isWrongNetwork = chainId !== celoSepolia.id;
+  const isWrongNetwork = chainId !== celo.id;
 
   // Form state
   const [eventName, setEventName] = useState("");
@@ -273,7 +273,7 @@ export default function CreateCreatorEventPage() {
 
     if (isWrongNetwork) {
       try {
-        await switchChainAsync({ chainId: celoSepolia.id });
+        await switchChainAsync({ chainId: celo.id });
       } catch {
         return;
       }
@@ -370,7 +370,7 @@ export default function CreateCreatorEventPage() {
               </code>
             </div>
             <a
-              href={`https://celo-sepolia.blockscout.com/tx/${successTxHash}`}
+              href={`https://celoscan.io/tx/${successTxHash}`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-xs text-gray-400 hover:text-orange-400 transition break-all block mb-6 font-mono"
