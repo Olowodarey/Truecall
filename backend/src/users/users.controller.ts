@@ -28,8 +28,8 @@ export class UsersController {
   @Get('profile/:address')
   @ApiOperation({ summary: 'Get user profile by wallet address' })
   @ApiParam({ name: 'address', type: String })
-  getProfile(@Param('address') address: string) {
-    const profile = this.usersService.getProfile(address);
+  async getProfile(@Param('address') address: string) {
+    const profile = await this.usersService.getProfile(address);
     return profile || { address, twitterHandle: null };
   }
 
@@ -124,7 +124,7 @@ export class UsersController {
       }
 
       // Step 4: Link to wallet
-      const profile = this.usersService.linkTwitter(
+      const profile = await this.usersService.linkTwitter(
         address,
         twitterUser.username,
         twitterUser.id,
@@ -235,8 +235,8 @@ export class UsersController {
       },
     },
   })
-  unlinkTwitter(@Body() body: { address: string }) {
-    const success = this.usersService.unlinkTwitter(body.address);
+  async unlinkTwitter(@Body() body: { address: string }) {
+    const success = await this.usersService.unlinkTwitter(body.address);
     return { success };
   }
 
