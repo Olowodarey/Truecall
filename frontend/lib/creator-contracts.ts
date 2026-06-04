@@ -1,10 +1,10 @@
 // CreatorEventManager — Celo Sepolia
-// Proxy: 0xD360E9eF6bF50A357c77fA17474a4838c2379B3f
+// Proxy: 0x10C6D0bD4500B1Dd4c24B1D10B7648Ed98453309
 // Fee:   native CELO only (no ERC-20, no approval needed)
 
 export const CREATOR_EVENT_MANAGER_ADDRESS = (process.env
   .NEXT_PUBLIC_CREATOR_EVENT_MANAGER ??
-  "0xD360E9eF6bF50A357c77fA17474a4838c2379B3f") as `0x${string}`;
+  "0x10C6D0bD4500B1Dd4c24B1D10B7648Ed98453309") as `0x${string}`;
 
 export const CREATOR_EVENT_MANAGER_ABI = [
   // ─── Write ────────────────────────────────────────────────────────────────
@@ -101,7 +101,7 @@ export const CREATOR_EVENT_MANAGER_ABI = [
     type: "function",
     name: "withdrawFees",
     stateMutability: "nonpayable",
-    inputs: [],
+    inputs: [{ name: "recipient", type: "address" }],
     outputs: [],
   },
   {

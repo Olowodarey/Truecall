@@ -76,6 +76,10 @@ export default function CreatorEventDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Creator Twitter info
+  const [creatorTwitter, setCreatorTwitter] = useState<string | null>(null);
+  const [creatorAvatar, setCreatorAvatar] = useState<string | null>(null);
+
   // Join state
   const [inviteCode, setInviteCode] = useState("");
   const [joinError, setJoinError] = useState<string | null>(null);
@@ -157,6 +161,18 @@ export default function CreatorEventDetailPage() {
       ]);
       setEvent(ev);
       setMatches(ms);
+
+      // Load creator Twitter info
+      try {
+        const creatorProfile = await fetch(`/api/users/profile/${ev.creator}`);
+        if (creatorProfile.ok) {
+          const profile = await creatorProfile.json();
+          setCreatorTwitter(profile.twitterHandle || null);
+          setCreatorAvatar(profile.twitterAvatar || null);
+        }
+      } catch {
+        // Silently fail
+      }
 
       if (address) {
         const [joined, verified] = await Promise.all([
@@ -454,12 +470,36 @@ export default function CreatorEventDetailPage() {
               <h1 className="text-3xl font-bold text-white">
                 {event.eventName}
               </h1>
-              <p className="text-gray-500 text-sm mt-1 font-mono">
-                Creator: {event.creator.slice(0, 6)}…{event.creator.slice(-4)}
-                {isCreator && (
-                  <span className="ml-2 text-orange-400 font-bold">(you)</span>
+              <div className="flex items-center gap-2 mt-1">
+                {creatorAvatar && (
+                  <img
+                    src={creatorAvatar}
+                    alt="Creator"
+                    className="w-5 h-5 rounded-full"
+                  />
                 )}
-              </p>
+                {creatorTwitter ? (
+                  <p className="text-blue-400 text-sm flex items-center gap-1.5">
+                    Creator: @{creatorTwitter}
+                    <span className="text-green-500 text-xs">✓</span>
+                    {isCreator && (
+                      <span className="ml-1 text-orange-400 font-bold">
+                        (you)
+                      </span>
+                    )}
+                  </p>
+                ) : (
+                  <p className="text-gray-500 text-sm font-mono">
+                    Creator: {event.creator.slice(0, 6)}…
+                    {event.creator.slice(-4)}
+                    {isCreator && (
+                      <span className="ml-2 text-orange-400 font-bold">
+                        (you)
+                      </span>
+                    )}
+                  </p>
+                )}
+              </div>
             </div>
             <span
               className={`px-3 py-1 rounded-full text-xs font-bold border shrink-0 ${

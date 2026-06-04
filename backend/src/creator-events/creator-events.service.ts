@@ -244,17 +244,21 @@ export class CreatorEventsService implements OnModuleInit {
     return { success: true, transactionHash: receipt.transactionHash, user };
   }
 
-  async withdrawFees() {
+  async withdrawFees(recipient: string) {
     const hash = await this.walletClient.writeContract({
       account: this.account,
       chain: celoSepolia,
       address: this.contractAddress,
       abi: CREATOR_EVENT_MANAGER_ABI,
       functionName: 'withdrawFees',
-      args: [],
+      args: [recipient as `0x${string}`],
     });
     const receipt = await this.publicClient.waitForTransactionReceipt({ hash });
-    return { success: true, transactionHash: receipt.transactionHash };
+    return {
+      success: true,
+      transactionHash: receipt.transactionHash,
+      recipient,
+    };
   }
 
   async submitMatchResult(

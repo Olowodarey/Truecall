@@ -313,16 +313,19 @@ contract CreatorEventManager is
 
     // ─── Fee Withdrawal ───────────────────────────────────────────────────────
 
-    /// @notice Admin withdraws all accumulated CELO fees to treasury
-    function withdrawFees() external onlyOwner nonReentrant {
+    /// @notice Admin withdraws all accumulated CELO fees to specified address
+    /// @param recipient Address to receive the withdrawn fees
+    function withdrawFees(address recipient) external onlyOwner nonReentrant {
+        if (recipient == address(0)) revert ZeroAddress();
+        
         uint256 amount = pendingFees;
         if (amount == 0) revert NothingToWithdraw();
 
         pendingFees = 0;
-        (bool ok, ) = payable(treasury).call{value: amount}("");
+        (bool ok, ) = payable(recipient).call{value: amount}("");
         require(ok, "CELO transfer failed");
 
-        emit FeesWithdrawn(treasury, amount);
+        emit FeesWithdrawn(recipient, amount);
     }
 
     // ─── Event Creation ───────────────────────────────────────────────────────

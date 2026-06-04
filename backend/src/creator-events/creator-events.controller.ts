@@ -8,7 +8,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiParam } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiParam, ApiBody } from '@nestjs/swagger';
 import { CreatorEventsService } from './creator-events.service';
 import { UsersService } from '../users/users.service';
 
@@ -128,7 +128,8 @@ export class CreatorEventsController {
     const profiles = await this.usersService.getProfilesByAddresses(addresses);
 
     const enrichedWinners = winners.map((w) => {
-      const profile = profiles.get(w.user);
+      // Normalize address to lowercase for lookup
+      const profile = profiles.get(w.user.toLowerCase());
       return {
         user: w.user,
         submittedAt: w.submittedAt,
@@ -223,11 +224,20 @@ export class CreatorEventsController {
 
   @Post('admin/withdraw-fees')
   @ApiOperation({
-    summary: 'Admin: withdraw all accumulated CELO fees to treasury',
+    summary: 'Admin: withdraw all accumulated CELO fees to specified address',
   })
-  async withdrawFees() {
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        recipient: { type: 'string', description: 'Address to receive fees' },
+      },
+      required: ['recipient'],
+    },
+  })
+  async withdrawFees(@Body() body: { recipient: string }) {
     try {
-      return await this.svc.withdrawFees();
+      return await this.svc.withdrawFees(body.recipient);
     } catch (e) {
       throw new BadRequestException(
         e instanceof Error ? e.message : 'Failed to withdraw fees',

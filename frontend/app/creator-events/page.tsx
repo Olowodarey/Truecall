@@ -8,20 +8,55 @@ import Footer from "@/components/Footer";
 import { fetchCreatorEvents, type CreatorEvent } from "@/lib/creator-api";
 import { formatDistanceToNow } from "date-fns";
 
+// Extended event type with creator Twitter info
+interface EventWithCreator extends CreatorEvent {
+  creatorTwitter?: string | null;
+  creatorAvatar?: string | null;
+}
+
 export default function CreatorEventsPage() {
   const router = useRouter();
   const { isConnected, address, connectWallet } = useWallet();
-  const [events, setEvents] = useState<CreatorEvent[]>([]);
+  const [events, setEvents] = useState<EventWithCreator[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isVerified, setIsVerified] = useState(false);
   const [twitterHandle, setTwitterHandle] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchCreatorEvents()
-      .then(setEvents)
-      .catch((e) => setError(e?.message ?? "Failed to load events"))
-      .finally(() => setLoading(false));
+    const loadEvents = async () => {
+      try {
+        const fetchedEvents = await fetchCreatorEvents();
+
+        // Enrich with creator Twitter data
+        const enriched = await Promise.all(
+          fetchedEvents.map(async (ev) => {
+            try {
+              const response = await fetch(`/api/users/profile/${ev.creator}`);
+              if (response.ok) {
+                const profile = await response.json();
+                return {
+                  ...ev,
+                  creatorTwitter: profile.twitterHandle || null,
+                  creatorAvatar: profile.twitterAvatar || null,
+                };
+              }
+            } catch {
+              // Silently fail - just won't have Twitter data
+            }
+            return { ...ev, creatorTwitter: null, creatorAvatar: null };
+          }),
+        );
+
+        setEvents(enriched);
+      } catch (e) {
+        setError(e?.message ?? "Failed to load events");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadEvents();
   }, []);
 
   useEffect(() => {
@@ -160,9 +195,25 @@ export default function CreatorEventsPage() {
                     <h3 className="text-white font-bold text-lg group-hover:text-orange-400 transition truncate">
                       {ev.eventName}
                     </h3>
-                    <p className="text-gray-500 text-xs mt-1 font-mono">
-                      by {ev.creator.slice(0, 6)}…{ev.creator.slice(-4)}
-                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      {ev.creatorAvatar && (
+                        <img
+                          src={ev.creatorAvatar}
+                          alt="Creator"
+                          className="w-4 h-4 rounded-full"
+                        />
+                      )}
+                      {ev.creatorTwitter ? (
+                        <p className="text-blue-400 text-xs flex items-center gap-1">
+                          by @{ev.creatorTwitter}
+                          <span className="text-green-500 text-[10px]">✓</span>
+                        </p>
+                      ) : (
+                        <p className="text-gray-500 text-xs font-mono">
+                          by {ev.creator.slice(0, 6)}…{ev.creator.slice(-4)}
+                        </p>
+                      )}
+                    </div>
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-gray-400 text-xs">

@@ -117,6 +117,9 @@ export default function CreatorAdminPage() {
 
   // ── Withdraw Fees ─────────────────────────────────────────────────────────
 
+  const [recipientAddress, setRecipientAddress] = useState("");
+  const [withdrawError, setWithdrawError] = useState<string | null>(null);
+
   const {
     writeContract: withdrawWrite,
     data: withdrawTx,
@@ -130,10 +133,33 @@ export default function CreatorAdminPage() {
   useEffect(() => {
     if (withdrawDone) {
       refetchPending();
+      setRecipientAddress(""); // Clear the input after successful withdrawal
     }
   }, [withdrawDone, refetchPending]);
 
+  // Pre-fill treasury address only once on mount
+  const [hasAutoFilled, setHasAutoFilled] = useState(false);
+  useEffect(() => {
+    if (treasuryAddress && !hasAutoFilled && !recipientAddress) {
+      setRecipientAddress(String(treasuryAddress));
+      setHasAutoFilled(true);
+    }
+  }, [treasuryAddress, hasAutoFilled, recipientAddress]);
+
   const handleWithdraw = async () => {
+    setWithdrawError(null);
+
+    // Validate recipient address
+    if (!recipientAddress || !recipientAddress.startsWith("0x")) {
+      setWithdrawError("Enter a valid wallet address (0x...)");
+      return;
+    }
+
+    if (recipientAddress.length !== 42) {
+      setWithdrawError("Wallet address must be 42 characters");
+      return;
+    }
+
     resetWithdraw();
 
     if (isWrongNetwork) {
@@ -148,7 +174,7 @@ export default function CreatorAdminPage() {
       address: CREATOR_EVENT_MANAGER_ADDRESS,
       abi: CREATOR_EVENT_MANAGER_ABI,
       functionName: "withdrawFees",
-      args: [],
+      args: [recipientAddress as `0x${string}`],
     });
   };
 
@@ -361,11 +387,11 @@ export default function CreatorAdminPage() {
           <div className="bg-gray-800/50 border border-gray-700 rounded-2xl p-6">
             <h2 className="text-white font-bold text-lg mb-1">Withdraw Fees</h2>
             <p className="text-gray-400 text-sm mb-5">
-              Sends all accumulated CELO to the treasury address.
+              Sends all accumulated CELO to the specified wallet address.
             </p>
 
-            <div className="bg-gray-900/50 border border-gray-700/50 rounded-xl p-4 mb-5">
-              <div className="flex justify-between items-center mb-2">
+            <div className="bg-gray-900/50 border border-gray-700/50 rounded-xl p-4 mb-4">
+              <div className="flex justify-between items-center">
                 <span className="text-gray-400 text-sm">
                   Available to withdraw
                 </span>
@@ -375,19 +401,47 @@ export default function CreatorAdminPage() {
                   {pendingFees} CELO
                 </span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-400 text-sm">Destination</span>
-                <span className="text-gray-300 text-xs font-mono">
-                  {treasuryAddress
-                    ? `${String(treasuryAddress).slice(0, 8)}…${String(treasuryAddress).slice(-6)}`
-                    : "..."}
-                </span>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Destination
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={recipientAddress}
+                  onChange={(e) => {
+                    setRecipientAddress(e.target.value);
+                    setWithdrawError(null);
+                  }}
+                  placeholder="0xAB26...FE5b"
+                  disabled={withdrawPending || withdrawMining}
+                  className="w-full px-4 py-2.5 pr-20 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50"
+                />
+                {recipientAddress && !withdrawPending && !withdrawMining && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRecipientAddress("");
+                      setWithdrawError(null);
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1 text-xs text-gray-400 hover:text-white hover:bg-gray-600 rounded transition"
+                  >
+                    Clear
+                  </button>
+                )}
               </div>
             </div>
 
             <button
               onClick={handleWithdraw}
-              disabled={withdrawPending || withdrawMining || !hasPendingFees}
+              disabled={
+                withdrawPending ||
+                withdrawMining ||
+                !hasPendingFees ||
+                !recipientAddress
+              }
               className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white font-bold py-3 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {withdrawPending
@@ -399,6 +453,9 @@ export default function CreatorAdminPage() {
                     : "Nothing to withdraw"}
             </button>
 
+            {withdrawError && (
+              <p className="text-red-400 text-sm mt-3">⚠️ {withdrawError}</p>
+            )}
             {withdrawWriteError && (
               <p className="text-red-400 text-sm mt-3">
                 ⚠️ {withdrawWriteError.message?.split(".")[0]}
@@ -406,7 +463,7 @@ export default function CreatorAdminPage() {
             )}
             {withdrawDone && (
               <div className="flex items-center gap-2 text-green-400 text-sm mt-3">
-                <span>✅ Fees withdrawn to treasury</span>
+                <span>✅ Fees withdrawn successfully</span>
                 {withdrawTx && (
                   <a
                     href={`https://celo-sepolia.blockscout.com/tx/${withdrawTx}`}

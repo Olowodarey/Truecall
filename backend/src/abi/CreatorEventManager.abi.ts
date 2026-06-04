@@ -95,7 +95,7 @@ export const CREATOR_EVENT_MANAGER_ABI = [
     type: 'function',
     name: 'withdrawFees',
     stateMutability: 'nonpayable',
-    inputs: [], // no args — always sends to treasury
+    inputs: [{ name: 'recipient', type: 'address' }],
     outputs: [],
   },
   {
