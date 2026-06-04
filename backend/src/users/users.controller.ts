@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiParam, ApiBody } from '@nestjs/swagger';
 import { UsersService } from './users.service';
+import { CreatorEventsService } from '../creator-events/creator-events.service';
 import { Client, OAuth2 } from '@xdevplatform/xdk';
 import { ConfigService } from '@nestjs/config';
 
@@ -20,6 +21,7 @@ export class UsersController {
 
   constructor(
     private readonly usersService: UsersService,
+    private readonly creatorEventsService: CreatorEventsService,
     private readonly config: ConfigService,
   ) {}
 
@@ -116,6 +118,19 @@ export class UsersController {
         `Twitter linked via XDK: @${twitterUser.username} → ${address}`,
       );
 
+      // Step 4: Verify address on-chain (so they can join events)
+      try {
+        this.logger.log(`Verifying address on-chain: ${address}`);
+        await this.creatorEventsService.verifyAddress(address);
+        this.logger.log(`✅ Address verified on-chain: ${address}`);
+      } catch (verifyError) {
+        this.logger.warn(
+          `Failed to verify address on-chain (user can manually verify later): ${verifyError.message}`,
+        );
+        // Don't fail the OAuth flow if on-chain verification fails
+        // User can still use the platform, admin can verify manually later
+      }
+
       return {
         success: true,
         profile,
@@ -145,7 +160,7 @@ export class UsersController {
       required: ['address', 'twitterHandle'],
     },
   })
-  linkTwitterManual(
+  async linkTwitterManual(
     @Body()
     body: {
       address: string;
@@ -158,6 +173,18 @@ export class UsersController {
       body.twitterHandle,
       body.twitterId || 'manual_' + Date.now(),
     );
+
+    // Verify on-chain
+    try {
+      this.logger.log(`Verifying address on-chain (manual): ${body.address}`);
+      await this.creatorEventsService.verifyAddress(body.address);
+      this.logger.log(`✅ Address verified on-chain: ${body.address}`);
+    } catch (verifyError) {
+      this.logger.warn(
+        `Failed to verify address on-chain: ${verifyError.message}`,
+      );
+    }
+
     return { success: true, profile };
   }
 

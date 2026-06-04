@@ -161,12 +161,18 @@ export default function CreatorEventDetailPage() {
       if (address) {
         const [joined, verified] = await Promise.all([
           fetchCreatorHasJoined(eventId, address),
-          fetch(`/api/creator-events/verify/status/${address}`)
+          fetch(`/api/users/twitter/verify-status/${address}`)
             .then((r) => r.json())
-            .catch(() => ({ verified: false })),
+            .catch(() => ({
+              verified: false,
+              twitterHandle: null,
+              twitterAvatar: null,
+            })),
         ]);
         setHasJoined(joined.joined);
         setIsVerified(verified.verified ?? false);
+        setTwitterHandle(verified.twitterHandle);
+        setTwitterAvatar(verified.twitterAvatar);
 
         // Fetch predictions for all matches
         const predictions: Record<number, any> = {};
@@ -501,19 +507,38 @@ export default function CreatorEventDetailPage() {
           ) : hasJoined ? (
             <div className="bg-green-500/10 border border-green-500/30 text-green-400 p-4 rounded-xl text-center font-medium">
               ✅ You have joined — predict on matches below
+              {isVerified && twitterHandle && (
+                <div className="mt-2 flex items-center justify-center gap-2 text-sm">
+                  <span className="text-blue-400">🐦 @{twitterHandle}</span>
+                  <span className="text-green-400">✓ Verified</span>
+                </div>
+              )}
             </div>
           ) : !isVerified ? (
             <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-xl p-5">
-              <h3 className="text-white font-bold mb-2">
-                Verification Required
+              <h3 className="text-white font-bold mb-2 flex items-center gap-2">
+                <span>🔒</span>
+                Twitter Verification Required
               </h3>
               <p className="text-gray-400 text-sm mb-4">
-                You need to be socially verified (Twitter) to join events.
-                Contact admin to verify your address.
+                You need to verify your Twitter account to join creator events.
+                This helps creators know you're a real person and builds trust
+                in the community.
               </p>
-              <p className="text-gray-500 text-xs font-mono break-all">
-                {address}
-              </p>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => router.push("/profile")}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-5 rounded-lg transition flex items-center gap-2"
+                >
+                  🐦 Verify Twitter
+                </button>
+                <div className="flex-1 bg-gray-900/50 rounded-lg p-3">
+                  <p className="text-gray-500 text-xs mb-1">Your wallet:</p>
+                  <p className="text-gray-400 text-xs font-mono break-all">
+                    {address}
+                  </p>
+                </div>
+              </div>
             </div>
           ) : isOpen ? (
             <div className="bg-blue-900/20 border border-blue-500/30 rounded-xl p-5">

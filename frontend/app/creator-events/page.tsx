@@ -14,6 +14,8 @@ export default function CreatorEventsPage() {
   const [events, setEvents] = useState<CreatorEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isVerified, setIsVerified] = useState(false);
+  const [twitterHandle, setTwitterHandle] = useState<string | null>(null);
 
   useEffect(() => {
     fetchCreatorEvents()
@@ -21,6 +23,21 @@ export default function CreatorEventsPage() {
       .catch((e) => setError(e?.message ?? "Failed to load events"))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (address) {
+      fetch(`/api/users/twitter/verify-status/${address}`)
+        .then((r) => r.json())
+        .then((data) => {
+          setIsVerified(data.verified ?? false);
+          setTwitterHandle(data.twitterHandle);
+        })
+        .catch(() => {
+          setIsVerified(false);
+          setTwitterHandle(null);
+        });
+    }
+  }, [address]);
 
   return (
     <div className="relative pt-20 min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 pb-20">
@@ -33,6 +50,28 @@ export default function CreatorEventsPage() {
             <p className="text-gray-400 text-sm mt-1">
               Invite-code prediction events · Free to join · Winners on-chain
             </p>
+            {isConnected && (
+              <div className="mt-2">
+                {isVerified && twitterHandle ? (
+                  <div className="inline-flex items-center gap-2 bg-green-500/10 border border-green-500/30 px-3 py-1.5 rounded-lg">
+                    <span className="text-blue-400 text-sm">
+                      🐦 @{twitterHandle}
+                    </span>
+                    <span className="text-green-400 text-xs font-semibold">
+                      ✓ Verified
+                    </span>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => router.push("/profile")}
+                    className="inline-flex items-center gap-2 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 px-3 py-1.5 rounded-lg text-yellow-400 text-sm transition"
+                  >
+                    <span>⚠️</span>
+                    <span>Verify Twitter to Join Events</span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-3">
             {address?.toLowerCase() ===
