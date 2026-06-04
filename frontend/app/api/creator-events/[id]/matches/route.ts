@@ -5,11 +5,12 @@ const BACKEND_URL =
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const { id } = await params;
     const response = await fetch(
-      `${BACKEND_URL}/creator-events/${params.id}/matches`,
+      `${BACKEND_URL}/creator-events/${id}/matches`,
       {
         cache: "no-store",
       },

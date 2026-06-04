@@ -5,11 +5,12 @@ const BACKEND_URL =
 
 export async function GET(
   request: Request,
-  { params }: { params: { address: string } },
+  { params }: { params: Promise<{ address: string }> },
 ) {
   try {
+    const { address } = await params;
     const response = await fetch(
-      `${BACKEND_URL}/users/twitter/verify-status/${params.address}`,
+      `${BACKEND_URL}/users/twitter/verify-status/${address}`,
       {
         cache: "no-store",
       },

@@ -5,15 +5,13 @@ const BACKEND_URL =
 
 export async function GET(
   request: Request,
-  { params }: { params: { address: string } },
+  { params }: { params: Promise<{ address: string }> },
 ) {
   try {
-    const response = await fetch(
-      `${BACKEND_URL}/users/profile/${params.address}`,
-      {
-        cache: "no-store",
-      },
-    );
+    const { address } = await params;
+    const response = await fetch(`${BACKEND_URL}/users/profile/${address}`, {
+      cache: "no-store",
+    });
 
     if (!response.ok) {
       return NextResponse.json(

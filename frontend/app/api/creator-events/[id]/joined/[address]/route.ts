@@ -5,11 +5,12 @@ const BACKEND_URL =
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string; address: string } },
+  { params }: { params: Promise<{ id: string; address: string }> },
 ) {
   try {
+    const { id, address } = await params;
     const response = await fetch(
-      `${BACKEND_URL}/creator-events/${params.id}/joined/${params.address}`,
+      `${BACKEND_URL}/creator-events/${id}/joined/${address}`,
       {
         cache: "no-store",
       },
