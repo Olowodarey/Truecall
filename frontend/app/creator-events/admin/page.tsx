@@ -182,9 +182,9 @@ export default function CreatorAdminPage() {
 
   if (!isConnected)
     return (
-      <div className="relative pt-20 min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
+      <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
         <Header />
-        <main className="container mx-auto px-4 py-20 text-center">
+        <main className="flex-1 container mx-auto px-4 py-20 text-center">
           <div className="max-w-md mx-auto bg-gray-800/40 border border-gray-700/50 rounded-2xl p-10">
             <div className="text-5xl mb-4">🔐</div>
             <h2 className="text-2xl font-bold text-white mb-3">Admin Access</h2>
@@ -205,9 +205,9 @@ export default function CreatorAdminPage() {
 
   if (!isAdmin)
     return (
-      <div className="relative pt-20 min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
+      <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
         <Header />
-        <main className="container mx-auto px-4 py-20 text-center">
+        <main className="flex-1 container mx-auto px-4 py-20 text-center">
           <div className="max-w-md mx-auto bg-red-900/20 border border-red-900/50 rounded-2xl p-10">
             <div className="text-5xl mb-4">🚫</div>
             <h2 className="text-red-400 font-bold text-xl mb-4">
@@ -229,9 +229,9 @@ export default function CreatorAdminPage() {
   // ── Main panel ────────────────────────────────────────────────────────────
 
   return (
-    <div className="relative pt-20 min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 pb-20">
+    <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
       <Header />
-      <main className="container mx-auto px-4 max-w-3xl mt-8">
+      <main className="flex-1 container mx-auto px-4 max-w-3xl mt-28 mb-20">
         <button
           onClick={() => router.push("/creator-events")}
           className="text-gray-400 hover:text-white mb-6 flex items-center gap-2 text-sm"

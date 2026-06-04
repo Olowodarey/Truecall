@@ -325,9 +325,9 @@ export default function CreateCreatorEventPage() {
 
   if (!isConnected)
     return (
-      <div className="relative pt-20 min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
+      <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
         <Header />
-        <main className="container mx-auto px-4 py-20 text-center">
+        <main className="flex-1 container mx-auto px-4 py-20 text-center">
           <div className="max-w-md mx-auto bg-gray-800/40 border border-gray-700/50 rounded-2xl p-10">
             <div className="text-5xl mb-4">🔐</div>
             <h2 className="text-2xl font-bold text-white mb-3">
@@ -350,9 +350,9 @@ export default function CreateCreatorEventPage() {
 
   if (successTxHash)
     return (
-      <div className="relative pt-20 min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
+      <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
         <Header />
-        <main className="container mx-auto px-4 py-20 text-center">
+        <main className="flex-1 container mx-auto px-4 py-20 text-center">
           <div className="max-w-md mx-auto bg-gray-800/40 border border-green-500/30 rounded-2xl p-10">
             <div className="text-6xl mb-4">🎉</div>
             <h2 className="text-3xl font-bold text-white mb-2">
@@ -406,9 +406,9 @@ export default function CreateCreatorEventPage() {
   // ── Main form ─────────────────────────────────────────────────────────────
 
   return (
-    <div className="relative pt-20 min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 pb-20">
+    <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
       <Header />
-      <main className="container mx-auto px-4 py-12 max-w-2xl">
+      <main className="flex-1 container mx-auto px-4 py-12 max-w-2xl mb-20">
         <button
           onClick={() => router.push("/creator-events")}
           className="text-gray-400 hover:text-white mb-6 flex items-center gap-2 text-sm"

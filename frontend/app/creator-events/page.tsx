@@ -75,9 +75,9 @@ export default function CreatorEventsPage() {
   }, [address]);
 
   return (
-    <div className="relative pt-20 min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 pb-20">
+    <div className="flex flex-col min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
       <Header />
-      <main className="container mx-auto px-4 max-w-4xl mt-8">
+      <main className="flex-1 container mx-auto px-4 max-w-4xl mt-28 mb-20">
         {/* Header row */}
         <div className="flex items-center justify-between mb-8">
           <div>
