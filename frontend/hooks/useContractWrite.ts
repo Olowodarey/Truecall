@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { useWallet } from "@/contexts/WalletContext";
 import { useChainId, useSwitchChain, useWriteContract } from "wagmi";
-import { celoSepolia } from "@/lib/wagmi";
+import { celo } from "@/lib/wagmi";
 
 interface UseContractWriteOptions {
   onSuccess?: () => void;

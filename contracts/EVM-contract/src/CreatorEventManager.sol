@@ -86,6 +86,7 @@ contract CreatorEventManager is
 
     enum EventStatus {
         OPEN,      // Accepting joins and predictions
+        COMPLETED, // All matches verified, event finished
         CANCELLED  // Creator cancelled before any results
     }
 
@@ -143,6 +144,7 @@ contract CreatorEventManager is
     );
 
     event EventCancelled(uint256 indexed eventId);
+    event EventCompleted(uint256 indexed eventId, uint256 timestamp);
     event FeesWithdrawn(address indexed to, uint256 amount);
 
     // ─── Errors ───────────────────────────────────────────────────────────────
@@ -503,6 +505,31 @@ contract CreatorEventManager is
         emit MatchResultSubmitted(
             matchId, eventId, homeScore, awayScore, winnersFound, block.timestamp
         );
+
+        // Check if all matches in this event are now verified
+        _checkAndCompleteEvent(eventId);
+    }
+
+    /// @notice Internal helper to check if event should be marked as completed
+    /// @dev Called after each match result submission
+    function _checkAndCompleteEvent(uint256 eventId) internal {
+        Event storage ev = events[eventId];
+        
+        // Only check if event is still OPEN
+        if (ev.status != EventStatus.OPEN) return;
+        
+        uint256[] memory matchIds = _eventMatches[eventId];
+        
+        // Check if all matches are verified
+        for (uint256 i = 0; i < matchIds.length; i++) {
+            if (matches[matchIds[i]].status != MatchStatus.VERIFIED) {
+                return; // At least one match not verified yet
+            }
+        }
+        
+        // All matches verified - mark event as completed
+        ev.status = EventStatus.COMPLETED;
+        emit EventCompleted(eventId, block.timestamp);
     }
 
     // ─── Creator: Cancel Event ────────────────────────────────────────────────

@@ -19,7 +19,7 @@ const celoSepolia = {
   },
 } as const;
 
-const EVENT_STATUS = ['OPEN', 'CANCELLED'] as const;
+const EVENT_STATUS = ['OPEN', 'COMPLETED', 'CANCELLED'] as const;
 const MATCH_STATUS = ['OPEN', 'VERIFIED'] as const;
 
 @Injectable()

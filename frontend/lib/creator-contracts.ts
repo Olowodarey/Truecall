@@ -1,10 +1,10 @@
-// CreatorEventManager — Celo Sepolia
-// Proxy: 0x10C6D0bD4500B1Dd4c24B1D10B7648Ed98453309
+// CreatorEventManager — Celo Mainnet
+// Proxy: 0x8A18Da2A173b3951c797a438102345cF92838880
 // Fee:   native CELO only (no ERC-20, no approval needed)
 
 export const CREATOR_EVENT_MANAGER_ADDRESS = (process.env
   .NEXT_PUBLIC_CREATOR_EVENT_MANAGER ??
-  "0x10C6D0bD4500B1Dd4c24B1D10B7648Ed98453309") as `0x${string}`;
+  "0x8A18Da2A173b3951c797a438102345cF92838880") as `0x${string}`;
 
 export const CREATOR_EVENT_MANAGER_ABI = [
   // ─── Write ────────────────────────────────────────────────────────────────
