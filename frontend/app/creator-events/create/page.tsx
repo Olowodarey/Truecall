@@ -126,9 +126,7 @@ export default function CreateCreatorEventPage() {
     if (fixturesLoaded) return;
     setFixturesLoading(true);
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/matches/upcoming`,
-      );
+      const res = await fetch("/api/matches/upcoming");
       if (res.ok) {
         setFixtures(await res.json());
         setFixturesLoaded(true);

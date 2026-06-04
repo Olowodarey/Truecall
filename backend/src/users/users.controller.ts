@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiParam, ApiBody } from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import axios from 'axios';
+import { Client, OAuth2 } from '@xdevplatform/xdk';
 import { ConfigService } from '@nestjs/config';
 
 @ApiTags('Users')
@@ -61,69 +61,73 @@ export class UsersController {
     }
 
     try {
-      // Exchange code for access token
       const clientId = this.config.get<string>('TWITTER_CLIENT_ID');
       const clientSecret = this.config.get<string>('TWITTER_CLIENT_SECRET');
       const redirectUri = this.config.get<string>('TWITTER_REDIRECT_URI');
 
       if (!clientId || !clientSecret || !redirectUri) {
-        throw new Error('Twitter OAuth not configured');
+        throw new Error(
+          'Twitter OAuth not configured (missing clientId, clientSecret, or redirectUri)',
+        );
       }
 
-      // Step 1: Get access token
-      const tokenResponse = await axios.post(
-        'https://api.twitter.com/2/oauth2/token',
-        new URLSearchParams({
-          code,
-          grant_type: 'authorization_code',
-          client_id: clientId,
-          redirect_uri: redirectUri,
-          code_verifier: codeVerifier, // Use the actual code verifier from frontend
-        }),
-        {
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
-          },
-        },
+      this.logger.log(
+        `Debugging Twitter OAuth: ClientID=${clientId.slice(0, 5)}..., RedirectURI=${redirectUri}`,
       );
 
-      const accessToken = tokenResponse.data.access_token;
+      // Step 1: Exchange code for access token using XDK
+      const oauth2 = new OAuth2({
+        clientId,
+        clientSecret,
+        redirectUri,
+        scope: ['tweet.read', 'users.read', 'offline.access'],
+      });
 
-      // Step 2: Get user info
-      const userResponse = await axios.get(
-        'https://api.twitter.com/2/users/me',
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-          params: {
-            'user.fields': 'profile_image_url',
-          },
-        },
+      this.logger.log(
+        `Exchanging code for tokens... (code=${code.slice(0, 5)}..., verifier=${codeVerifier.slice(0, 5)}...)`,
       );
+      const tokens = await oauth2.exchangeCode(code, codeVerifier);
+      this.logger.log('Tokens received successfully:', tokens);
 
-      const twitterUser = userResponse.data.data;
+      const client = new Client({ accessToken: tokens.access_token });
+
+      // Step 2: Get user info using XDK
+      this.logger.log('Fetching user info from X...');
+      const userResponse = await client.users.getMe({
+        'user.fields': ['profile_image_url'],
+      });
+
+      const twitterUser = userResponse.data;
+
+      if (!twitterUser) {
+        this.logger.error('No data in userResponse', userResponse);
+        throw new Error('Failed to fetch Twitter profile (empty data)');
+      }
 
       // Step 3: Link to wallet
       const profile = this.usersService.linkTwitter(
         address,
         twitterUser.username,
         twitterUser.id,
-        twitterUser.profile_image_url,
+        twitterUser.profileImageUrl,
       );
 
-      this.logger.log(`Twitter linked: @${twitterUser.username} → ${address}`);
+      this.logger.log(
+        `Twitter linked via XDK: @${twitterUser.username} → ${address}`,
+      );
 
       return {
         success: true,
         profile,
       };
     } catch (error) {
-      this.logger.error('Twitter OAuth error', error);
+      this.logger.error('Detailed Twitter OAuth error:', {
+        message: error.message,
+        stack: error.stack,
+        response: error.response?.data || error.data,
+      });
       throw new BadRequestException(
-        error.response?.data?.error_description ||
-          'Twitter verification failed',
+        error.message || 'Twitter verification failed',
       );
     }
   }
@@ -170,5 +174,19 @@ export class UsersController {
   unlinkTwitter(@Body() body: { address: string }) {
     const success = this.usersService.unlinkTwitter(body.address);
     return { success };
+  }
+
+  @Get('twitter/verify-status/:address')
+  @ApiOperation({ summary: 'Check if wallet address has Twitter verified' })
+  @ApiParam({ name: 'address', type: String })
+  getTwitterVerifyStatus(@Param('address') address: string) {
+    const profile = this.usersService.getProfile(address);
+    const verified = !!(profile?.twitterHandle && profile?.twitterId);
+
+    return {
+      verified,
+      twitterHandle: profile?.twitterHandle || null,
+      twitterAvatar: profile?.twitterAvatar || null,
+    };
   }
 }

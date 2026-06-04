@@ -3,9 +3,7 @@
  * Writes (createEvent, joinEvent, submitPrediction) go directly via wagmi.
  */
 
-const BASE =
-  (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api") +
-  "/creator-events";
+const BASE = "/api/creator-events";
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { cache: "no-store" });

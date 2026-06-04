@@ -42,7 +42,7 @@ function TwitterCallbackContent() {
                   ? "Authorization cancelled"
                   : `Twitter error: ${error}`,
             },
-            window.location.origin,
+            "*",
           );
           setTimeout(() => window.close(), 2000);
         }
@@ -58,27 +58,34 @@ function TwitterCallbackContent() {
               type: "TWITTER_AUTH_ERROR",
               message: "Missing authorization code",
             },
-            window.location.origin,
+            "*",
           );
           setTimeout(() => window.close(), 2000);
         }
         return;
       }
 
-      const storedState = sessionStorage.getItem("twitter_auth_state");
-      const address = sessionStorage.getItem("twitter_auth_address");
-      const codeVerifier = sessionStorage.getItem("twitter_code_verifier");
+      const storedState = localStorage.getItem("twitter_auth_state");
+      const address = localStorage.getItem("twitter_auth_address");
+      const codeVerifier = localStorage.getItem("twitter_code_verifier");
+
+      console.log("🔍 State validation:", {
+        receivedState: state,
+        storedState: storedState,
+        match: state === storedState,
+      });
 
       if (state !== storedState) {
         setStatus("error");
         setMessage("Security validation failed. Please try again.");
+        console.error("State mismatch!", { state, storedState });
         if (window.opener) {
           window.opener.postMessage(
             {
               type: "TWITTER_AUTH_ERROR",
               message: "Security validation failed",
             },
-            window.location.origin,
+            "*",
           );
           setTimeout(() => window.close(), 2000);
         }
@@ -91,7 +98,7 @@ function TwitterCallbackContent() {
         if (window.opener) {
           window.opener.postMessage(
             { type: "TWITTER_AUTH_ERROR", message: "Wallet address not found" },
-            window.location.origin,
+            "*",
           );
           setTimeout(() => window.close(), 2000);
         }
@@ -104,7 +111,7 @@ function TwitterCallbackContent() {
         if (window.opener) {
           window.opener.postMessage(
             { type: "TWITTER_AUTH_ERROR", message: "Code verifier not found" },
-            window.location.origin,
+            "*",
           );
           setTimeout(() => window.close(), 2000);
         }
@@ -113,14 +120,11 @@ function TwitterCallbackContent() {
 
       setMessage("Verifying with Twitter...");
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"}/users/twitter/callback`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ address, code, codeVerifier }),
-        },
-      );
+      const response = await fetch("/api/users/twitter/callback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address, code, codeVerifier }),
+      });
 
       const data = await response.json();
 
@@ -128,9 +132,10 @@ function TwitterCallbackContent() {
         setStatus("success");
         setMessage(`Successfully linked @${data.profile.twitterHandle}!`);
 
-        sessionStorage.removeItem("twitter_auth_state");
-        sessionStorage.removeItem("twitter_auth_address");
-        sessionStorage.removeItem("twitter_code_verifier");
+        // Clean up localStorage
+        localStorage.removeItem("twitter_auth_state");
+        localStorage.removeItem("twitter_auth_address");
+        localStorage.removeItem("twitter_code_verifier");
 
         // Send success to parent window
         if (window.opener) {
@@ -139,7 +144,7 @@ function TwitterCallbackContent() {
               type: "TWITTER_AUTH_SUCCESS",
               profile: data.profile,
             },
-            window.location.origin,
+            "*",
           );
           setTimeout(() => window.close(), 1500);
         } else {
@@ -157,7 +162,7 @@ function TwitterCallbackContent() {
               type: "TWITTER_AUTH_ERROR",
               message: data.message || "Failed to link Twitter",
             },
-            window.location.origin,
+            "*",
           );
           setTimeout(() => window.close(), 2000);
         }
@@ -172,7 +177,7 @@ function TwitterCallbackContent() {
             type: "TWITTER_AUTH_ERROR",
             message: "An unexpected error occurred",
           },
-          window.location.origin,
+          "*",
         );
         setTimeout(() => window.close(), 2000);
       }

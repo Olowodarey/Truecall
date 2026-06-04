@@ -96,7 +96,7 @@ async function request<T>(
 export class ApiClient {
   private baseUrl: string;
 
-  constructor(baseUrl: string = process.env.NEXT_PUBLIC_API_URL || "") {
+  constructor(baseUrl: string = "/api") {
     this.baseUrl = baseUrl;
   }
 

@@ -6,6 +6,11 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import UnifiedBackground from "@/components/UnifiedBackground";
 import { Twitter, CheckCircle, XCircle } from "lucide-react";
+import {
+  generateCodeVerifier,
+  generateCodeChallenge,
+  OAuth2,
+} from "@xdevplatform/xdk";
 
 interface UserProfile {
   address: string;
@@ -16,26 +21,34 @@ interface UserProfile {
 }
 
 export default function ProfilePage() {
-  const { isConnected, address, connectWallet } = useWallet();
+  const { isConnected, address, connectWallet, isConnecting } = useWallet();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [linking, setLinking] = useState(false);
+  // Mounted guard: wagmi reads as disconnected during SSR, so we must wait
+  // for the client to hydrate before trusting isConnected
+  const [mounted, setMounted] = useState(false);
+
+  // Set mounted on client only
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
+    if (!mounted) return;
+
     if (isConnected && address) {
       loadProfile();
     } else {
       setLoading(false);
     }
-  }, [isConnected, address]);
+  }, [mounted, isConnected, address]);
 
   const loadProfile = async () => {
     if (!address) return;
     try {
       setLoading(true);
-      const response = await fetch(
-        `http://localhost:3001/users/profile/${address}`,
-      );
+      const response = await fetch(`/api/users/profile/${address}`);
       const data = await response.json();
       setProfile(data);
     } catch (error) {
@@ -56,37 +69,116 @@ export default function ProfilePage() {
     return result;
   };
 
-  const handleLinkTwitter = () => {
+  const handleManualLink = async () => {
+    if (!address) return;
+    const input = document.getElementById(
+      "twitter-handle-input",
+    ) as HTMLInputElement;
+    const handle = input?.value?.trim().replace(/^@/, "");
+    if (!handle) {
+      alert("Please enter a Twitter handle");
+      return;
+    }
+    try {
+      setLinking(true);
+      const response = await fetch("/api/users/twitter/link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address, twitterHandle: handle }),
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        await loadProfile();
+        alert(`Twitter @${handle} linked successfully!`);
+        input.value = "";
+      } else {
+        alert(data.message || "Failed to link Twitter handle");
+      }
+    } catch (err) {
+      console.error("Manual link error", err);
+      alert("Failed to link Twitter handle");
+    } finally {
+      setLinking(false);
+    }
+  };
+
+  const handleLinkTwitter = async () => {
     if (!address) return;
 
     setLinking(true);
 
-    // Store wallet address in sessionStorage for callback
-    sessionStorage.setItem("twitter_auth_address", address);
+    // Check if using Brave browser
+    const isBrave = (navigator as any).brave !== undefined;
+    if (isBrave) {
+      const proceed = confirm(
+        "🛡️ Brave Browser Detected!\n\n" +
+          "Brave's privacy settings may block Twitter login.\n\n" +
+          "If you see a login screen even though you're logged into Twitter:\n" +
+          "1. Just log in once in the popup, OR\n" +
+          "2. Click the Brave Shields icon and allow cookies for twitter.com\n\n" +
+          "Continue?",
+      );
+      if (!proceed) {
+        setLinking(false);
+        return;
+      }
+    }
+
+    // Store wallet address in localStorage for callback (popup needs access)
+    localStorage.setItem("twitter_auth_address", address);
 
     // Generate state for security
     const state = generateRandomString(32);
-    sessionStorage.setItem("twitter_auth_state", state);
+    localStorage.setItem("twitter_auth_state", state);
 
-    // Generate code verifier and challenge for PKCE
-    const codeVerifier = generateRandomString(64);
-    sessionStorage.setItem("twitter_code_verifier", codeVerifier);
+    // Generate PKCE code verifier using XDK
+    const codeVerifier = generateCodeVerifier();
+    localStorage.setItem("twitter_code_verifier", codeVerifier);
 
-    // Twitter OAuth URL
+    // Generate PKCE code challenge using XDK
+    const codeChallenge = await generateCodeChallenge(codeVerifier);
+
+    const expectedOrigin = process.env.NEXT_PUBLIC_TWITTER_REDIRECT_URI
+      ? new URL(process.env.NEXT_PUBLIC_TWITTER_REDIRECT_URI).origin
+      : window.location.origin;
+
+    const redirectUri =
+      process.env.NEXT_PUBLIC_TWITTER_REDIRECT_URI ||
+      `${window.location.origin}/profile/twitter/callback`;
+
     const clientId = process.env.NEXT_PUBLIC_TWITTER_CLIENT_ID;
-    const redirectUri = encodeURIComponent(
-      "http://127.0.0.1:3000/profile/twitter/callback",
-    );
 
-    const authUrl =
-      `https://twitter.com/i/oauth2/authorize?` +
-      `response_type=code&` +
-      `client_id=${clientId}&` +
-      `redirect_uri=${redirectUri}&` +
-      `scope=tweet.read%20users.read&` +
-      `state=${state}&` +
-      `code_challenge=${codeVerifier}&` +
-      `code_challenge_method=plain`;
+    if (!clientId) {
+      alert("Twitter Client ID not configured");
+      setLinking(false);
+      return;
+    }
+
+    // Use XDK OAuth2 class to generate the authorization URL
+    const oauth2 = new OAuth2({
+      clientId,
+      redirectUri,
+      scope: ["tweet.read", "users.read", "offline.access"],
+    });
+
+    // Set PKCE parameters for the authorization URL
+    oauth2.setPkceParameters(codeVerifier, codeChallenge);
+    const authUrl = await oauth2.getAuthorizationUrl(state);
+
+    // DEBUG: log the full auth URL — check redirect_uri and client_id are correct
+    console.log("🐦 Twitter OAuth Flow Starting:");
+    console.log("   Auth URL:", authUrl);
+    console.log("   Client ID:", clientId);
+    console.log("   Redirect URI:", redirectUri);
+    console.log("   State:", state);
+    console.log("   Code Verifier:", codeVerifier.slice(0, 10) + "...");
+    console.log("   Code Challenge:", codeChallenge.slice(0, 10) + "...");
+    console.log("   Stored in localStorage:", {
+      state: localStorage.getItem("twitter_auth_state"),
+      address: localStorage.getItem("twitter_auth_address"),
+      codeVerifier:
+        localStorage.getItem("twitter_code_verifier")?.slice(0, 10) + "...",
+    });
 
     // Open Twitter auth in popup window
     const width = 600;
@@ -108,13 +200,20 @@ export default function ProfilePage() {
 
     // Listen for message from popup when auth completes
     const handleMessage = (event: MessageEvent) => {
-      // Security: verify origin
-      if (event.origin !== window.location.origin) return;
+      // Accept messages from both localhost and 127.0.0.1 variants
+      // (origin may differ due to redirect URI config)
+      const allowedOrigins = [
+        window.location.origin,
+        process.env.NEXT_PUBLIC_TWITTER_REDIRECT_URI
+          ? new URL(process.env.NEXT_PUBLIC_TWITTER_REDIRECT_URI).origin
+          : null,
+      ].filter(Boolean);
+      if (!allowedOrigins.includes(event.origin)) return;
 
       if (event.data.type === "TWITTER_AUTH_SUCCESS") {
         window.removeEventListener("message", handleMessage);
         setLinking(false);
-        loadProfile(); // Reload profile to show new Twitter data
+        loadProfile();
       } else if (event.data.type === "TWITTER_AUTH_ERROR") {
         window.removeEventListener("message", handleMessage);
         setLinking(false);
@@ -139,14 +238,11 @@ export default function ProfilePage() {
 
     try {
       setLinking(true);
-      const response = await fetch(
-        "http://localhost:3001/users/twitter/unlink",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ address }),
-        },
-      );
+      const response = await fetch("/api/users/twitter/unlink", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address }),
+      });
 
       if (response.ok) {
         await loadProfile();
@@ -161,6 +257,22 @@ export default function ProfilePage() {
       setLinking(false);
     }
   };
+
+  // Don't render wallet-dependent UI until clientside hydration is complete.
+  // Without this, wagmi's isConnected is always false on the first render
+  // (SSR), causing the profile page to permanently show "Connect Wallet".
+  if (!mounted) {
+    return (
+      <div className="relative min-h-screen">
+        <UnifiedBackground />
+        <Header />
+        <main className="relative z-10 flex items-center justify-center min-h-[70vh]">
+          <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   if (!isConnected) {
     return (
@@ -177,9 +289,10 @@ export default function ProfilePage() {
             </p>
             <button
               onClick={connectWallet}
-              className="px-8 py-3 bg-gradient-to-r from-orange-500 to-yellow-500 text-white font-bold rounded-xl hover:shadow-lg transition"
+              disabled={isConnecting}
+              className="px-8 py-3 bg-gradient-to-r from-orange-500 to-yellow-500 text-white font-bold rounded-xl hover:shadow-lg transition disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              Connect Wallet
+              {isConnecting ? "Waiting for wallet…" : "Connect Wallet"}
             </button>
           </div>
         </main>
@@ -306,18 +419,64 @@ export default function ProfilePage() {
                 </ul>
               </div>
 
+              {/* Manual Entry Option */}
+              <div className="bg-gray-700/30 border border-gray-600 rounded-xl p-5">
+                <h4 className="text-white font-semibold mb-3 text-sm">
+                  Quick Link (No OAuth)
+                </h4>
+                <p className="text-gray-400 text-xs mb-3">
+                  Just enter your Twitter handle to link it to your wallet
+                </p>
+                <div className="flex gap-2">
+                  <div className="flex-1 relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                      @
+                    </span>
+                    <input
+                      type="text"
+                      placeholder="username"
+                      className="w-full pl-8 pr-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none"
+                      id="twitter-handle-input"
+                      disabled={linking}
+                    />
+                  </div>
+                  <button
+                    onClick={handleManualLink}
+                    disabled={linking}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition disabled:opacity-50 whitespace-nowrap"
+                  >
+                    {linking ? "..." : "Link"}
+                  </button>
+                </div>
+                <p className="text-gray-500 text-xs mt-2">
+                  Enter your Twitter handle (without @)
+                </p>
+              </div>
+
+              {/* OAuth Option */}
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-700"></div>
+                </div>
+                <div className="relative flex justify-center text-xs">
+                  <span className="px-2 bg-gray-800/50 text-gray-500">
+                    OR use OAuth
+                  </span>
+                </div>
+              </div>
+
               <button
                 onClick={handleLinkTwitter}
                 disabled={linking}
                 className="w-full py-4 px-6 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold rounded-xl transition disabled:opacity-50 flex items-center justify-center gap-3"
               >
                 <Twitter className="w-5 h-5" />
-                {linking ? "Linking..." : "Link Twitter Account"}
+                {linking ? "Linking..." : "Link with Twitter OAuth"}
               </button>
 
               <p className="text-gray-500 text-xs text-center">
-                You'll be redirected to Twitter to authorize this app. We only
-                access your public profile information.
+                OAuth redirects to Twitter for authorization (may have browser
+                compatibility issues)
               </p>
             </div>
           )}

@@ -60,6 +60,8 @@ export default function CreatorEventDetailPage() {
   const [matches, setMatches] = useState<CreatorMatch[]>([]);
   const [hasJoined, setHasJoined] = useState(false);
   const [isVerified, setIsVerified] = useState(false);
+  const [twitterHandle, setTwitterHandle] = useState<string | null>(null);
+  const [twitterAvatar, setTwitterAvatar] = useState<string | null>(null);
   const [userPredictions, setUserPredictions] = useState<
     Record<
       number,
@@ -159,9 +161,7 @@ export default function CreatorEventDetailPage() {
       if (address) {
         const [joined, verified] = await Promise.all([
           fetchCreatorHasJoined(eventId, address),
-          fetch(
-            `${process.env.NEXT_PUBLIC_API_URL}/creator-events/verify/status/${address}`,
-          )
+          fetch(`/api/creator-events/verify/status/${address}`)
             .then((r) => r.json())
             .catch(() => ({ verified: false })),
         ]);
@@ -173,7 +173,7 @@ export default function CreatorEventDetailPage() {
         for (const match of ms) {
           try {
             const pred = await fetch(
-              `${process.env.NEXT_PUBLIC_API_URL}/creator-events/match/${match.matchId}/prediction/${address}`,
+              `/api/creator-events/match/${match.matchId}/prediction/${address}`,
             ).then((r) => r.json());
             if (pred && pred.submitted) {
               predictions[match.matchId] = pred;
@@ -280,9 +280,7 @@ export default function CreatorEventDetailPage() {
     if (fixturesLoaded) return;
     setFixturesLoading(true);
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/matches/upcoming`,
-      );
+      const res = await fetch("/api/matches/upcoming");
       if (res.ok) {
         setFixtures(await res.json());
         setFixturesLoaded(true);

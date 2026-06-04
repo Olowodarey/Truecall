@@ -26,11 +26,7 @@ export const celoSepolia = defineChain({
 
 export const wagmiConfig = createConfig({
   chains: [celoSepolia],
-  connectors: [
-    injected({
-      target: "metaMask",
-    }),
-  ],
+  connectors: [injected()],
   transports: {
     [celoSepolia.id]: http(
       process.env.NEXT_PUBLIC_CELO_RPC ??
