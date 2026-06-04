@@ -1,0 +1,23 @@
+# Netlify configuration for Next.js
+[build]
+  base = "frontend"
+  command = "pnpm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "20"
+  PNPM_VERSION = "10.32.1"
+
+# Next.js on Netlify requires the Essential Next.js plugin
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# Redirect all requests to Next.js for server-side rendering
+[[redirects]]
+  from = "/*"
+  to = "/.netlify/functions/___netlify-handler"
+  status = 200
+
+# Environment variables (set these in Netlify dashboard)
+# NEXT_PUBLIC_API_URL=https://truecall-production.up.railway.app/api
+# NEXT_PUBLIC_TWITTER_CLIENT_ID=ZGFtYjlOY2ZlRTF3ZDFYMGJVTHo6MTpjaQ
