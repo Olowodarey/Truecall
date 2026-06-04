@@ -1000,10 +1000,10 @@ export default function CreatorEventDetailPage() {
                                 </span>
                               )}
                               <p className="text-gray-500 text-xs">
-                                Predicted{" "}
-                                {formatDistanceToNow(
+                                Predicted on{" "}
+                                {format(
                                   new Date(w.submittedAt * 1000),
-                                  { addSuffix: true },
+                                  "MMM d, yyyy 'at' HH:mm:ss",
                                 )}
                               </p>
                             </div>

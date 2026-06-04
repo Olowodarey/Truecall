@@ -1,6 +1,3 @@
-import * as fs from "fs";
-import * as path from "path";
-
 export interface Match {
   id: string;
   homeTeam: string;
@@ -11,104 +8,109 @@ export interface Match {
   venue: string;
   homeTeamId: string;
   awayTeamId: string;
-  kickoffTime: number; // Unix timestamp
+  kickoffTime?: number; // Unix timestamp (optional)
+  finalHomeScore?: number;
+  finalAwayScore?: number;
+  status?: string;
 }
 
 /**
- * MatchDataService — Load and manage match data from local JSON
+ * MatchDataService — Fetch match data from backend API
  * The AI agent uses this to fetch match information for verification
  */
 export class MatchDataService {
   private matches: Match[] = [];
+  private backendApiUrl: string;
+  private lastFetchTime: number = 0;
+  private cacheDurationMs: number = 60_000; // 1 minute cache
 
-  constructor() {
-    this.loadMatches();
+  constructor(backendApiUrl: string) {
+    this.backendApiUrl = backendApiUrl;
   }
 
   /**
-   * Load matches from JSON file
+   * Load matches from backend API
    */
-  private loadMatches(): void {
+  private async loadMatches(): Promise<void> {
     try {
-      const possiblePaths = [
-        path.join(__dirname, "../data/matches.json"),
-        path.join(__dirname, "../../src/data/matches.json"),
-        path.join(process.cwd(), "src/data/matches.json"),
-        path.join(process.cwd(), "dist/services/../data/matches.json"),
-      ];
+      const response = await fetch(`${this.backendApiUrl}/matches`);
 
-      let fileContent: string | null = null;
-      let loadedPath: string | null = null;
-
-      for (const filePath of possiblePaths) {
-        try {
-          if (fs.existsSync(filePath)) {
-            fileContent = fs.readFileSync(filePath, "utf-8");
-            loadedPath = filePath;
-            console.log(`✅ Loaded matches from: ${loadedPath}`);
-            break;
-          }
-        } catch (e) {
-          // Continue to next path
-        }
-      }
-
-      if (!fileContent) {
+      if (!response.ok) {
         throw new Error(
-          `Could not find matches.json in any of the expected locations`,
+          `Backend API returned ${response.status}: ${response.statusText}`,
         );
       }
 
-      const data = JSON.parse(fileContent);
-      this.matches = data.matches || [];
-      console.log(`✅ Loaded ${this.matches.length} matches from JSON`);
+      const matches = await response.json();
+      this.matches = Array.isArray(matches) ? matches : [];
+      this.lastFetchTime = Date.now();
+
+      console.log(`✅ Loaded ${this.matches.length} matches from backend API`);
     } catch (error) {
-      console.error("❌ Failed to load matches from JSON:", error);
+      console.error("❌ Failed to load matches from backend API:", error);
       this.matches = [];
+    }
+  }
+
+  /**
+   * Ensure matches are loaded and not stale
+   */
+  private async ensureFreshData(): Promise<void> {
+    const now = Date.now();
+    const isCacheStale = now - this.lastFetchTime > this.cacheDurationMs;
+
+    if (this.matches.length === 0 || isCacheStale) {
+      await this.loadMatches();
     }
   }
 
   /**
    * Get all matches
    */
-  getAllMatches(): Match[] {
+  async getAllMatches(): Promise<Match[]> {
+    await this.ensureFreshData();
     return this.matches;
   }
 
   /**
    * Get a match by ID
    */
-  getMatchById(id: string): Match | undefined {
+  async getMatchById(id: string): Promise<Match | undefined> {
+    await this.ensureFreshData();
     return this.matches.find((m) => m.id === id);
   }
 
   /**
    * Get matches that are ready for verification (past kickoff time)
    */
-  getReadyForVerification(): Match[] {
+  async getReadyForVerification(): Promise<Match[]> {
+    await this.ensureFreshData();
     const now = Math.floor(Date.now() / 1000);
-    return this.matches.filter((m) => m.kickoffTime <= now);
+    return this.matches.filter((m) => m.kickoffTime && m.kickoffTime <= now);
   }
 
   /**
    * Get upcoming matches (not yet kicked off)
    */
-  getUpcoming(): Match[] {
+  async getUpcoming(): Promise<Match[]> {
+    await this.ensureFreshData();
     const now = Math.floor(Date.now() / 1000);
-    return this.matches.filter((m) => m.kickoffTime > now);
+    return this.matches.filter((m) => m.kickoffTime && m.kickoffTime > now);
   }
 
   /**
    * Get match by external API ID
    */
-  getByApiId(apiId: string): Match | undefined {
+  async getByApiId(apiId: string): Promise<Match | undefined> {
+    await this.ensureFreshData();
     return this.matches.find((m) => m.id === apiId);
   }
 
   /**
    * Get total count
    */
-  getTotalCount(): number {
+  async getTotalCount(): Promise<number> {
+    await this.ensureFreshData();
     return this.matches.length;
   }
 
@@ -116,10 +118,24 @@ export class MatchDataService {
    * Pretty print match info
    */
   formatMatch(match: Match): string {
-    const kickoffDate = new Date(match.kickoffTime * 1000).toLocaleString();
+    const kickoffDate = match.kickoffTime
+      ? new Date(match.kickoffTime * 1000).toLocaleString()
+      : "TBD";
     return `${match.homeTeam} vs ${match.awayTeam} (${match.league}) - Kickoff: ${kickoffDate}`;
+  }
+
+  /**
+   * Force refresh matches from backend
+   */
+  async refresh(): Promise<void> {
+    await this.loadMatches();
   }
 }
 
-// Export singleton instance
-export const matchDataService = new MatchDataService();
+// Export factory function instead of singleton
+// This allows dependency injection of the backend URL
+export function createMatchDataService(
+  backendApiUrl: string,
+): MatchDataService {
+  return new MatchDataService(backendApiUrl);
+}

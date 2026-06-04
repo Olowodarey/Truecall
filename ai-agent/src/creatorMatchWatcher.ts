@@ -11,7 +11,7 @@
 
 import { config } from "./config";
 import { logger } from "./utils/logger";
-import { matchDataService } from "./services/matchDataService";
+import { createMatchDataService } from "./services/matchDataService";
 import {
   publicClient,
   getPendingCreatorMatchesFromLogs,
@@ -19,6 +19,9 @@ import {
   submitCreatorMatchResult,
   type CreatorMatch,
 } from "./services/creatorMatchClient";
+
+// Create match data service instance with backend URL
+const matchDataService = createMatchDataService(config.backendApiUrl);
 
 // ─── Match status enum (mirrors Solidity) ────────────────────────────────────
 
@@ -92,26 +95,30 @@ async function fetchMatchResultFromBackend(apiMatchId: string): Promise<{
 }
 
 /**
- * Also check JSON data for match results (fallback)
+ * Also check backend data for match results (fallback)
+ * This uses the same backend API as fetchMatchResultFromBackend but goes through the match data service
  */
-function getMatchResultFromJson(
-  apiMatchId: string,
-): { homeScore: number; awayScore: number; isFinished: boolean } | null {
-  const match = matchDataService.getByApiId(apiMatchId) as any;
+async function getMatchResultFromBackend(apiMatchId: string): Promise<{
+  homeScore: number;
+  awayScore: number;
+  isFinished: boolean;
+} | null> {
+  const match = await matchDataService.getByApiId(apiMatchId);
 
   if (!match) {
     return null;
   }
 
-  // For testing: if kickoff time has passed, check for actual results in JSON
+  // For testing: if kickoff time has passed, check for actual results
   const now = Math.floor(Date.now() / 1000);
-  if (match.kickoffTime <= now) {
-    // If the JSON has actual scores, use them
+  if (match.kickoffTime && match.kickoffTime <= now) {
+    // If the backend has actual scores, use them
     if (
       match.finalHomeScore !== undefined &&
-      match.finalAwayScore !== undefined
+      match.finalAwayScore !== undefined &&
+      match.status === "FT"
     ) {
-      logger.info("Using match result from JSON data", {
+      logger.info("Using match result from backend data", {
         apiMatchId,
         homeScore: match.finalHomeScore,
         awayScore: match.finalAwayScore,
@@ -129,7 +136,7 @@ function getMatchResultFromJson(
     const homeScore = Math.abs(hash % 4);
     const awayScore = Math.abs((hash / 4) % 4);
 
-    logger.info("Using generated test result from JSON", {
+    logger.info("Using generated test result from backend", {
       apiMatchId,
       homeScore,
       awayScore,
@@ -255,15 +262,18 @@ async function processTrackedMatches(): Promise<void> {
       continue;
     }
 
-    // Try to fetch result from backend first, then fallback to JSON
+    // Try to fetch result from backend
     let result = await fetchMatchResultFromBackend(match.apiMatchId);
 
     if (!result) {
-      logger.debug("No result from backend, checking JSON data", {
-        matchId: key,
-        apiMatchId: match.apiMatchId,
-      });
-      result = getMatchResultFromJson(match.apiMatchId);
+      logger.debug(
+        "No result from backend API, checking backend data service",
+        {
+          matchId: key,
+          apiMatchId: match.apiMatchId,
+        },
+      );
+      result = await getMatchResultFromBackend(match.apiMatchId);
     }
 
     if (!result || !result.isFinished) {
