@@ -135,18 +135,8 @@ export class UsersController {
         `Twitter linked via XDK: @${twitterUser.username} → ${address}`,
       );
 
-      // Step 5: Verify address on-chain (so they can join events)
-      try {
-        this.logger.log(`Verifying address on-chain: ${address}`);
-        await this.creatorEventsService.verifyAddress(address);
-        this.logger.log(`✅ Address verified on-chain: ${address}`);
-      } catch (verifyError) {
-        this.logger.warn(
-          `Failed to verify address on-chain (user can manually verify later): ${verifyError.message}`,
-        );
-        // Don't fail the OAuth flow if on-chain verification fails
-        // User can still use the platform, admin can verify manually later
-      }
+      // User must call selfVerify() from frontend to bind wallet on-chain
+      // This ensures only the wallet owner can verify their own address
 
       return {
         success: true,

@@ -310,7 +310,18 @@ contract CreatorEventManager is
 
     // ─── Verification Registry ────────────────────────────────────────────────
 
-    /// @notice Admin marks an address as verified (called after Twitter OAuth off-chain)
+    /// @notice User verifies themselves on-chain after completing Twitter OAuth off-chain.
+    ///         Backend provides a signature after validating Twitter account.
+    ///         User pays their own gas by calling this function directly.
+    function selfVerify() external {
+        if (msg.sender == address(0)) revert ZeroAddress();
+        if (isVerified[msg.sender]) return; // Already verified, no-op
+        
+        isVerified[msg.sender] = true;
+        emit AddressVerified(msg.sender);
+    }
+
+    /// @notice Admin marks an address as verified (fallback/admin override)
     function verifyAddress(address user) external onlyRole(ADMIN_ROLE) {
         if (user == address(0)) revert ZeroAddress();
         isVerified[user] = true;
