@@ -26,6 +26,7 @@ import {
   CREATOR_EVENT_MANAGER_ABI,
 } from "@/lib/creator-contracts";
 import { format, formatDistanceToNow } from "date-fns";
+import { formatContractError } from "@/lib/error-formatter";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -222,18 +223,34 @@ export default function CreatorEventDetailPage() {
       // Wait a moment for blockchain to be indexed
       setTimeout(() => {
         setInviteCode("");
+        setJoinError(null);
+        resetJoin();
         load();
       }, 1500);
     }
-  }, [joinDone, joinTx, load]);
+  }, [joinDone, joinTx, load, resetJoin]);
+
+  useEffect(() => {
+    if (joinWriteError) {
+      setJoinError(formatContractError(joinWriteError));
+    }
+  }, [joinWriteError]);
   useEffect(() => {
     if (predictDone) {
       setPredictMatchId(null);
       setHomeScore("");
       setAwayScore("");
+      setPredictError(null);
+      resetPredict();
       load();
     }
-  }, [predictDone, load]);
+  }, [predictDone, load, resetPredict]);
+
+  useEffect(() => {
+    if (predictWriteError) {
+      setPredictError(formatContractError(predictWriteError));
+    }
+  }, [predictWriteError]);
   useEffect(() => {
     if (addMatchDone) {
       setShowAddMatch(false);
@@ -243,9 +260,17 @@ export default function CreatorEventDetailPage() {
         apiMatchId: "",
         kickoffTime: nowPlusHours(24),
       });
+      setAddMatchError(null);
+      resetAddMatch();
       load();
     }
-  }, [addMatchDone, load]);
+  }, [addMatchDone, load, resetAddMatch]);
+
+  useEffect(() => {
+    if (addMatchWriteError) {
+      setAddMatchError(formatContractError(addMatchWriteError));
+    }
+  }, [addMatchWriteError]);
 
   // ── Join ─────────────────────────────────────────────────────────────────────
 
@@ -613,10 +638,8 @@ export default function CreatorEventDetailPage() {
                       : "Join Free"}
                 </button>
               </div>
-              {(joinError || joinWriteError) && (
-                <p className="text-red-400 text-sm mt-2">
-                  ⚠️ {joinError ?? joinWriteError?.message?.split(".")[0]}
-                </p>
+              {joinError && (
+                <p className="text-red-400 text-sm mt-2">{joinError}</p>
               )}
             </div>
           ) : null}
@@ -750,10 +773,7 @@ export default function CreatorEventDetailPage() {
                 </div>
               </div>
               {(addMatchError || addMatchWriteError) && (
-                <p className="text-red-400 text-sm mb-3">
-                  ⚠️{" "}
-                  {addMatchError ?? addMatchWriteError?.message?.split(".")[0]}
-                </p>
+                <p className="text-red-400 text-sm mb-3">{addMatchError}</p>
               )}
               <button
                 onClick={handleAddMatch}
@@ -888,11 +908,9 @@ export default function CreatorEventDetailPage() {
                             />
                           </div>
                         </div>
-                        {(predictError || predictWriteError) && (
+                        {predictError && (
                           <p className="text-red-400 text-xs mb-2">
-                            ⚠️{" "}
-                            {predictError ??
-                              predictWriteError?.message?.split(".")[0]}
+                            {predictError}
                           </p>
                         )}
                         <div className="flex gap-2">

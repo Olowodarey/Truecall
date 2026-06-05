@@ -18,6 +18,7 @@ import {
   CREATOR_EVENT_MANAGER_ABI,
 } from "@/lib/creator-contracts";
 import { fetchCreationFee } from "@/lib/creator-api";
+import { formatContractError } from "@/lib/error-formatter";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -119,6 +120,12 @@ export default function CreateCreatorEventPage() {
   useEffect(() => {
     if (done && txHash) setSuccessTxHash(txHash);
   }, [done, txHash]);
+
+  useEffect(() => {
+    if (writeError) {
+      setFormError(formatContractError(writeError));
+    }
+  }, [writeError]);
 
   // ── Load fixtures ─────────────────────────────────────────────────────────
 
@@ -635,14 +642,9 @@ export default function CreateCreatorEventPage() {
             </div>
 
             {/* Error */}
-            {(formError || writeError) && (
-              <div className="p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-sm flex items-start gap-2">
-                <span>⚠️</span>
-                <span>
-                  {formError ??
-                    writeError?.message?.split(".")[0] ??
-                    "Transaction failed"}
-                </span>
+            {formError && (
+              <div className="p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-sm">
+                {formError}
               </div>
             )}
 
