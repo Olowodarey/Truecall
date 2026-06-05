@@ -138,10 +138,8 @@ export default function ProfilePage() {
     // Generate PKCE code challenge using XDK
     const codeChallenge = await generateCodeChallenge(codeVerifier);
 
-    const expectedOrigin = process.env.NEXT_PUBLIC_TWITTER_REDIRECT_URI
-      ? new URL(process.env.NEXT_PUBLIC_TWITTER_REDIRECT_URI).origin
-      : window.location.origin;
-
+    // Use environment variable if set, otherwise use current domain
+    // This allows it to work on Netlify, Vercel, or localhost automatically
     const redirectUri =
       process.env.NEXT_PUBLIC_TWITTER_REDIRECT_URI ||
       `${window.location.origin}/profile/twitter/callback`;
@@ -200,15 +198,17 @@ export default function ProfilePage() {
 
     // Listen for message from popup when auth completes
     const handleMessage = (event: MessageEvent) => {
-      // Accept messages from both localhost and 127.0.0.1 variants
-      // (origin may differ due to redirect URI config)
-      const allowedOrigins = [
-        window.location.origin,
-        process.env.NEXT_PUBLIC_TWITTER_REDIRECT_URI
-          ? new URL(process.env.NEXT_PUBLIC_TWITTER_REDIRECT_URI).origin
-          : null,
-      ].filter(Boolean);
-      if (!allowedOrigins.includes(event.origin)) return;
+      // Accept messages from our domains (Netlify, Vercel, localhost)
+      const isAllowedOrigin =
+        event.origin === window.location.origin ||
+        event.origin.includes("netlify.app") ||
+        event.origin.includes("vercel.app") ||
+        event.origin.includes("localhost");
+
+      if (!isAllowedOrigin) {
+        console.warn("Message from unauthorized origin:", event.origin);
+        return;
+      }
 
       if (event.data.type === "TWITTER_AUTH_SUCCESS") {
         window.removeEventListener("message", handleMessage);
