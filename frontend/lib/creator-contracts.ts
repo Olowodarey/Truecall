@@ -70,6 +70,20 @@ export const CREATOR_EVENT_MANAGER_ABI = [
     inputs: [{ name: "user", type: "address" }],
     outputs: [],
   },
+  {
+    type: "function",
+    name: "verifyAddressBatch",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "users", type: "address[]" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "unverifyAddress",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "user", type: "address" }],
+    outputs: [],
+  },
 
   // ─── Read ─────────────────────────────────────────────────────────────────
   {
