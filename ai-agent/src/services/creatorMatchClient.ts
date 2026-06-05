@@ -1,6 +1,6 @@
 import { createPublicClient, createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { celo, celoAlfajores } from "viem/chains";
+import { celo } from "viem/chains";
 import { config } from "../config";
 import { CREATOR_EVENT_MANAGER_ABI } from "../abi/CreatorEventManager.abi";
 import { logger } from "../utils/logger";
@@ -19,24 +19,8 @@ export interface CreatorMatch {
 
 // ─── Chain detection ──────────────────────────────────────────────────────────
 
-// Celo Sepolia testnet (chain ID 11142220)
-const celoSepolia = {
-  ...celoAlfajores,
-  id: 11142220,
-  name: "Celo Sepolia",
-  rpcUrls: {
-    default: { http: ["https://forno.celo-sepolia.celo-testnet.org"] },
-    public: { http: ["https://forno.celo-sepolia.celo-testnet.org"] },
-  },
-  blockExplorers: {
-    default: { name: "Blockscout", url: "https://celo-sepolia.blockscout.com" },
-  },
-} as const;
-
-const isMainnet =
-  config.celoRpcUrl.includes("forno.celo.org") &&
-  !config.celoRpcUrl.includes("sepolia");
-const chain = isMainnet ? celo : celoSepolia;
+// Use Celo Mainnet
+const chain = celo;
 
 // ─── Clients ──────────────────────────────────────────────────────────────────
 
@@ -55,11 +39,13 @@ const walletClient = createWalletClient({
 });
 
 const creatorEventManagerAddress = (process.env.CREATOR_EVENT_MANAGER_ADDRESS ||
-  "0xD360E9eF6bF50A357c77fA17474a4838c2379B3f") as `0x${string}`;
+  "0x8A18Da2A173b3951c797a438102345cF92838880") as `0x${string}`;
 
 logger.info("Creator Match Client initialized", {
   address: account.address,
   creatorEventManager: creatorEventManagerAddress,
+  chain: "Celo Mainnet",
+  chainId: chain.id,
 });
 
 // ─── Contract reads ───────────────────────────────────────────────────────────

@@ -4,12 +4,11 @@ export default () => ({
 
   // Blockchain configuration
   blockchain: {
-    rpcUrl:
-      process.env.CELO_RPC_URL || 'https://forno.celo-sepolia.celo-testnet.org',
+    rpcUrl: process.env.CELO_RPC_URL || 'https://forno.celo.org',
     privateKey: process.env.PRIVATE_KEY,
     eventManagerAddress: process.env.EVENT_MANAGER_ADDRESS,
     leaderboardAddress: process.env.LEADERBOARD_ADDRESS,
-    chainId: parseInt(process.env.CHAIN_ID || '11142220', 10),
+    chainId: parseInt(process.env.CHAIN_ID || '42220', 10),
   },
 
   // API configuration

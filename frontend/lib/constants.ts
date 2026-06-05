@@ -1,7 +1,7 @@
 // Admin wallet address
 export const ADMIN_ADDRESS = "0xAB26c86b78DEDb488Bf0cb4FaCe11b048DDeFE5b";
 
-// Token addresses on Celo Sepolia
+// Token addresses on Celo Mainnet
 export const TOKENS = {
   CELO: {
     address: "0x0000000000000000000000000000000000000000",
@@ -10,25 +10,25 @@ export const TOKENS = {
     name: "Celo Native Token",
   },
   cUSD: {
-    address: "0x874069Fa1Eb16D44d622F2e0Ca25eeA172369bC1",
+    address: "0x765DE816845861e75A25fCA122bb6898B8B1282a",
     symbol: "cUSD",
     decimals: 18,
     name: "Celo Dollar",
   },
 } as const;
 
-// Contract addresses on Celo Sepolia
+// Contract addresses on Celo Mainnet
 export const CONTRACTS = {
-  EVENT_MANAGER: "0xD905DCc072A1FeD3A5E63434D921C4ed6a6c1B33",
+  EVENT_MANAGER: "0x8A18Da2A173b3951c797a438102345cF92838880",
   LEADERBOARD: "0xb4410D9CC489bc5b1AD45a4f6611B13aA4742B06",
 } as const;
 
 // Chain configuration
 export const CHAIN_CONFIG = {
-  id: 11142220,
-  name: "Celo Sepolia",
-  rpcUrl: "https://forno.celo-sepolia.celo-testnet.org",
-  blockExplorer: "https://sepolia-blockscout.celo-testnet.org",
+  id: 42220,
+  name: "Celo Mainnet",
+  rpcUrl: "https://forno.celo.org",
+  blockExplorer: "https://celoscan.io",
 } as const;
 
 // Prediction points

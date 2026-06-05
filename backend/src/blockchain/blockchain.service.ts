@@ -3,19 +3,19 @@ import { ConfigService } from '@nestjs/config';
 import { createPublicClient, createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 
-// Celo Sepolia chain definition
-const celoSepolia = {
-  id: 11142220,
-  name: 'Celo Sepolia',
+// Celo Mainnet chain definition
+const celoMainnet = {
+  id: 42220,
+  name: 'Celo',
   nativeCurrency: { name: 'CELO', symbol: 'CELO', decimals: 18 },
   rpcUrls: {
-    default: { http: ['https://forno.celo-sepolia.celo-testnet.org'] },
-    public: { http: ['https://forno.celo-sepolia.celo-testnet.org'] },
+    default: { http: ['https://forno.celo.org'] },
+    public: { http: ['https://forno.celo.org'] },
   },
 } as const;
 
 /**
- * Blockchain Service - Basic Celo Sepolia connection
+ * Blockchain Service - Basic Celo Mainnet connection
  *
  * Note: This service now only provides basic blockchain client access.
  * For Creator Events, use CreatorEventsService which has its own contract client.
@@ -40,17 +40,17 @@ export class BlockchainService implements OnModuleInit {
     this.account = privateKeyToAccount(privateKey);
 
     this.publicClient = createPublicClient({
-      chain: celoSepolia,
+      chain: celoMainnet,
       transport: http(rpcUrl),
     }) as any;
 
     this.walletClient = createWalletClient({
-      chain: celoSepolia,
+      chain: celoMainnet,
       transport: http(rpcUrl),
       account: this.account,
     }) as any;
 
-    this.logger.log(`Connected to Celo Sepolia`);
+    this.logger.log(`Connected to Celo Mainnet`);
     if (eventManagerAddress) {
       this.logger.log(`EventManager: ${eventManagerAddress}`);
     }
