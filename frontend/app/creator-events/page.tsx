@@ -154,7 +154,7 @@ export default function CreatorEventsPage() {
             )}
           </div>
           <div className="flex items-center gap-3">
-            {isAdminAddress(address) && (
+            {isAdminAddress(address ?? undefined) && (
               <button
                 onClick={() => router.push("/creator-events/admin")}
                 className="bg-gray-700 hover:bg-gray-600 text-gray-300 font-bold py-2 px-4 rounded-lg transition text-sm"
