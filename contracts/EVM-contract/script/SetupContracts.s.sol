@@ -9,9 +9,9 @@ import {Leaderboard} from "../src/Leaderboard.sol";
 /// @dev Run with:
 ///   forge script script/SetupContracts.s.sol --rpc-url celo-sepolia --broadcast
 contract SetupContracts is Script {
-    address constant EVENT_MANAGER_PROXY  = 0xc76C9f0Bb031245ce145c0b7B822E2d0A1267e89;
-    address constant LEADERBOARD_PROXY    = 0xa95a8c09A3873C4429E69Ba05fA74dF852f539e2;
-    address constant AI_AGENT             = 0xAB26c86b78DEDb488Bf0cb4FaCe11b048DDeFE5b;
+    address payable constant EVENT_MANAGER_PROXY  = payable(0xc76C9f0Bb031245ce145c0b7B822E2d0A1267e89);
+    address constant LEADERBOARD_PROXY            = 0xa95a8c09A3873C4429E69Ba05fA74dF852f539e2;
+    address constant AI_AGENT                     = 0xAB26c86b78DEDb488Bf0cb4FaCe11b048DDeFE5b;
 
     function run() external {
         uint256 deployerKey = vm.envUint("PRIVATE_KEY");

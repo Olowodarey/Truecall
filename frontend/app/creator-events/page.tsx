@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@/contexts/WalletContext";
+import { isAdminAddress } from "@/lib/utils";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { fetchCreatorEvents, type CreatorEvent } from "@/lib/creator-api";
@@ -153,8 +154,7 @@ export default function CreatorEventsPage() {
             )}
           </div>
           <div className="flex items-center gap-3">
-            {address?.toLowerCase() ===
-              "0xab26c86b78dedb488bf0cb4face11b048ddefe5b" && (
+            {isAdminAddress(address) && (
               <button
                 onClick={() => router.push("/creator-events/admin")}
                 className="bg-gray-700 hover:bg-gray-600 text-gray-300 font-bold py-2 px-4 rounded-lg transition text-sm"

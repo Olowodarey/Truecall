@@ -19,9 +19,10 @@ import {
   CREATOR_EVENT_MANAGER_ABI,
 } from "@/lib/creator-contracts";
 
-// ─── Config ───────────────────────────────────────────────────────────────────
+import { ADMIN_ADDRESS } from "@/lib/constants";
 
-const ADMIN = "0xAB26c86b78DEDb488Bf0cb4FaCe11b048DDeFE5b";
+// ─── Config ───────────────────────────────────────────────────────────────────
+const ADMIN = ADMIN_ADDRESS;
 
 // ─── Component ────────────────────────────────────────────────────────────────
 

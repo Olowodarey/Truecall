@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
@@ -9,7 +10,12 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 
 /// @title CreatorEventManager
 /// @author TrueCall Team
-/// @notice Creator-focused prediction event contract.
+/// @notice Creator-focused prediction event contract with role-based access control.
+///
+///  Roles:
+///  - DEFAULT_ADMIN_ROLE: Deployer wallet (manages roles, kept secure, no regular gas usage)
+///  - ADMIN_ROLE: Backend wallet (verifies users, withdraws fees, pays gas)
+///  - ORACLE_ROLE: AI agent wallet (submits match results, pays gas)
 ///
 ///  Flow:
 ///  1. Admin sets a creation fee in native CELO via `setCreationFee`.
@@ -33,17 +39,26 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 contract CreatorEventManager is
     Initializable,
     OwnableUpgradeable,
+    AccessControlUpgradeable,
     PausableUpgradeable,
     UUPSUpgradeable,
     ReentrancyGuard
 {
+    // ─── Role Definitions ─────────────────────────────────────────────────────
+    
+    /// @notice Admin role - can verify users, withdraw fees, manage settings
+    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+    
+    /// @notice Oracle role - can submit match results
+    bytes32 public constant ORACLE_ROLE = keccak256("ORACLE_ROLE");
+
     // ─── Constants ────────────────────────────────────────────────────────────
 
     /// @notice Maximum number of matches allowed per event
     uint256 public constant MAX_MATCHES_PER_EVENT = 5;
 
-    /// @notice Maximum number of participants allowed per event
-    uint256 public constant MAX_PARTICIPANTS_PER_EVENT = 500;
+    /// @notice Maximum number of participants allowed per event (starting conservative for gas efficiency)
+    uint256 public constant MAX_PARTICIPANTS_PER_EVENT = 200;
 
     // ─── Structs ──────────────────────────────────────────────────────────────
 
@@ -161,8 +176,8 @@ contract CreatorEventManager is
     error DeadlinePassed();
     error KickoffInPast();
     error AlreadyPredicted();
-    error OnlyAIAgent();
     error OnlyCreator();
+    error UnauthorizedResultSubmission();
     error ArrayLengthMismatch();
     error NothingToWithdraw();
     error EventMatchLimitReached();
@@ -219,13 +234,6 @@ contract CreatorEventManager is
     // ─── Storage gap for future upgrades ─────────────────────────────────────
     uint256[50] private __gap;
 
-    // ─── Modifiers ────────────────────────────────────────────────────────────
-
-    modifier onlyAIAgent() {
-        if (msg.sender != aiOracleAgent) revert OnlyAIAgent();
-        _;
-    }
-
     // ─── Constructor (disabled for proxy) ────────────────────────────────────
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -236,22 +244,31 @@ contract CreatorEventManager is
     // ─── Initializer ─────────────────────────────────────────────────────────
 
     /// @notice Initialize the contract (called once via proxy deployment)
-    /// @param _treasury  Address that receives withdrawn fees
-    /// @param _aiAgent   AI Oracle Agent address
-    /// @param _owner     Initial owner / admin
+    /// @param _treasury     Address that receives withdrawn fees
+    /// @param _aiAgent      AI Oracle Agent address (will get ORACLE_ROLE)
+    /// @param _owner        Initial owner (gets DEFAULT_ADMIN_ROLE)
+    /// @param _backendAdmin Backend wallet address (will get ADMIN_ROLE for user verification)
     function initialize(
         address _treasury,
         address _aiAgent,
-        address _owner
+        address _owner,
+        address _backendAdmin
     ) external initializer {
-        if (_treasury == address(0) || _aiAgent == address(0) || _owner == address(0)) {
+        if (_treasury == address(0) || _aiAgent == address(0) || 
+            _owner == address(0) || _backendAdmin == address(0)) {
             revert ZeroAddress();
         }
         __Ownable_init(_owner);
+        __AccessControl_init();
         __Pausable_init();
 
         treasury      = _treasury;
         aiOracleAgent = _aiAgent;
+        
+        // Grant roles
+        _grantRole(DEFAULT_ADMIN_ROLE, _owner);        // Deployer - manages roles
+        _grantRole(ADMIN_ROLE, _backendAdmin);         // Backend - verifies users, withdraws fees
+        _grantRole(ORACLE_ROLE, _aiAgent);             // AI Agent - submits results
     }
 
     // ─── UUPS Upgrade Authorization ───────────────────────────────────────────
@@ -266,40 +283,42 @@ contract CreatorEventManager is
     /// @notice Admin sets the creation fee in native CELO.
     ///         Applies to all events created after this call.
     /// @param amount Fee in wei (e.g. 1e18 = 1 CELO, 1e17 = 0.1 CELO)
-    function setCreationFee(uint256 amount) external onlyOwner {
+    function setCreationFee(uint256 amount) external onlyRole(ADMIN_ROLE) {
         if (amount == 0) revert ZeroAmount();
         creationFee = amount;
         emit CreationFeeUpdated(amount);
     }
 
     /// @notice Update treasury address
-    function setTreasury(address _treasury) external onlyOwner {
+    function setTreasury(address _treasury) external onlyRole(ADMIN_ROLE) {
         if (_treasury == address(0)) revert ZeroAddress();
         treasury = _treasury;
         emit TreasuryUpdated(_treasury);
     }
 
     /// @notice Update AI Oracle Agent address
-    function setAIAgent(address _agent) external onlyOwner {
+    function setAIAgent(address _agent) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (_agent == address(0)) revert ZeroAddress();
         aiOracleAgent = _agent;
+        // Revoke old agent's role if needed, grant to new agent
+        _grantRole(ORACLE_ROLE, _agent);
         emit AIAgentUpdated(_agent);
     }
 
-    function pause()   external onlyOwner { _pause(); }
-    function unpause() external onlyOwner { _unpause(); }
+    function pause()   external onlyRole(ADMIN_ROLE) { _pause(); }
+    function unpause() external onlyRole(ADMIN_ROLE) { _unpause(); }
 
     // ─── Verification Registry ────────────────────────────────────────────────
 
     /// @notice Admin marks an address as verified (called after Twitter OAuth off-chain)
-    function verifyAddress(address user) external onlyOwner {
+    function verifyAddress(address user) external onlyRole(ADMIN_ROLE) {
         if (user == address(0)) revert ZeroAddress();
         isVerified[user] = true;
         emit AddressVerified(user);
     }
 
     /// @notice Admin batch-verifies multiple addresses in one tx
-    function verifyAddressBatch(address[] calldata users) external onlyOwner {
+    function verifyAddressBatch(address[] calldata users) external onlyRole(ADMIN_ROLE) {
         for (uint256 i = 0; i < users.length; i++) {
             if (users[i] == address(0)) revert ZeroAddress();
             isVerified[users[i]] = true;
@@ -308,7 +327,7 @@ contract CreatorEventManager is
     }
 
     /// @notice Admin revokes verification
-    function unverifyAddress(address user) external onlyOwner {
+    function unverifyAddress(address user) external onlyRole(ADMIN_ROLE) {
         isVerified[user] = false;
         emit AddressUnverified(user);
     }
@@ -317,7 +336,7 @@ contract CreatorEventManager is
 
     /// @notice Admin withdraws all accumulated CELO fees to specified address
     /// @param recipient Address to receive the withdrawn fees
-    function withdrawFees(address recipient) external onlyOwner nonReentrant {
+    function withdrawFees(address recipient) external onlyRole(ADMIN_ROLE) nonReentrant {
         if (recipient == address(0)) revert ZeroAddress();
         
         uint256 amount = pendingFees;
@@ -463,13 +482,18 @@ contract CreatorEventManager is
 
     // ─── AI Oracle Agent ──────────────────────────────────────────────────────
 
-    /// @notice AI Oracle Agent submits the verified correct score.
+    /// @notice AI Oracle Agent (or Admin as backup) submits the verified correct score.
     ///         Contract records all exact-score winners with their timestamps.
     function submitMatchResult(
         uint256 matchId,
         uint8   homeScore,
         uint8   awayScore
-    ) external onlyAIAgent nonReentrant {
+    ) external nonReentrant {
+        // Allow either ORACLE_ROLE (AI agent) or ADMIN_ROLE (manual backup)
+        if (!hasRole(ORACLE_ROLE, msg.sender) && !hasRole(ADMIN_ROLE, msg.sender)) {
+            revert UnauthorizedResultSubmission();
+        }
+        
         Match storage m = matches[matchId];
 
         if (m.status != MatchStatus.OPEN) revert MatchNotOpen();

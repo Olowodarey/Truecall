@@ -28,13 +28,12 @@ export function getTokenSymbol(address: string): string {
   return shortAddress(address);
 }
 
+import { ADMIN_ADDRESS } from "@/lib/constants";
+
 /** Check if an address is the admin wallet */
 export function isAdminAddress(address: string | undefined): boolean {
-  if (!address) return false;
-  return (
-    address.toLowerCase() ===
-    "0xab26c86b78dedb488bf0cb4face11b048ddefE5b".toLowerCase()
-  );
+  if (!address || !ADMIN_ADDRESS) return false;
+  return address.toLowerCase() === ADMIN_ADDRESS.toLowerCase();
 }
 
 /** Format a number as currency with token symbol */
