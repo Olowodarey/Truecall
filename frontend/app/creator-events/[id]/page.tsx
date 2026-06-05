@@ -277,6 +277,15 @@ export default function CreatorEventDetailPage() {
   const handleJoin = async () => {
     setJoinError(null);
     if (!inviteCode.trim()) return setJoinError("Enter the invite code");
+
+    // Check verification status before attempting transaction
+    if (!isVerified) {
+      setJoinError(
+        "🔒 You must verify your Twitter account before joining creator events",
+      );
+      return;
+    }
+
     resetJoin();
 
     if (isWrongNetwork) {
