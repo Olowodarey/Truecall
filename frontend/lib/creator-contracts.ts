@@ -56,6 +56,20 @@ export const CREATOR_EVENT_MANAGER_ABI = [
     ],
     outputs: [],
   },
+  {
+    type: "function",
+    name: "selfVerify",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "verifyAddress",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "user", type: "address" }],
+    outputs: [],
+  },
 
   // ─── Read ─────────────────────────────────────────────────────────────────
   {
@@ -88,13 +102,6 @@ export const CREATOR_EVENT_MANAGER_ABI = [
     name: "setCreationFee",
     stateMutability: "nonpayable",
     inputs: [{ name: "amount", type: "uint256" }],
-    outputs: [],
-  },
-  {
-    type: "function",
-    name: "verifyAddress",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "user", type: "address" }],
     outputs: [],
   },
   {
