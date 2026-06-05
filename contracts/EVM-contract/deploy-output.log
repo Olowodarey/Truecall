@@ -1,0 +1,48 @@
+No files changed, compilation skipped
+Script ran successfully.
+
+== Logs ==
+  === CreatorEventManager Deployment (Role-Based) ===
+  Network:         Celo Mainnet
+  Deployer:        0x2c2A6E42E71350f80248Aee308Bd04A898c0C694 (DEFAULT_ADMIN_ROLE)
+  Backend Admin:   0x684835A1f131dcC3D4fF49A356556Fe0188Bd062 (ADMIN_ROLE)
+  Treasury:        0x2c2A6E42E71350f80248Aee308Bd04A898c0C694
+  AI Agent:        0x684835A1f131dcC3D4fF49A356556Fe0188Bd062 (ORACLE_ROLE)
+  Fee (wei):       1000000000000000000
+  Chain ID:        42220
+  Impl:            0xF78F5c9e8356a89ac2C43c19017595bBf371BF27
+  Proxy:           0xbA57166902064dE0EE16Df3A30839da7382F06E5
+  Fee set:         1000000000000000000 wei CELO
+  
+=== Done ===
+  CREATOR_EVENT_MANAGER_PROXY= 0xbA57166902064dE0EE16Df3A30839da7382F06E5
+  CREATOR_EVENT_MANAGER_IMPL=  0xF78F5c9e8356a89ac2C43c19017595bBf371BF27
+  
+Role assignments:
+  - DEFAULT_ADMIN_ROLE:  0x2c2A6E42E71350f80248Aee308Bd04A898c0C694 (can manage roles)
+  - ADMIN_ROLE:          0x684835A1f131dcC3D4fF49A356556Fe0188Bd062 (verifies users, withdraws fees)
+  - ORACLE_ROLE:         0x684835A1f131dcC3D4fF49A356556Fe0188Bd062 (submits match results)
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 42220
+
+Estimated gas price: 400.001099991 gwei
+
+Estimated total gas used for script: 5118321
+
+Estimated amount required: 2.047334030107035111 CELO
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: /home/olowo/Desktop/my projects/Truecall/contracts/EVM-contract/broadcast/DeployCreatorEventManager.s.sol/42220/run-latest.json
+
+Sensitive values saved to: /home/olowo/Desktop/my projects/Truecall/contracts/EVM-contract/cache/DeployCreatorEventManager.s.sol/42220/run-latest.json
+

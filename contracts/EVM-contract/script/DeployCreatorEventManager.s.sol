@@ -54,9 +54,13 @@ contract DeployCreatorEventManager is Script {
         CreatorEventManager manager = CreatorEventManager(payable(address(proxy)));
         console.log("Proxy:          ", address(proxy));
 
-        // 3. Set creation fee in native CELO
+        // 3. Set creation fee in native CELO (deployer has DEFAULT_ADMIN_ROLE, can do this once)
+        // Grant ADMIN_ROLE temporarily to deployer for initial setup
+        manager.grantRole(manager.ADMIN_ROLE(), deployer);
         manager.setCreationFee(feeAmount);
         console.log("Fee set:        ", feeAmount, "wei CELO");
+        // Revoke temporary admin role
+        manager.revokeRole(manager.ADMIN_ROLE(), deployer);
 
         vm.stopBroadcast();
 

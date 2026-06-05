@@ -72,6 +72,13 @@ export const CREATOR_EVENT_MANAGER_ABI = [
   },
   {
     type: 'function',
+    name: 'selfVerify',
+    stateMutability: 'nonpayable',
+    inputs: [],
+    outputs: [],
+  },
+  {
+    type: 'function',
     name: 'verifyAddress',
     stateMutability: 'nonpayable',
     inputs: [{ name: 'user', type: 'address' }],
