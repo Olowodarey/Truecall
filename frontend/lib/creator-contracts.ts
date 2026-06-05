@@ -1,10 +1,10 @@
 // CreatorEventManager — Celo Mainnet
-// Proxy: 0x8A18Da2A173b3951c797a438102345cF92838880
+// Proxy: 0xbA57166902064dE0EE16Df3A30839da7382F06E5
 // Fee:   native CELO only (no ERC-20, no approval needed)
 
 export const CREATOR_EVENT_MANAGER_ADDRESS = (process.env
   .NEXT_PUBLIC_CREATOR_EVENT_MANAGER ??
-  "0x8A18Da2A173b3951c797a438102345cF92838880") as `0x${string}`;
+  "0xbA57166902064dE0EE16Df3A30839da7382F06E5") as `0x${string}`;
 
 export const CREATOR_EVENT_MANAGER_ABI = [
   // ─── Write ────────────────────────────────────────────────────────────────
