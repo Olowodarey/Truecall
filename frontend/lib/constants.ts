@@ -1,5 +1,5 @@
-// Admin wallet address
-export const ADMIN_ADDRESS = "0xAB26c86b78DEDb488Bf0cb4FaCe11b048DDeFE5b";
+// Admin wallet address (will be updated after new contract deployment)
+export const ADMIN_ADDRESS = "0xYOUR_NEW_ADMIN_WALLET_ADDRESS_HERE";
 
 // Token addresses on Celo Mainnet
 export const TOKENS = {
