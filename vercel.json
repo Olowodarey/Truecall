@@ -1,10 +1,14 @@
 {
-  "buildCommand": "cd frontend && pnpm install && pnpm run build",
-  "outputDirectory": "frontend/.next",
+  "buildCommand": "pnpm run build",
+  "outputDirectory": ".next",
+  "installCommand": "pnpm install",
   "framework": "nextjs",
-  "installCommand": "npm install -g pnpm@10.32.1 && cd frontend && pnpm install",
+  "rootDirectory": "frontend",
   "env": {
     "NEXT_PUBLIC_API_URL": "https://truecall-production.up.railway.app/api",
-    "NEXT_PUBLIC_TWITTER_CLIENT_ID": "ZGFtYjlOY2ZlRTF3ZDFYMGJVTHo6MTpjaQ"
+    "NEXT_PUBLIC_TWITTER_CLIENT_ID": "ZGFtYjlOY2ZlRTF3ZDFYMGJVTHo6MTpjaQ",
+    "NEXT_PUBLIC_CONTRACT_ADDRESS": "0xbA57166902064dE0EE16Df3A30839da7382F06E5",
+    "NEXT_PUBLIC_CREATOR_EVENT_MANAGER": "0xbA57166902064dE0EE16Df3A30839da7382F06E5",
+    "NEXT_PUBLIC_ADMIN_ADDRESS": "0x684835A1f131dcC3D4fF49A356556Fe0188Bd062"
   }
 }
