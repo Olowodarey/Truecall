@@ -1,5 +1,5 @@
-// ABI for CreatorEventManager — Celo Sepolia
-// Proxy: 0xD360E9eF6bF50A357c77fA17474a4838c2379B3f
+// ABI for CreatorEventManager — Celo Mainnet
+// Proxy: 0xbA57166902064dE0EE16Df3A30839da7382F06E5
 // Fee:   native CELO only
 
 export const CREATOR_EVENT_MANAGER_ABI = [

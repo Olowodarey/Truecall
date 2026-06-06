@@ -146,4 +146,22 @@ export const CREATOR_EVENT_MANAGER_ABI = [
     inputs: [],
     outputs: [{ type: "uint256" }],
   },
+  {
+    type: "function",
+    name: "nextMatchId",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "submitMatchResult",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "matchId", type: "uint256" },
+      { name: "homeScore", type: "uint8" },
+      { name: "awayScore", type: "uint8" },
+    ],
+    outputs: [],
+  },
 ] as const;

@@ -1,37 +1,54 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 const BACKEND_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  "https://truecall-production.up.railway.app";
 
-export async function POST(request: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await req.json();
+    const { address, twitterHandle } = body;
 
-    const response = await fetch(`${BACKEND_URL}/users/twitter/link`, {
+    if (!address || !twitterHandle) {
+      return NextResponse.json(
+        { error: "Address and Twitter handle required" },
+        { status: 400 },
+      );
+    }
+
+    // Validate Ethereum address format
+    if (!address.match(/^0x[a-fA-F0-9]{40}$/)) {
+      return NextResponse.json(
+        { error: "Invalid Ethereum address" },
+        { status: 400 },
+      );
+    }
+
+    const response = await fetch(`${BACKEND_URL}/users/link-twitter`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        address,
+        twitterHandle: twitterHandle.replace("@", ""), // Remove @ if present
+      }),
     });
 
-    const data = await response.json();
-
     if (!response.ok) {
+      const errorData = await response.json();
       return NextResponse.json(
-        { success: false, message: data.message || "Link failed" },
+        { error: errorData.message || "Failed to link Twitter" },
         { status: response.status },
       );
     }
 
+    const data = await response.json();
     return NextResponse.json(data);
   } catch (error) {
-    console.error("Twitter link proxy error:", error);
+    console.error("Error linking Twitter:", error);
     return NextResponse.json(
-      {
-        success: false,
-        message: error instanceof Error ? error.message : "Link failed",
-      },
+      { error: "Internal server error" },
       { status: 500 },
     );
   }

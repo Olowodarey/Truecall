@@ -39,7 +39,7 @@ const walletClient = createWalletClient({
 });
 
 const creatorEventManagerAddress = (process.env.CREATOR_EVENT_MANAGER_ADDRESS ||
-  "0x8A18Da2A173b3951c797a438102345cF92838880") as `0x${string}`;
+  "0xbA57166902064dE0EE16Df3A30839da7382F06E5") as `0x${string}`;
 
 logger.info("Creator Match Client initialized", {
   address: account.address,

@@ -259,4 +259,13 @@ export class UsersController {
       addresses,
     };
   }
+
+  @Get()
+  @ApiOperation({
+    summary: 'Get all users (admin)',
+  })
+  async getAllUsers() {
+    const users = await this.usersService.getAllProfiles();
+    return users;
+  }
 }
