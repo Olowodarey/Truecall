@@ -538,6 +538,28 @@ export default function CreateCreatorEventPage() {
                     {activePickerIndex === i && (
                       <div className="bg-gray-800 border border-gray-600 rounded-lg overflow-hidden">
                         <div className="p-3 border-b border-gray-700">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-400">
+                                {fixtures.length > 0
+                                  ? `${fixtures.length} matches available`
+                                  : "Real-time API"}
+                              </span>
+                              {!fixturesLoading && fixtures.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setFixturesLoaded(false);
+                                    setFixtures([]);
+                                    loadFixtures();
+                                  }}
+                                  className="text-xs text-blue-400 hover:text-blue-300 transition"
+                                >
+                                  🔄 Refresh
+                                </button>
+                              )}
+                            </div>
+                          </div>
                           <input
                             type="text"
                             value={search}
@@ -554,11 +576,21 @@ export default function CreateCreatorEventPage() {
                         ) : (
                           <div className="max-h-72 overflow-y-auto">
                             {filteredFixtures.length === 0 ? (
-                              <p className="text-gray-500 text-sm text-center py-4">
-                                {search
-                                  ? "No matches found"
-                                  : "Loading matches..."}
-                              </p>
+                              <div className="text-center py-6 px-4">
+                                <p className="text-gray-400 text-sm mb-2">
+                                  {search
+                                    ? "No matches found"
+                                    : fixtures.length === 0
+                                      ? "No upcoming matches available"
+                                      : "Loading matches..."}
+                                </p>
+                                {fixtures.length === 0 && !search && (
+                                  <p className="text-gray-500 text-xs">
+                                    Configure API_FOOTBALL_KEY in backend for
+                                    real-time data
+                                  </p>
+                                )}
+                              </div>
                             ) : (
                               <div className="divide-y divide-gray-700">
                                 {filteredFixtures.map((f) => (
@@ -575,6 +607,14 @@ export default function CreateCreatorEventPage() {
                                     </p>
                                     <p className="text-gray-400 text-xs mt-1">
                                       {f.league} · {f.venue}
+                                      {f.kickoffTime && (
+                                        <span className="ml-2 text-gray-500">
+                                          ·{" "}
+                                          {new Date(
+                                            f.kickoffTime * 1000,
+                                          ).toLocaleDateString()}
+                                        </span>
+                                      )}
                                     </p>
                                   </button>
                                 ))}

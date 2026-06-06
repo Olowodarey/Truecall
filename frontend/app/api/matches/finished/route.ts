@@ -4,12 +4,13 @@ const BACKEND_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
 
 /**
- * GET /api/matches/upcoming
- * Get upcoming matches (next 7 days) for creators to add to their events
+ * GET /api/matches/finished
+ * Get finished matches (last 7 days)
+ * This is used by the AI agent for result submission
  */
 export async function GET() {
   try {
-    const response = await fetch(`${BACKEND_URL}/matches?upcoming=true`, {
+    const response = await fetch(`${BACKEND_URL}/matches?status=finished`, {
       cache: "no-store",
       headers: {
         "Content-Type": "application/json",
@@ -18,7 +19,7 @@ export async function GET() {
 
     if (!response.ok) {
       return NextResponse.json(
-        { error: "Failed to fetch upcoming matches" },
+        { error: "Failed to fetch finished matches" },
         { status: response.status },
       );
     }
@@ -26,7 +27,7 @@ export async function GET() {
     const data = await response.json();
     return NextResponse.json(data);
   } catch (error) {
-    console.error("Upcoming matches API error:", error);
+    console.error("Finished matches API error:", error);
     return NextResponse.json(
       { error: "Failed to connect to backend" },
       { status: 500 },

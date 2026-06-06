@@ -34,11 +34,32 @@ export class CreatorEventsService implements OnModuleInit {
 
   onModuleInit() {
     const rpcUrl = this.config.get<string>('CELO_RPC_URL')!;
-    const privateKey = this.config.get<string>('PRIVATE_KEY')! as `0x${string}`;
+    const rawPrivateKey = this.config.get<string>('PRIVATE_KEY')!;
 
     this.contractAddress = this.config.get<string>(
       'CREATOR_EVENT_MANAGER_ADDRESS',
     )! as `0x${string}`;
+
+    // Ensure private key has 0x prefix
+    const privateKey = this.ensureHexPrefix(rawPrivateKey);
+
+    // Validate private key format
+    if (!this.isValidPrivateKey(privateKey)) {
+      this.logger.warn(
+        '⚠️ Invalid or placeholder PRIVATE_KEY - admin features disabled',
+      );
+
+      // Create read-only client
+      this.publicClient = createPublicClient({
+        chain: celoMainnet,
+        transport: http(rpcUrl),
+      }) as any;
+
+      this.logger.log(
+        `CreatorEventManager: ${this.contractAddress} (read-only)`,
+      );
+      return;
+    }
 
     this.account = privateKeyToAccount(privateKey);
 
@@ -54,6 +75,44 @@ export class CreatorEventsService implements OnModuleInit {
     }) as any;
 
     this.logger.log(`CreatorEventManager: ${this.contractAddress}`);
+    this.logger.log(`Admin Account: ${this.account.address}`);
+  }
+
+  /**
+   * Ensure hex prefix on private key
+   */
+  private ensureHexPrefix(value: string): `0x${string}` {
+    if (!value) return '0x' as `0x${string}`;
+    return value.startsWith('0x')
+      ? (value as `0x${string}`)
+      : (`0x${value}` as `0x${string}`);
+  }
+
+  /**
+   * Check if private key is valid (not a placeholder)
+   */
+  private isValidPrivateKey(privateKey: string): boolean {
+    if (
+      !privateKey ||
+      privateKey === '0x' ||
+      privateKey.includes('YOUR_') ||
+      privateKey.includes('PRIVATE_KEY_HERE')
+    ) {
+      return false;
+    }
+    const hexPattern = /^0x[0-9a-fA-F]{64}$/;
+    return hexPattern.test(privateKey);
+  }
+
+  /**
+   * Check if wallet client is available
+   */
+  private checkWalletAvailable() {
+    if (!this.walletClient) {
+      throw new Error(
+        'Wallet not available - PRIVATE_KEY not configured in environment',
+      );
+    }
   }
 
   // ─── Reads ─────────────────────────────────────────────────────────────────
@@ -206,6 +265,7 @@ export class CreatorEventsService implements OnModuleInit {
   // ─── Writes ────────────────────────────────────────────────────────────────
 
   async verifyAddress(user: string) {
+    this.checkWalletAvailable();
     const hash = await this.walletClient.writeContract({
       account: this.account,
       chain: celoMainnet,
@@ -219,6 +279,7 @@ export class CreatorEventsService implements OnModuleInit {
   }
 
   async verifyAddressBatch(users: string[]) {
+    this.checkWalletAvailable();
     const hash = await this.walletClient.writeContract({
       account: this.account,
       chain: celoMainnet,
@@ -232,6 +293,7 @@ export class CreatorEventsService implements OnModuleInit {
   }
 
   async unverifyAddress(user: string) {
+    this.checkWalletAvailable();
     const hash = await this.walletClient.writeContract({
       account: this.account,
       chain: celoMainnet,
@@ -245,6 +307,7 @@ export class CreatorEventsService implements OnModuleInit {
   }
 
   async withdrawFees(recipient: string) {
+    this.checkWalletAvailable();
     const hash = await this.walletClient.writeContract({
       account: this.account,
       chain: celoMainnet,
@@ -266,6 +329,7 @@ export class CreatorEventsService implements OnModuleInit {
     homeScore: number,
     awayScore: number,
   ) {
+    this.checkWalletAvailable();
     this.logger.log(
       `Submitting result for match ${matchId}: ${homeScore}-${awayScore}`,
     );

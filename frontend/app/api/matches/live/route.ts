@@ -4,12 +4,12 @@ const BACKEND_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api";
 
 /**
- * GET /api/matches/upcoming
- * Get upcoming matches (next 7 days) for creators to add to their events
+ * GET /api/matches/live
+ * Get currently playing matches with real-time scores
  */
 export async function GET() {
   try {
-    const response = await fetch(`${BACKEND_URL}/matches?upcoming=true`, {
+    const response = await fetch(`${BACKEND_URL}/matches?status=live`, {
       cache: "no-store",
       headers: {
         "Content-Type": "application/json",
@@ -18,7 +18,7 @@ export async function GET() {
 
     if (!response.ok) {
       return NextResponse.json(
-        { error: "Failed to fetch upcoming matches" },
+        { error: "Failed to fetch live matches" },
         { status: response.status },
       );
     }
@@ -26,7 +26,7 @@ export async function GET() {
     const data = await response.json();
     return NextResponse.json(data);
   } catch (error) {
-    console.error("Upcoming matches API error:", error);
+    console.error("Live matches API error:", error);
     return NextResponse.json(
       { error: "Failed to connect to backend" },
       { status: 500 },

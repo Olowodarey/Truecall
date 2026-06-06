@@ -51,6 +51,7 @@ let lastScannedBlock: bigint = 0n;
 
 /**
  * Fetch match result from backend API
+ * Only returns result if match status is "FT" (Full Time)
  */
 async function fetchMatchResultFromBackend(apiMatchId: string): Promise<{
   homeScore: number;
@@ -72,16 +73,34 @@ async function fetchMatchResultFromBackend(apiMatchId: string): Promise<{
 
     const data = await response.json();
 
-    // If match has a final score, it's finished
+    // IMPORTANT: Only submit if match is Full Time (FT)
+    // This ensures we don't submit results from live or halftime scores
     if (
+      data.status === "FT" &&
       data.finalHomeScore !== undefined &&
       data.finalAwayScore !== undefined
     ) {
+      logger.info("Match is Full Time, ready to submit", {
+        apiMatchId,
+        status: data.status,
+        homeScore: data.finalHomeScore,
+        awayScore: data.finalAwayScore,
+      });
+
       return {
         homeScore: data.finalHomeScore,
         awayScore: data.finalAwayScore,
         isFinished: true,
       };
+    }
+
+    // Log if match exists but isn't finished yet
+    if (data.status) {
+      logger.debug("Match not yet finished", {
+        apiMatchId,
+        status: data.status,
+        comment: data.comment,
+      });
     }
 
     return null;
@@ -96,7 +115,7 @@ async function fetchMatchResultFromBackend(apiMatchId: string): Promise<{
 
 /**
  * Also check backend data for match results (fallback)
- * This uses the same backend API as fetchMatchResultFromBackend but goes through the match data service
+ * Only returns results for matches with FT (Full Time) status
  */
 async function getMatchResultFromBackend(apiMatchId: string): Promise<{
   homeScore: number;
@@ -109,56 +128,34 @@ async function getMatchResultFromBackend(apiMatchId: string): Promise<{
     return null;
   }
 
-  // For testing: if kickoff time has passed, check for actual results
-  const now = Math.floor(Date.now() / 1000);
-  if (match.kickoffTime && match.kickoffTime <= now) {
-    // If the backend has actual scores, use them
-    if (
-      match.finalHomeScore !== undefined &&
-      match.finalAwayScore !== undefined &&
-      match.status === "FT"
-    ) {
-      logger.info("Using match result from backend data", {
-        apiMatchId,
-        homeScore: match.finalHomeScore,
-        awayScore: match.finalAwayScore,
-      });
-
-      return {
-        homeScore: match.finalHomeScore,
-        awayScore: match.finalAwayScore,
-        isFinished: true,
-      };
-    }
-
-    // Otherwise generate deterministic result based on match ID for testing
-    const hash = hashCode(apiMatchId);
-    const homeScore = Math.abs(hash % 4);
-    const awayScore = Math.abs((hash / 4) % 4);
-
-    logger.info("Using generated test result from backend", {
+  // Only submit if match is Full Time (FT) and has final scores
+  if (
+    match.status === "FT" &&
+    match.finalHomeScore !== undefined &&
+    match.finalAwayScore !== undefined
+  ) {
+    logger.info("Using FT match result from backend data", {
       apiMatchId,
-      homeScore,
-      awayScore,
+      status: match.status,
+      homeScore: match.finalHomeScore,
+      awayScore: match.finalAwayScore,
     });
 
-    return { homeScore, awayScore, isFinished: true };
+    return {
+      homeScore: match.finalHomeScore,
+      awayScore: match.finalAwayScore,
+      isFinished: true,
+    };
   }
+
+  logger.debug("Match not FT yet or missing scores", {
+    apiMatchId,
+    status: match.status,
+    hasScores:
+      match.finalHomeScore !== undefined && match.finalAwayScore !== undefined,
+  });
 
   return null;
-}
-
-/**
- * Simple hash function for deterministic test results
- */
-function hashCode(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  return Math.abs(hash);
 }
 
 /**

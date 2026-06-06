@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
+import { ApiFootballService, ApiFootballFixture } from './api-football.service';
 
 export interface Match {
   id: string;
@@ -12,15 +13,28 @@ export interface Match {
   venue: string;
   homeTeamId: string;
   awayTeamId: string;
+  kickoffTime?: number;
+  finalHomeScore?: number;
+  finalAwayScore?: number;
+  status?: string;
+  comment?: string;
 }
 
 @Injectable()
 export class MatchesService {
   private readonly logger = new Logger(MatchesService.name);
   private matches: Match[] = [];
+  private useRealTimeData: boolean = false;
 
-  constructor() {
+  constructor(private readonly apiFootballService: ApiFootballService) {
     this.loadMatches();
+    this.useRealTimeData = this.apiFootballService.isConfigured();
+
+    if (this.useRealTimeData) {
+      this.logger.log('✅ Real-time API configured - will fetch live data');
+    } else {
+      this.logger.warn('⚠️ Real-time API not configured - using JSON fallback');
+    }
   }
 
   /**
@@ -52,9 +66,14 @@ export class MatchesService {
       }
 
       if (!fileContent) {
-        throw new Error(
-          `Could not find matches.json in any of the expected locations: ${possiblePaths.join(', ')}`,
+        this.logger.warn(
+          'No matches.json file found - using empty array as fallback',
         );
+        this.logger.warn(
+          'Configure API_FOOTBALL_KEY in .env for real-time match data',
+        );
+        this.matches = [];
+        return;
       }
 
       const data = JSON.parse(fileContent);
@@ -63,7 +82,10 @@ export class MatchesService {
         `Loaded ${this.matches.length} matches from JSON (${loadedPath})`,
       );
     } catch (error) {
-      this.logger.error('Failed to load matches from JSON', error);
+      this.logger.warn('Failed to load matches from JSON - using empty array');
+      this.logger.warn(
+        'Configure API_FOOTBALL_KEY in .env for real-time match data',
+      );
       this.matches = [];
     }
   }
@@ -170,6 +192,134 @@ export class MatchesService {
         league,
         count: this.matches.filter((m) => m.league === league).length,
       })),
+      dataSource: this.useRealTimeData ? 'Real-time API' : 'JSON Fallback',
     };
+  }
+
+  /**
+   * Convert API-Football fixture to Match format
+   */
+  private convertApiFixtureToMatch(fixture: ApiFootballFixture): Match {
+    const homeTeamSlug = fixture.teams.home.name
+      .toLowerCase()
+      .replace(/\s+/g, '_');
+    const awayTeamSlug = fixture.teams.away.name
+      .toLowerCase()
+      .replace(/\s+/g, '_');
+
+    return {
+      id: `api_${fixture.fixture.id}`,
+      homeTeam: fixture.teams.home.name,
+      awayTeam: fixture.teams.away.name,
+      league: fixture.league.name,
+      season: `${fixture.league.season}/${fixture.league.season + 1}`,
+      round: fixture.league.round,
+      venue: fixture.fixture.venue.name || 'TBD',
+      homeTeamId: homeTeamSlug,
+      awayTeamId: awayTeamSlug,
+      kickoffTime: fixture.fixture.timestamp,
+      finalHomeScore: fixture.score.fulltime.home ?? undefined,
+      finalAwayScore: fixture.score.fulltime.away ?? undefined,
+      status: fixture.fixture.status.short,
+      comment: `${fixture.fixture.status.long}${fixture.fixture.status.elapsed ? ` - ${fixture.fixture.status.elapsed}'` : ''}`,
+    };
+  }
+
+  /**
+   * Get live matches from real-time API
+   */
+  async getLiveMatches(): Promise<Match[]> {
+    if (!this.useRealTimeData) {
+      this.logger.warn('Real-time API not available, returning empty array');
+      return [];
+    }
+
+    try {
+      const fixtures = await this.apiFootballService.getLiveMatches();
+      return fixtures.map((f) => this.convertApiFixtureToMatch(f));
+    } catch (error) {
+      this.logger.error('Failed to fetch live matches', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get finished matches from real-time API
+   */
+  async getFinishedMatches(): Promise<Match[]> {
+    if (!this.useRealTimeData) {
+      // Fallback to JSON data with FT status
+      return this.matches.filter((m) => m.status === 'FT');
+    }
+
+    try {
+      const fixtures = await this.apiFootballService.getFinishedMatches();
+      return fixtures.map((f) => this.convertApiFixtureToMatch(f));
+    } catch (error) {
+      this.logger.error('Failed to fetch finished matches', error);
+      return this.matches.filter((m) => m.status === 'FT');
+    }
+  }
+
+  /**
+   * Get upcoming matches from real-time API
+   */
+  async getUpcomingMatchesFromApi(): Promise<Match[]> {
+    if (!this.useRealTimeData) {
+      // Fallback to JSON data
+      return this.matches;
+    }
+
+    try {
+      const fixtures = await this.apiFootballService.getUpcomingMatches();
+      return fixtures.map((f) => this.convertApiFixtureToMatch(f));
+    } catch (error) {
+      this.logger.error('Failed to fetch upcoming matches', error);
+      return this.matches;
+    }
+  }
+
+  /**
+   * Get matches by date from real-time API
+   */
+  async getMatchesByDate(date: string): Promise<Match[]> {
+    if (!this.useRealTimeData) {
+      this.logger.warn('Real-time API not available, returning JSON data');
+      return this.matches;
+    }
+
+    try {
+      const fixtures = await this.apiFootballService.getFixturesByDate(date);
+      return fixtures.map((f) => this.convertApiFixtureToMatch(f));
+    } catch (error) {
+      this.logger.error(`Failed to fetch matches for date ${date}`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Get match by API fixture ID
+   */
+  async getMatchByApiId(fixtureId: number): Promise<Match | null> {
+    if (!this.useRealTimeData) {
+      this.logger.warn('Real-time API not available');
+      return null;
+    }
+
+    try {
+      const fixture = await this.apiFootballService.getFixtureById(fixtureId);
+      if (!fixture) return null;
+      return this.convertApiFixtureToMatch(fixture);
+    } catch (error) {
+      this.logger.error(`Failed to fetch fixture ${fixtureId}`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Check if real-time data is available
+   */
+  isRealTimeDataAvailable(): boolean {
+    return this.useRealTimeData;
   }
 }

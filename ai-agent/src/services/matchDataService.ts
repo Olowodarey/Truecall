@@ -30,10 +30,14 @@ export class MatchDataService {
 
   /**
    * Load matches from backend API
+   * Fetches finished matches (status=finished) for result submission
    */
   private async loadMatches(): Promise<void> {
     try {
-      const response = await fetch(`${this.backendApiUrl}/matches`);
+      // Fetch finished matches for result submission
+      const response = await fetch(
+        `${this.backendApiUrl}/matches?status=finished`,
+      );
 
       if (!response.ok) {
         throw new Error(
@@ -45,7 +49,9 @@ export class MatchDataService {
       this.matches = Array.isArray(matches) ? matches : [];
       this.lastFetchTime = Date.now();
 
-      console.log(`✅ Loaded ${this.matches.length} matches from backend API`);
+      console.log(
+        `✅ Loaded ${this.matches.length} finished matches from backend API`,
+      );
     } catch (error) {
       console.error("❌ Failed to load matches from backend API:", error);
       this.matches = [];
