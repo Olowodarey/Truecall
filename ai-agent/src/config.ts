@@ -10,10 +10,16 @@ function optional(key: string, defaultVal: string): string {
   return process.env[key] ?? defaultVal;
 }
 
+function ensureHexPrefix(value: string): `0x${string}` {
+  return value.startsWith("0x")
+    ? (value as `0x${string}`)
+    : (`0x${value}` as `0x${string}`);
+}
+
 export const config = {
   // Celo
   celoRpcUrl: required("CELO_RPC_URL"),
-  agentPrivateKey: required("AGENT_PRIVATE_KEY") as `0x${string}`,
+  agentPrivateKey: ensureHexPrefix(required("AGENT_PRIVATE_KEY")),
   eventManagerAddress: optional(
     "EVENT_MANAGER_ADDRESS",
     "0x0000000000000000000000000000000000000000",
