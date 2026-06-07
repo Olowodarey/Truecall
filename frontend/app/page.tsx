@@ -1,8 +1,5 @@
 import Header from "../components/Header";
 import HeroSection from "../components/HeroSection";
-import HowItWorksSection from "../components/HowItWorksSection";
-import PrivateLeaguesSection from "../components/PrivateLeaguesSection";
-import CreatorEventsSection from "../components/CreatorEventsSection";
 import Footer from "../components/Footer";
 
 export default function Home() {
@@ -57,10 +54,6 @@ export default function Home() {
       <div className="relative z-10">
         <Header />
         <HeroSection />
-        <PrivateLeaguesSection />
-        <CreatorEventsSection />
-        <HowItWorksSection />
-
         <Footer />
       </div>
     </div>
