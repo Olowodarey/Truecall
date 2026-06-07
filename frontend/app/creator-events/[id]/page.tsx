@@ -12,6 +12,7 @@ import {
 import { celo } from "@/lib/wagmi";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import SharePredictionButton from "@/components/SharePredictionButton";
 import {
   fetchCreatorEvent,
   fetchCreatorEventMatches,
@@ -929,7 +930,7 @@ export default function CreatorEventDetailPage() {
                           {userPredictions[m.matchId].homeScore} –{" "}
                           {userPredictions[m.matchId].awayScore}
                         </div>
-                        <p className="text-gray-400 text-xs">
+                        <p className="text-gray-400 text-xs mb-3">
                           Predicted on{" "}
                           {format(
                             new Date(
@@ -938,6 +939,20 @@ export default function CreatorEventDetailPage() {
                             "MMM d, yyyy 'at' HH:mm",
                           )}
                         </p>
+                        {/* Share Button */}
+                        <div className="flex justify-center">
+                          <SharePredictionButton
+                            eventName={event.eventName}
+                            homeTeam={m.homeTeam}
+                            awayTeam={m.awayTeam}
+                            homeScore={userPredictions[m.matchId].homeScore}
+                            awayScore={userPredictions[m.matchId].awayScore}
+                            creatorTwitter={creatorTwitter}
+                            eventId={eventId}
+                            matchId={m.matchId}
+                            variant="secondary"
+                          />
+                        </div>
                       </div>
                     ) : canPredict && predictMatchId === m.matchId ? (
                       <div className="bg-gray-900/50 rounded-lg p-4 mt-2">
