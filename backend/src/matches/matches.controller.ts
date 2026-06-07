@@ -1,16 +1,20 @@
 import { Controller, Get, Param, Query, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { MatchesService, Match } from './matches.service';
+import { DatabaseCacheService } from './database-cache.service';
 
 @ApiTags('Matches')
 @Controller('matches')
 export class MatchesController {
   private readonly logger = new Logger(MatchesController.name);
 
-  constructor(private readonly matchesService: MatchesService) {}
+  constructor(
+    private readonly matchesService: MatchesService,
+    private readonly databaseCache: DatabaseCacheService,
+  ) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get all available matches' })
+  @ApiOperation({ summary: 'Get all available matches from database cache' })
   @ApiQuery({
     name: 'league',
     required: false,
@@ -24,45 +28,32 @@ export class MatchesController {
   @ApiQuery({
     name: 'upcoming',
     required: false,
-    description: 'Get only upcoming matches (next 7 days)',
-  })
-  @ApiQuery({
-    name: 'realtime',
-    required: false,
-    description: 'Force real-time API fetch',
+    description: 'Get only upcoming matches (from database)',
   })
   async getAllMatches(
     @Query('league') league?: string,
     @Query('status') status?: string,
     @Query('upcoming') upcoming?: string,
-    @Query('realtime') realtime?: string,
   ) {
-    this.logger.log('Fetching matches');
+    this.logger.log('Fetching matches from database cache');
 
-    // Real-time live matches
-    if (status === 'live' || realtime === 'live') {
-      return await this.matchesService.getLiveMatches();
-    }
-
-    // Real-time finished matches
+    // Finished matches from database
     if (status === 'finished' || status === 'FT') {
-      return await this.matchesService.getFinishedMatches();
+      return await this.databaseCache.getFinishedMatches();
     }
 
-    // Real-time upcoming matches
-    if (upcoming === 'true' || realtime === 'upcoming') {
-      return await this.matchesService.getUpcomingMatchesFromApi();
+    // Upcoming matches from database
+    if (upcoming === 'true') {
+      return await this.databaseCache.getUpcomingMatches();
     }
 
+    // League filter
     if (league) {
-      return this.matchesService.getMatchesByLeague(league);
+      return await this.databaseCache.getMatchesByLeague(league);
     }
 
-    if (status) {
-      return this.matchesService.getMatchesByStatus(status);
-    }
-
-    return this.matchesService.getAllMatches();
+    // Default: upcoming matches
+    return await this.databaseCache.getUpcomingMatches();
   }
 
   @Get('statistics')
@@ -116,17 +107,58 @@ export class MatchesController {
     return this.matchesService.searchMatchesByTeamName(teamName);
   }
 
+  @Get('stats/usage')
+  @ApiOperation({ summary: 'Get API usage statistics' })
+  getApiUsageStats() {
+    return this.databaseCache.getUsageStats();
+  }
+
+  @Get('stats/database')
+  @ApiOperation({ summary: 'Get database cache statistics' })
+  async getDatabaseStats() {
+    return await this.databaseCache.getDatabaseStats();
+  }
+
+  @Get('priority')
+  @ApiOperation({
+    summary: 'Get all priority matches (World Cup + Friendlies) from database',
+  })
+  async getPriorityMatches() {
+    this.logger.log('Fetching priority matches from database');
+    return await this.databaseCache.getUpcomingMatches();
+  }
+
+  @Get('sync/trigger')
+  @ApiOperation({
+    summary: 'Manually trigger priority matches sync (for testing)',
+  })
+  async triggerSync() {
+    this.logger.log('Manually triggering priority matches sync');
+    await this.databaseCache.syncPriorityMatches();
+    return {
+      message: 'Sync triggered successfully',
+      stats: await this.databaseCache.getDatabaseStats(),
+    };
+  }
+
   @Get(':id')
   @ApiOperation({
-    summary: 'Get a match by fixture ID (e.g., match_001)',
+    summary: 'Get a match by fixture ID from database (e.g., api_123)',
   })
   @ApiParam({
     name: 'id',
-    description: 'Match fixture ID (e.g., match_001)',
+    description: 'Match fixture ID (e.g., api_123 or match_001)',
   })
-  getMatchById(@Param('id') id: string) {
-    this.logger.log(`Fetching match: ${id}`);
+  async getMatchById(@Param('id') id: string) {
+    this.logger.log(`Fetching match: ${id} from database`);
 
+    // Try database cache first
+    const cachedMatch = await this.databaseCache.getMatchById(id);
+    if (cachedMatch) {
+      return cachedMatch;
+    }
+
+    // Fallback to old JSON data if exists
     const match = this.matchesService.getMatchById(id);
     if (!match) {
       return { error: 'Match not found' };

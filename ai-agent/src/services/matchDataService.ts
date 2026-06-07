@@ -22,7 +22,7 @@ export class MatchDataService {
   private matches: Match[] = [];
   private backendApiUrl: string;
   private lastFetchTime: number = 0;
-  private cacheDurationMs: number = 60_000; // 1 minute cache
+  private cacheDurationMs: number = 1800_000; // 30 minutes cache (reduced API calls)
 
   constructor(backendApiUrl: string) {
     this.backendApiUrl = backendApiUrl;
