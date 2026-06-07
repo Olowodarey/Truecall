@@ -952,8 +952,13 @@ export default function CreatorEventDetailPage() {
 
                     {/* Verified result */}
                     {m.status === "VERIFIED" && (
-                      <div className="text-center text-2xl font-bold text-white mb-3">
-                        {m.finalHomeScore} – {m.finalAwayScore}
+                      <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3 mb-3">
+                        <p className="text-blue-400 text-xs font-semibold mb-2 text-center uppercase">
+                          Final Score
+                        </p>
+                        <div className="text-center text-3xl font-bold text-white">
+                          {m.finalHomeScore} – {m.finalAwayScore}
+                        </div>
                       </div>
                     )}
 
@@ -963,11 +968,14 @@ export default function CreatorEventDetailPage() {
                         <p className="text-green-400 text-sm font-semibold mb-3">
                           ✅ Your prediction submitted
                         </p>
-                        <div className="text-center text-2xl font-bold text-white mb-2">
+                        <p className="text-gray-400 text-xs font-semibold mb-2 text-center uppercase">
+                          Your Prediction
+                        </p>
+                        <div className="text-center text-3xl font-bold text-white mb-2">
                           {userPredictions[m.matchId].homeScore} –{" "}
                           {userPredictions[m.matchId].awayScore}
                         </div>
-                        <p className="text-gray-400 text-xs mb-3">
+                        <p className="text-gray-400 text-xs mb-3 text-center">
                           Predicted on{" "}
                           {format(
                             new Date(
