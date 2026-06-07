@@ -22,7 +22,7 @@ export default function ShareEventButton({
   size = "medium",
 }: ShareEventButtonProps) {
   const handleShare = () => {
-    // Build the event announcement text with prominent event name
+    // Build the event announcement text with event name and clear search instruction
     let eventText = `🎯 ${eventName.toUpperCase()}\n\nJoin my football prediction event on TrueCall!\n\n`;
 
     // Add optional details if available
@@ -38,10 +38,10 @@ export default function ShareEventButton({
 
     eventText += `\n`;
 
-    // Add creator mention if available
-    const creatorMention = creatorTwitter
-      ? `🎪 Created by @${creatorTwitter}\n`
-      : "";
+    // Add search instruction with creator mention
+    const searchInstruction = creatorTwitter
+      ? `🔍 Search for "${eventName}" event created by @${creatorTwitter}\n`
+      : `🔍 Search for "${eventName}" event on TrueCall\n`;
 
     // Add hashtags and link
     const hashtags = `#TrueCall #FootballPrediction #${eventName.replace(/\s+/g, "")}`;
@@ -49,7 +49,7 @@ export default function ShareEventButton({
 
     const codeHint = !inviteCode ? `\n💬 DM me for the invite code!` : "";
 
-    const fullText = `${eventText}${creatorMention}${hashtags}${codeHint}\n\n🔗 ${eventUrl}`;
+    const fullText = `${eventText}${searchInstruction}${hashtags}${codeHint}\n\n🔗 ${eventUrl}`;
 
     // Build Twitter URL
     const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(fullText)}`;
