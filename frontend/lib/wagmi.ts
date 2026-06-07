@@ -1,4 +1,4 @@
-import { http, createConfig } from "wagmi";
+import { http, createConfig, createStorage, cookieStorage } from "wagmi";
 import { defineChain } from "viem";
 import { injected, walletConnect } from "wagmi/connectors";
 
@@ -67,4 +67,8 @@ export const wagmiConfig = createConfig({
     ),
   },
   ssr: true,
+  storage: createStorage({
+    storage:
+      typeof window !== "undefined" ? window.localStorage : cookieStorage,
+  }),
 });

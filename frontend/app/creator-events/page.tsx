@@ -6,6 +6,7 @@ import { useWallet } from "@/contexts/WalletContext";
 import { isAdminAddress } from "@/lib/utils";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import ShareEventButton from "@/components/ShareEventButton";
 import { fetchCreatorEvents, type CreatorEvent } from "@/lib/creator-api";
 import { formatDistanceToNow } from "date-fns";
 
@@ -365,13 +366,26 @@ export default function CreatorEventsPage() {
                       )}
                     </div>
                   </div>
-                  <div className="text-right shrink-0">
+                  <div className="text-right shrink-0 flex flex-col items-end gap-2">
                     <p className="text-gray-400 text-xs">
                       {formatDistanceToNow(new Date(ev.createdAt * 1000), {
                         addSuffix: true,
                       })}
                     </p>
-                    <p className="text-orange-400 text-sm font-bold mt-1 group-hover:translate-x-1 transition-transform">
+                    {/* Share button for creators */}
+                    {address &&
+                      ev.creator.toLowerCase() === address.toLowerCase() && (
+                        <ShareEventButton
+                          eventId={ev.eventId}
+                          eventName={ev.eventName}
+                          matchCount={undefined}
+                          participantCount={ev.participantCount}
+                          creatorTwitter={ev.creatorTwitter}
+                          variant="icon"
+                          size="small"
+                        />
+                      )}
+                    <p className="text-orange-400 text-sm font-bold group-hover:translate-x-1 transition-transform">
                       View →
                     </p>
                   </div>

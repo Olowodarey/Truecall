@@ -13,6 +13,8 @@ import { celo } from "@/lib/wagmi";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SharePredictionButton from "@/components/SharePredictionButton";
+import ShareEventButton from "@/components/ShareEventButton";
+import CountdownTimer from "@/components/CountdownTimer";
 import {
   fetchCreatorEvent,
   fetchCreatorEventMatches,
@@ -584,6 +586,34 @@ export default function CreatorEventDetailPage() {
             </div>
           </div>
 
+          {/* Creator Share Section */}
+          {isCreator && (
+            <div className="mb-6 p-4 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/30 rounded-xl">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1">
+                  <p className="text-white font-semibold mb-1">
+                    Share Your Event
+                  </p>
+                  <p className="text-gray-400 text-xs">
+                    Invite participants with code:{" "}
+                    <span className="text-orange-400 font-bold font-mono">
+                      {inviteCode}
+                    </span>
+                  </p>
+                </div>
+                <ShareEventButton
+                  eventId={eventId}
+                  eventName={event.eventName}
+                  inviteCode={inviteCode}
+                  matchCount={matches.length}
+                  participantCount={participantCount}
+                  creatorTwitter={creatorTwitter}
+                  variant="primary"
+                />
+              </div>
+            </div>
+          )}
+
           {/* Join section */}
           {!isConnected ? (
             <div className="text-center p-5 bg-gray-900/80 rounded-xl border border-gray-700">
@@ -903,7 +933,7 @@ export default function CreatorEventDetailPage() {
 
                     <div className="flex items-center justify-between text-sm text-gray-400 mb-3">
                       <span>
-                        ⏰{" "}
+                        ⏰ Kickoff:{" "}
                         {format(new Date(m.kickoffTime * 1000), "MMM d, HH:mm")}
                       </span>
                       {kickedOff && m.status === "OPEN" && (
@@ -912,6 +942,13 @@ export default function CreatorEventDetailPage() {
                         </span>
                       )}
                     </div>
+
+                    {/* Countdown Timer for matches that haven't kicked off */}
+                    {!kickedOff && m.status === "OPEN" && (
+                      <div className="mb-3">
+                        <CountdownTimer targetTimestamp={m.kickoffTime} />
+                      </div>
+                    )}
 
                     {/* Verified result */}
                     {m.status === "VERIFIED" && (
@@ -956,6 +993,26 @@ export default function CreatorEventDetailPage() {
                       </div>
                     ) : canPredict && predictMatchId === m.matchId ? (
                       <div className="bg-gray-900/50 rounded-lg p-4 mt-2">
+                        {/* Deadline Warning */}
+                        {!kickedOff && (
+                          <div className="mb-4 p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+                            <p className="text-orange-400 text-xs font-semibold flex items-center gap-2">
+                              <svg
+                                className="w-4 h-4"
+                                fill="currentColor"
+                                viewBox="0 0 20 20"
+                              >
+                                <path
+                                  fillRule="evenodd"
+                                  d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                                  clipRule="evenodd"
+                                />
+                              </svg>
+                              Predictions close at kickoff
+                            </p>
+                          </div>
+                        )}
+
                         <p className="text-gray-300 text-sm font-semibold mb-3">
                           Your prediction
                         </p>
@@ -1022,17 +1079,35 @@ export default function CreatorEventDetailPage() {
                         </div>
                       </div>
                     ) : canPredict ? (
-                      <button
-                        onClick={() => {
-                          setPredictMatchId(m.matchId);
-                          setPredictError(null);
-                          setHomeScore("");
-                          setAwayScore("");
-                        }}
-                        className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 rounded-lg text-sm transition mt-1"
-                      >
-                        🎯 Predict Score
-                      </button>
+                      <div className="space-y-2 mt-1">
+                        <button
+                          onClick={() => {
+                            setPredictMatchId(m.matchId);
+                            setPredictError(null);
+                            setHomeScore("");
+                            setAwayScore("");
+                          }}
+                          className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 rounded-lg text-sm transition"
+                        >
+                          🎯 Predict Score
+                        </button>
+                        {!kickedOff && (
+                          <p className="text-center text-gray-400 text-xs flex items-center justify-center gap-1">
+                            <svg
+                              className="w-3 h-3"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
+                              <path
+                                fillRule="evenodd"
+                                d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                            Closes at kickoff
+                          </p>
+                        )}
+                      </div>
                     ) : null}
 
                     {/* View winners */}

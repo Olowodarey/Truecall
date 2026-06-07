@@ -376,6 +376,18 @@ export default function CreateCreatorEventPage() {
                 {inviteCode}
               </code>
             </div>
+
+            {/* Share Instructions */}
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 mb-4">
+              <p className="text-blue-400 text-sm font-semibold mb-2">
+                📣 Share Your Event
+              </p>
+              <p className="text-gray-400 text-xs">
+                After viewing your event, use the "Share Event" button to
+                announce it on Twitter/X with your invite code!
+              </p>
+            </div>
+
             <a
               href={`https://celoscan.io/tx/${successTxHash}`}
               target="_blank"
