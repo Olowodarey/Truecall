@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import UnifiedBackground from "./UnifiedBackground";
 
 const heroContent = [
@@ -31,6 +32,7 @@ const heroContent = [
 ];
 
 export default function HeroSection() {
+  const router = useRouter();
   const [currentTab, setCurrentTab] = useState(0);
 
   const nextTab = () => {
@@ -149,10 +151,16 @@ export default function HeroSection() {
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-            <button className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-4 rounded-lg font-semibold transition-colors text-lg">
+            <button
+              onClick={() => router.push("/creator-events")}
+              className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-4 rounded-lg font-semibold transition-colors text-lg"
+            >
               Start Predicting
             </button>
-            <button className="border border-gray-600 hover:border-orange-500 hover:text-orange-500 text-white px-8 py-4 rounded-lg font-semibold transition-colors text-lg">
+            <button
+              onClick={() => router.push("/about")}
+              className="border border-gray-600 hover:border-orange-500 hover:text-orange-500 text-white px-8 py-4 rounded-lg font-semibold transition-colors text-lg"
+            >
               Learn More
             </button>
           </div>
