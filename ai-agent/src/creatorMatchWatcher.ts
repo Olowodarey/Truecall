@@ -12,6 +12,7 @@
 import { config } from "./config";
 import { logger } from "./utils/logger";
 import { createMatchDataService } from "./services/matchDataService";
+import { updateHealthMetrics } from "./healthCheck";
 import {
   publicClient,
   getPendingCreatorMatchesFromLogs,
@@ -307,6 +308,9 @@ async function processTrackedMatches(): Promise<void> {
         result: `${result.homeScore}-${result.awayScore}`,
       });
 
+      // Update health metrics
+      updateHealthMetrics({ submitted: true });
+
       // Remove from tracker after a delay
       setTimeout(() => {
         trackedMatches.delete(key);
@@ -330,6 +334,13 @@ async function poll(): Promise<void> {
   try {
     await syncNewMatches();
     await processTrackedMatches();
+
+    // Update health metrics
+    updateHealthMetrics({
+      trackedCount: trackedMatches.size,
+      lastPoll: Date.now(),
+    });
+
     logger.debug("Creator match watcher poll complete", {
       trackedCount: trackedMatches.size,
     });

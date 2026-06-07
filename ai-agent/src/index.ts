@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { logger } from "./utils/logger";
 import { startCreatorMatchWatcher } from "./creatorMatchWatcher";
+import { startHealthServer } from "./healthCheck";
 
 /**
  * TrueCall AI Agent
@@ -16,6 +17,9 @@ async function main(): Promise<void> {
   logger.info("  TrueCall AI Agent v2.0.0");
   logger.info("  (Creator Events Only)");
   logger.info("─────────────────────────────────────────");
+
+  // Start health check server for monitoring
+  startHealthServer();
 
   // Graceful shutdown
   process.on("SIGINT", () => {
