@@ -1,6 +1,6 @@
 import { http, createConfig } from "wagmi";
 import { defineChain } from "viem";
-import { injected } from "wagmi/connectors";
+import { injected, walletConnect } from "wagmi/connectors";
 
 // Celo Mainnet
 export const celo = defineChain({
@@ -40,9 +40,27 @@ export const celoSepolia = defineChain({
   testnet: true,
 });
 
+// WalletConnect Project ID - Get yours at https://cloud.walletconnect.com
+const projectId =
+  process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "YOUR_PROJECT_ID";
+
 export const wagmiConfig = createConfig({
   chains: [celo],
-  connectors: [injected()],
+  connectors: [
+    injected({
+      shimDisconnect: true,
+    }),
+    walletConnect({
+      projectId,
+      metadata: {
+        name: "TrueCall",
+        description: "Blockchain-powered football predictions",
+        url: "https://truecall.xyz",
+        icons: ["https://truecall.xyz/logo.png"],
+      },
+      showQrModal: true,
+    }),
+  ],
   transports: {
     [celo.id]: http(
       process.env.NEXT_PUBLIC_CELO_RPC ?? "https://forno.celo.org",
