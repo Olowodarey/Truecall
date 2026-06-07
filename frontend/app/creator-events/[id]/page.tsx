@@ -60,6 +60,7 @@ export default function CreatorEventDetailPage() {
   const [event, setEvent] = useState<CreatorEvent | null>(null);
   const [matches, setMatches] = useState<CreatorMatch[]>([]);
   const [hasJoined, setHasJoined] = useState(false);
+  const [participantCount, setParticipantCount] = useState<number>(0);
   const [isVerified, setIsVerified] = useState(false);
   const [twitterHandle, setTwitterHandle] = useState<string | null>(null);
   const [twitterAvatar, setTwitterAvatar] = useState<string | null>(null);
@@ -173,6 +174,19 @@ export default function CreatorEventDetailPage() {
         }
       } catch {
         // Silently fail
+      }
+
+      // Load participant count
+      try {
+        const participantsRes = await fetch(
+          `/api/creator-events/${eventId}/participants`,
+        );
+        if (participantsRes.ok) {
+          const participantsData = await participantsRes.json();
+          setParticipantCount(participantsData.count || 0);
+        }
+      } catch {
+        setParticipantCount(0);
       }
 
       if (address) {
@@ -555,12 +569,16 @@ export default function CreatorEventDetailPage() {
             </div>
             <div className="bg-gray-900/50 rounded-xl p-3 border border-gray-700/30">
               <p className="text-gray-400 text-xs mb-1 uppercase font-semibold">
-                Created
+                Participants
               </p>
-              <p className="text-white font-medium text-sm">
-                {formatDistanceToNow(new Date(event.createdAt * 1000), {
-                  addSuffix: true,
-                })}
+              <p className="text-white font-bold text-lg flex items-center gap-2">
+                {participantCount}/200
+                {participantCount >= 200 && (
+                  <span className="text-red-400 text-xs">FULL</span>
+                )}
+                {participantCount >= 150 && participantCount < 200 && (
+                  <span className="text-yellow-400 text-xs">FILLING UP</span>
+                )}
               </p>
             </div>
           </div>

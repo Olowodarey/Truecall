@@ -13,6 +13,7 @@ import { formatDistanceToNow } from "date-fns";
 interface EventWithCreator extends CreatorEvent {
   creatorTwitter?: string | null;
   creatorAvatar?: string | null;
+  participantCount?: number;
 }
 
 export default function CreatorEventsPage() {
@@ -31,23 +32,37 @@ export default function CreatorEventsPage() {
       try {
         const fetchedEvents = await fetchCreatorEvents();
 
-        // Enrich with creator Twitter data
+        // Enrich with creator Twitter data and participant count
         const enriched = await Promise.all(
           fetchedEvents.map(async (ev) => {
+            let enrichedEvent: EventWithCreator = { ...ev };
+
             try {
               const response = await fetch(`/api/users/profile/${ev.creator}`);
               if (response.ok) {
                 const profile = await response.json();
-                return {
-                  ...ev,
-                  creatorTwitter: profile.twitterHandle || null,
-                  creatorAvatar: profile.twitterAvatar || null,
-                };
+                enrichedEvent.creatorTwitter = profile.twitterHandle || null;
+                enrichedEvent.creatorAvatar = profile.twitterAvatar || null;
               }
             } catch {
               // Silently fail - just won't have Twitter data
             }
-            return { ...ev, creatorTwitter: null, creatorAvatar: null };
+
+            // Fetch participant count
+            try {
+              const participantsRes = await fetch(
+                `/api/creator-events/${ev.eventId}/participants`,
+              );
+              if (participantsRes.ok) {
+                const participantsData = await participantsRes.json();
+                enrichedEvent.participantCount = participantsData.count || 0;
+              }
+            } catch {
+              // Silently fail - default to 0
+              enrichedEvent.participantCount = 0;
+            }
+
+            return enrichedEvent;
           }),
         );
 
@@ -313,6 +328,19 @@ export default function CreatorEventsPage() {
                       <span className="text-gray-500 text-xs">
                         #{ev.eventId}
                       </span>
+                      {/* Participant Counter */}
+                      {ev.status === "OPEN" && (
+                        <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-orange-500/10 text-orange-400 border border-orange-500/30 flex items-center gap-1.5">
+                          <svg
+                            className="w-3 h-3"
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+                          </svg>
+                          {ev.participantCount ?? 0}/200
+                        </span>
+                      )}
                     </div>
                     <h3 className="text-white font-bold text-lg group-hover:text-orange-400 transition truncate">
                       {ev.eventName}
