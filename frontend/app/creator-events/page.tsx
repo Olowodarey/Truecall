@@ -140,9 +140,11 @@ export default function CreatorEventsPage() {
       <Header />
       <main className="flex-1 container mx-auto px-4 max-w-4xl mt-28 mb-20">
         {/* Header row */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-white">Creator Events</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white">
+              Creator Events
+            </h1>
             <p className="text-gray-400 text-sm mt-1">
               Invite-code prediction events · Free to join · Winners on-chain
             </p>
@@ -169,7 +171,7 @@ export default function CreatorEventsPage() {
               </div>
             )}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 sm:shrink-0">
             {isAdminAddress(address ?? undefined) && (
               <button
                 onClick={() => router.push("/creator-events/admin")}
