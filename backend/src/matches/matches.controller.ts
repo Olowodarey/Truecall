@@ -150,9 +150,48 @@ export class MatchesController {
     description: 'Match fixture ID (e.g., api_123 or match_001)',
   })
   async getMatchById(@Param('id') id: string) {
-    this.logger.log(`Fetching match: ${id} from database`);
+    this.logger.log(`Fetching match: ${id}`);
 
-    // Try database cache first
+    // For API-Football matches (api_*), try to fetch live data first if status is not FT
+    if (id.startsWith('api_')) {
+      const cachedMatch = await this.databaseCache.getMatchById(id);
+
+      // If cached match exists and is already finished, return it
+      if (cachedMatch && cachedMatch.status === 'FT') {
+        this.logger.log(
+          `Match ${id} is finished in cache, returning cached data`,
+        );
+        return cachedMatch;
+      }
+
+      // Otherwise, fetch live data from API-Football
+      try {
+        const fixtureId = parseInt(id.replace('api_', ''), 10);
+        this.logger.log(
+          `Fetching live data for fixture ${fixtureId} from API-Football`,
+        );
+        const liveMatch = await this.matchesService.getMatchByApiId(fixtureId);
+
+        if (liveMatch) {
+          this.logger.log(
+            `Found live data for ${id}, status: ${liveMatch.status}`,
+          );
+          return liveMatch;
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Failed to fetch live data for ${id}, falling back to cache`,
+          error.message,
+        );
+      }
+
+      // Fallback to cached data if live fetch fails
+      if (cachedMatch) {
+        return cachedMatch;
+      }
+    }
+
+    // Try database cache for non-API matches
     const cachedMatch = await this.databaseCache.getMatchById(id);
     if (cachedMatch) {
       return cachedMatch;
