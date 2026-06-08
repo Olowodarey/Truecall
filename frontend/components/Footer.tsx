@@ -25,8 +25,8 @@ export default function Footer() {
     {
       title: "COMMUNITY",
       links: [
-        { name: "Twitter", href: "https://twitter.com/truecall" },
-        { name: "GitHub", href: "https://github.com/truecall" },
+        { name: "Twitter", href: "https://x.com/Truecall89" },
+        { name: "GitHub", href: "https://github.com/Olowodarey/Truecall" },
       ],
     },
   ];
@@ -55,7 +55,7 @@ export default function Footer() {
             {/* Social Links */}
             <div className="flex space-x-4 justify-center lg:justify-start pt-2">
               <a
-                href="https://twitter.com/truecall"
+                href="https://x.com/Truecall89"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-gray-400 hover:text-white transition-colors"
@@ -69,7 +69,7 @@ export default function Footer() {
                 </svg>
               </a>
               <a
-                href="https://github.com/truecall"
+                href="https://github.com/Olowodarey/Truecall"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-gray-400 hover:text-white transition-colors"
