@@ -3,12 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useWallet } from "@/contexts/WalletContext";
-import {
-  useWriteContract,
-  useWaitForTransactionReceipt,
-  useChainId,
-  useSwitchChain,
-} from "wagmi";
+import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { celo } from "@/lib/wagmi";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -56,9 +51,6 @@ export default function CreatorEventDetailPage() {
   const router = useRouter();
   const eventId = Number(params?.id);
   const { isConnected, address, connectWallet } = useWallet();
-  const chainId = useChainId();
-  const { switchChainAsync } = useSwitchChain();
-  const isWrongNetwork = chainId !== celo.id;
 
   const [event, setEvent] = useState<CreatorEvent | null>(null);
   const [matches, setMatches] = useState<CreatorMatch[]>([]);
@@ -311,19 +303,18 @@ export default function CreatorEventDetailPage() {
 
     resetJoin();
 
-    if (isWrongNetwork) {
-      try {
-        await switchChainAsync({ chainId: celo.id });
-      } catch {
-        return;
-      }
-    }
-
+    // Trigger the wallet request immediately, in the same tick as the click —
+    // mobile wallets (WalletConnect deep links) only auto-open when the
+    // request fires inside a synchronous user-gesture chain. Awaiting
+    // switchChainAsync() first breaks that chain, so the wallet app never
+    // pops up. Passing chainId here lets the connector handle switching as
+    // part of the same request instead of a separate round trip.
     joinWrite({
       address: CREATOR_EVENT_MANAGER_ADDRESS,
       abi: CREATOR_EVENT_MANAGER_ABI,
       functionName: "joinEvent",
       args: [BigInt(eventId), inviteCode.trim()],
+      chainId: celo.id,
     });
   };
 
@@ -337,19 +328,14 @@ export default function CreatorEventDetailPage() {
       return setPredictError("Enter valid scores (0–20)");
     resetPredict();
 
-    if (isWrongNetwork) {
-      try {
-        await switchChainAsync({ chainId: celo.id });
-      } catch {
-        return;
-      }
-    }
-
+    // Fire the wallet request synchronously (see handleJoin) so mobile
+    // wallets open via deep link instead of silently doing nothing.
     predictWrite({
       address: CREATOR_EVENT_MANAGER_ADDRESS,
       abi: CREATOR_EVENT_MANAGER_ABI,
       functionName: "submitPrediction",
       args: [BigInt(matchId), h, a],
+      chainId: celo.id,
     });
   };
 
@@ -445,14 +431,8 @@ export default function CreatorEventDetailPage() {
       return setAddMatchError("Kickoff must be in the future");
     resetAddMatch();
 
-    if (isWrongNetwork) {
-      try {
-        await switchChainAsync({ chainId: celo.id });
-      } catch {
-        return;
-      }
-    }
-
+    // Fire the wallet request synchronously (see handleJoin) so mobile
+    // wallets open via deep link instead of silently doing nothing.
     addMatchWrite({
       address: CREATOR_EVENT_MANAGER_ADDRESS,
       abi: CREATOR_EVENT_MANAGER_ABI,
@@ -464,6 +444,7 @@ export default function CreatorEventDetailPage() {
         newMatch.apiMatchId.trim() || `match-${Date.now()}`,
         BigInt(kickoffTs),
       ],
+      chainId: celo.id,
     });
   };
 
@@ -678,7 +659,7 @@ export default function CreatorEventDetailPage() {
                 Joining is free — you just need the invite code from the
                 creator.
               </p>
-              <div className="flex gap-3">
+              <div className="flex flex-col sm:flex-row gap-3">
                 <input
                   type="text"
                   value={inviteCode}
@@ -688,12 +669,12 @@ export default function CreatorEventDetailPage() {
                   }}
                   placeholder="Enter invite code"
                   disabled={joinPending || joinMining}
-                  className="flex-1 px-4 py-2.5 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono uppercase disabled:opacity-50"
+                  className="flex-1 min-w-0 px-4 py-2.5 bg-gray-700/50 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono uppercase disabled:opacity-50"
                 />
                 <button
                   onClick={handleJoin}
                   disabled={joinPending || joinMining}
-                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 px-5 rounded-lg transition disabled:opacity-50"
+                  className="shrink-0 sm:w-32 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 px-5 rounded-lg transition disabled:opacity-50"
                 >
                   {joinPending
                     ? "Confirm…"
