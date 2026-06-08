@@ -167,59 +167,65 @@ export default function CreatorEventDetailPage() {
       setEvent(ev);
       setMatches(ms);
 
-      // Load creator Twitter info
-      try {
-        const creatorProfile = await fetch(`/api/users/profile/${ev.creator}`);
-        if (creatorProfile.ok) {
-          const profile = await creatorProfile.json();
-          setCreatorTwitter(profile.twitterHandle || null);
-          setCreatorAvatar(profile.twitterAvatar || null);
-        }
-      } catch {
-        // Silently fail
+      // Everything below is independent — fire it all at once instead of
+      // awaiting one request before starting the next.
+      const creatorProfilePromise = fetch(`/api/users/profile/${ev.creator}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null);
+
+      const participantsPromise = fetch(
+        `/api/creator-events/${eventId}/participants`,
+      )
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null);
+
+      const userDataPromise = address
+        ? Promise.all([
+            fetchCreatorHasJoined(eventId, address),
+            fetch(`/api/users/twitter/verify-status/${address}`)
+              .then((r) => r.json())
+              .catch(() => ({
+                verified: false,
+                twitterHandle: null,
+                twitterAvatar: null,
+              })),
+            Promise.all(
+              ms.map((match) =>
+                fetch(
+                  `/api/creator-events/match/${match.matchId}/prediction/${address}`,
+                )
+                  .then((r) => r.json())
+                  .then((pred) => ({ matchId: match.matchId, pred }))
+                  .catch(() => null),
+              ),
+            ),
+          ])
+        : null;
+
+      const [creatorProfile, participantsData, userData] = await Promise.all([
+        creatorProfilePromise,
+        participantsPromise,
+        userDataPromise,
+      ]);
+
+      if (creatorProfile) {
+        setCreatorTwitter(creatorProfile.twitterHandle || null);
+        setCreatorAvatar(creatorProfile.twitterAvatar || null);
       }
 
-      // Load participant count
-      try {
-        const participantsRes = await fetch(
-          `/api/creator-events/${eventId}/participants`,
-        );
-        if (participantsRes.ok) {
-          const participantsData = await participantsRes.json();
-          setParticipantCount(participantsData.count || 0);
-        }
-      } catch {
-        setParticipantCount(0);
-      }
+      setParticipantCount(participantsData?.count || 0);
 
-      if (address) {
-        const [joined, verified] = await Promise.all([
-          fetchCreatorHasJoined(eventId, address),
-          fetch(`/api/users/twitter/verify-status/${address}`)
-            .then((r) => r.json())
-            .catch(() => ({
-              verified: false,
-              twitterHandle: null,
-              twitterAvatar: null,
-            })),
-        ]);
+      if (userData) {
+        const [joined, verified, predictionResults] = userData;
         setHasJoined(joined.joined);
         setIsVerified(verified.verified ?? false);
         setTwitterHandle(verified.twitterHandle);
         setTwitterAvatar(verified.twitterAvatar);
 
-        // Fetch predictions for all matches
         const predictions: Record<number, any> = {};
-        for (const match of ms) {
-          try {
-            const pred = await fetch(
-              `/api/creator-events/match/${match.matchId}/prediction/${address}`,
-            ).then((r) => r.json());
-            if (pred && pred.submitted) {
-              predictions[match.matchId] = pred;
-            }
-          } catch {
-            // Silently continue
+        for (const result of predictionResults) {
+          if (result?.pred?.submitted) {
+            predictions[result.matchId] = result.pred;
           }
         }
         setUserPredictions(predictions);

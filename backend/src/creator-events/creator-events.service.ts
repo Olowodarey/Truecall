@@ -22,13 +22,71 @@ const celoMainnet = {
 const EVENT_STATUS = ['OPEN', 'COMPLETED', 'CANCELLED'] as const;
 const MATCH_STATUS = ['OPEN', 'VERIFIED'] as const;
 
+/**
+ * Short-lived in-memory cache for on-chain reads. The chain stays the source
+ * of truth — a cold cache (e.g. right after a redeploy) just means the next
+ * request takes the normal RPC round-trip, nothing is lost or goes stale long.
+ */
+class TTLCache {
+  private store = new Map<string, { value: unknown; expiresAt: number }>();
+
+  get<T>(key: string): T | undefined {
+    const entry = this.store.get(key);
+    if (!entry) return undefined;
+    if (Date.now() > entry.expiresAt) {
+      this.store.delete(key);
+      return undefined;
+    }
+    return entry.value as T;
+  }
+
+  set(key: string, value: unknown, ttlMs: number) {
+    this.store.set(key, { value, expiresAt: Date.now() + ttlMs });
+  }
+
+  delete(key: string) {
+    this.store.delete(key);
+  }
+
+  clear() {
+    this.store.clear();
+  }
+}
+
+// How long cached on-chain reads stay fresh. Event/match/participant data only
+// changes via on-chain txs (join, predict, addMatch, oracle results), so a
+// short TTL hides RPC latency on repeat page loads without noticeable staleness.
+const TTL = {
+  EVENT: 30_000,
+  EVENT_LIST: 20_000,
+  MATCH: 30_000,
+  EVENT_MATCHES: 30_000,
+  WINNERS: 30_000,
+  PARTICIPANTS: 20_000,
+  FEE: 5 * 60_000,
+  VERIFIED: 60_000,
+};
+
 @Injectable()
 export class CreatorEventsService implements OnModuleInit {
   private readonly logger = new Logger(CreatorEventsService.name);
+  private readonly cache = new TTLCache();
   private publicClient: ReturnType<typeof createPublicClient>;
   private walletClient: ReturnType<typeof createWalletClient>;
   private contractAddress: `0x${string}`;
   private account: ReturnType<typeof privateKeyToAccount>;
+
+  private async cached<T>(
+    key: string,
+    ttlMs: number,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    const hit = this.cache.get<T>(key);
+    if (hit !== undefined) return hit;
+    const value = await fn();
+    this.cache.set(key, value, ttlMs);
+    return value;
+  }
 
   constructor(private config: ConfigService) {}
 
@@ -118,104 +176,121 @@ export class CreatorEventsService implements OnModuleInit {
   // ─── Reads ─────────────────────────────────────────────────────────────────
 
   async getEvent(eventId: number) {
-    const ev = await this.publicClient.readContract({
-      address: this.contractAddress,
-      abi: CREATOR_EVENT_MANAGER_ABI,
-      functionName: 'getEvent',
-      args: [BigInt(eventId)],
-    });
+    return this.cached(`event:${eventId}`, TTL.EVENT, async () => {
+      const ev = await this.publicClient.readContract({
+        address: this.contractAddress,
+        abi: CREATOR_EVENT_MANAGER_ABI,
+        functionName: 'getEvent',
+        args: [BigInt(eventId)],
+      });
 
-    return {
-      eventId: Number(ev.eventId),
-      creator: ev.creator,
-      eventName: ev.eventName,
-      createdAt: Number(ev.createdAt),
-      status: EVENT_STATUS[ev.status] ?? String(ev.status),
-    };
+      return {
+        eventId: Number(ev.eventId),
+        creator: ev.creator,
+        eventName: ev.eventName,
+        createdAt: Number(ev.createdAt),
+        status: EVENT_STATUS[ev.status] ?? String(ev.status),
+      };
+    });
   }
 
   async getAllEvents() {
-    const total = Number(
-      await this.publicClient.readContract({
-        address: this.contractAddress,
-        abi: CREATOR_EVENT_MANAGER_ABI,
-        functionName: 'nextEventId',
-      }),
-    );
-    if (total === 0) return [];
-    return Promise.all(
-      Array.from({ length: total }, (_, i) => this.getEvent(i)),
-    );
+    return this.cached('allEvents', TTL.EVENT_LIST, async () => {
+      const total = Number(
+        await this.publicClient.readContract({
+          address: this.contractAddress,
+          abi: CREATOR_EVENT_MANAGER_ABI,
+          functionName: 'nextEventId',
+        }),
+      );
+      if (total === 0) return [];
+      return Promise.all(
+        Array.from({ length: total }, (_, i) => this.getEvent(i)),
+      );
+    });
   }
 
   async getMatch(matchId: number) {
-    const m = await this.publicClient.readContract({
-      address: this.contractAddress,
-      abi: CREATOR_EVENT_MANAGER_ABI,
-      functionName: 'getMatch',
-      args: [BigInt(matchId)],
-    });
+    return this.cached(`match:${matchId}`, TTL.MATCH, async () => {
+      const m = await this.publicClient.readContract({
+        address: this.contractAddress,
+        abi: CREATOR_EVENT_MANAGER_ABI,
+        functionName: 'getMatch',
+        args: [BigInt(matchId)],
+      });
 
-    return {
-      matchId: Number(m.matchId),
-      eventId: Number(m.eventId),
-      homeTeam: m.homeTeam,
-      awayTeam: m.awayTeam,
-      apiMatchId: m.apiMatchId,
-      kickoffTime: Number(m.kickoffTime),
-      status: MATCH_STATUS[m.status] ?? String(m.status),
-      finalHomeScore: m.finalHomeScore,
-      finalAwayScore: m.finalAwayScore,
-      verifiedAt: Number(m.verifiedAt),
-    };
+      return {
+        matchId: Number(m.matchId),
+        eventId: Number(m.eventId),
+        homeTeam: m.homeTeam,
+        awayTeam: m.awayTeam,
+        apiMatchId: m.apiMatchId,
+        kickoffTime: Number(m.kickoffTime),
+        status: MATCH_STATUS[m.status] ?? String(m.status),
+        finalHomeScore: m.finalHomeScore,
+        finalAwayScore: m.finalAwayScore,
+        verifiedAt: Number(m.verifiedAt),
+      };
+    });
   }
 
   async getEventMatches(eventId: number) {
-    const ids = (await this.publicClient.readContract({
-      address: this.contractAddress,
-      abi: CREATOR_EVENT_MANAGER_ABI,
-      functionName: 'getEventMatches',
-      args: [BigInt(eventId)],
-    })) as bigint[];
+    return this.cached(`eventMatches:${eventId}`, TTL.EVENT_MATCHES, async () => {
+      const ids = (await this.publicClient.readContract({
+        address: this.contractAddress,
+        abi: CREATOR_EVENT_MANAGER_ABI,
+        functionName: 'getEventMatches',
+        args: [BigInt(eventId)],
+      })) as bigint[];
 
-    return Promise.all(ids.map((id) => this.getMatch(Number(id))));
+      return Promise.all(ids.map((id) => this.getMatch(Number(id))));
+    });
   }
 
   async getMatchWinners(matchId: number) {
-    const winners = (await this.publicClient.readContract({
-      address: this.contractAddress,
-      abi: CREATOR_EVENT_MANAGER_ABI,
-      functionName: 'getMatchWinners',
-      args: [BigInt(matchId)],
-    })) as Array<{ user: string; submittedAt: bigint }>;
+    return this.cached(`winners:${matchId}`, TTL.WINNERS, async () => {
+      const winners = (await this.publicClient.readContract({
+        address: this.contractAddress,
+        abi: CREATOR_EVENT_MANAGER_ABI,
+        functionName: 'getMatchWinners',
+        args: [BigInt(matchId)],
+      })) as Array<{ user: string; submittedAt: bigint }>;
 
-    return winners.map((w) => ({
-      user: w.user,
-      submittedAt: Number(w.submittedAt),
-    }));
+      return winners.map((w) => ({
+        user: w.user,
+        submittedAt: Number(w.submittedAt),
+      }));
+    });
   }
 
   async getParticipants(eventId: number) {
-    return (await this.publicClient.readContract({
-      address: this.contractAddress,
-      abi: CREATOR_EVENT_MANAGER_ABI,
-      functionName: 'getParticipants',
-      args: [BigInt(eventId)],
-    })) as string[];
+    return this.cached(`participants:${eventId}`, TTL.PARTICIPANTS, async () => {
+      return (await this.publicClient.readContract({
+        address: this.contractAddress,
+        abi: CREATOR_EVENT_MANAGER_ABI,
+        functionName: 'getParticipants',
+        args: [BigInt(eventId)],
+      })) as string[];
+    });
   }
 
   async getParticipantCount(eventId: number) {
-    return Number(
-      await this.publicClient.readContract({
-        address: this.contractAddress,
-        abi: CREATOR_EVENT_MANAGER_ABI,
-        functionName: 'getParticipantCount',
-        args: [BigInt(eventId)],
-      }),
-    );
+    return this.cached(`participantCount:${eventId}`, TTL.PARTICIPANTS, async () => {
+      return Number(
+        await this.publicClient.readContract({
+          address: this.contractAddress,
+          abi: CREATOR_EVENT_MANAGER_ABI,
+          functionName: 'getParticipantCount',
+          args: [BigInt(eventId)],
+        }),
+      );
+    });
   }
 
   async hasJoined(eventId: number, user: string) {
+    // Not cached: writes (joinEvent) go directly through the user's wallet,
+    // bypassing the backend, so a cache here could show stale "not joined"
+    // right after the user's own action.
     return (await this.publicClient.readContract({
       address: this.contractAddress,
       abi: CREATOR_EVENT_MANAGER_ABI,
@@ -225,15 +300,21 @@ export class CreatorEventsService implements OnModuleInit {
   }
 
   async isVerified(user: string) {
-    return (await this.publicClient.readContract({
-      address: this.contractAddress,
-      abi: CREATOR_EVENT_MANAGER_ABI,
-      functionName: 'isVerified',
-      args: [user as `0x${string}`],
-    })) as boolean;
+    const key = `verified:${user.toLowerCase()}`;
+    return this.cached(key, TTL.VERIFIED, async () => {
+      return (await this.publicClient.readContract({
+        address: this.contractAddress,
+        abi: CREATOR_EVENT_MANAGER_ABI,
+        functionName: 'isVerified',
+        args: [user as `0x${string}`],
+      })) as boolean;
+    });
   }
 
   async getPrediction(matchId: number, user: string) {
+    // Not cached: writes (submitPrediction) go directly through the user's
+    // wallet, so a cache here could show a stale "not submitted" right after
+    // the user's own action.
     const p = (await this.publicClient.readContract({
       address: this.contractAddress,
       abi: CREATOR_EVENT_MANAGER_ABI,
@@ -250,16 +331,18 @@ export class CreatorEventsService implements OnModuleInit {
   }
 
   async getCreationFee() {
-    const fee = (await this.publicClient.readContract({
-      address: this.contractAddress,
-      abi: CREATOR_EVENT_MANAGER_ABI,
-      functionName: 'creationFee',
-    })) as bigint;
+    return this.cached('creationFee', TTL.FEE, async () => {
+      const fee = (await this.publicClient.readContract({
+        address: this.contractAddress,
+        abi: CREATOR_EVENT_MANAGER_ABI,
+        functionName: 'creationFee',
+      })) as bigint;
 
-    return {
-      amount: formatUnits(fee, 18), // e.g. "0.1"
-      amountRaw: fee.toString(), // wei string for frontend BigInt conversion
-    };
+      return {
+        amount: formatUnits(fee, 18), // e.g. "0.1"
+        amountRaw: fee.toString(), // wei string for frontend BigInt conversion
+      };
+    });
   }
 
   // ─── Writes ────────────────────────────────────────────────────────────────
@@ -275,6 +358,7 @@ export class CreatorEventsService implements OnModuleInit {
       args: [user as `0x${string}`],
     });
     const receipt = await this.publicClient.waitForTransactionReceipt({ hash });
+    this.cache.delete(`verified:${user.toLowerCase()}`);
     return { success: true, transactionHash: receipt.transactionHash, user };
   }
 
@@ -289,6 +373,7 @@ export class CreatorEventsService implements OnModuleInit {
       args: [users as `0x${string}`[]],
     });
     const receipt = await this.publicClient.waitForTransactionReceipt({ hash });
+    for (const u of users) this.cache.delete(`verified:${u.toLowerCase()}`);
     return { success: true, transactionHash: receipt.transactionHash, users };
   }
 
@@ -303,6 +388,7 @@ export class CreatorEventsService implements OnModuleInit {
       args: [user as `0x${string}`],
     });
     const receipt = await this.publicClient.waitForTransactionReceipt({ hash });
+    this.cache.delete(`verified:${user.toLowerCase()}`);
     return { success: true, transactionHash: receipt.transactionHash, user };
   }
 
@@ -343,6 +429,11 @@ export class CreatorEventsService implements OnModuleInit {
     });
     const receipt = await this.publicClient.waitForTransactionReceipt({ hash });
     this.logger.log(`Result submitted: ${receipt.transactionHash}`);
+    // Submitting a result can flip match status to VERIFIED and may
+    // auto-complete the event — clear everything rather than tracking the
+    // exact dependency chain. This only runs when the oracle posts a result
+    // (a handful of times per event), so the cost is negligible.
+    this.cache.clear();
     return {
       success: true,
       transactionHash: receipt.transactionHash,
