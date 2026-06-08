@@ -237,6 +237,18 @@ export default function ProfilePage() {
         localStorage.getItem("twitter_code_verifier")?.slice(0, 10) + "...",
     });
 
+    // Mobile browsers (especially iOS Safari) only hand off to the native
+    // X/Twitter app — where the user is already logged in — on a top-level
+    // page navigation, not a window.open() popup. Popups on iOS just load
+    // the Twitter website, often logged out. Redirect the whole page instead;
+    // the callback page already supports this (falls back to router.push when
+    // there's no window.opener) and Twitter will bounce back to redirectUri.
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (isMobile) {
+      window.location.href = authUrl;
+      return;
+    }
+
     // Open Twitter auth in popup window
     const width = 600;
     const height = 700;

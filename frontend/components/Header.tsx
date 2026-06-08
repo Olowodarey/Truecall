@@ -20,7 +20,7 @@ export default function Header() {
         <nav className="flex items-center justify-between gap-2">
           <Link href="/" className="flex items-center space-x-2 shrink-0">
             <Image
-              src="/logo.png"
+              src="/newlogo.png"
               alt="TrueCall"
               width={420}
               height={440}
