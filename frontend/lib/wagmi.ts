@@ -1,74 +1,42 @@
-import { http, createConfig, createStorage, cookieStorage } from "wagmi";
-import { defineChain } from "viem";
-import { injected, walletConnect } from "wagmi/connectors";
+import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
+import { createAppKit } from "@reown/appkit/react";
+import { celo } from "@reown/appkit/networks";
 
-// Celo Mainnet
-export const celo = defineChain({
-  id: 42220,
-  name: "Celo",
-  nativeCurrency: { name: "CELO", symbol: "CELO", decimals: 18 },
-  rpcUrls: {
-    default: {
-      http: [process.env.NEXT_PUBLIC_CELO_RPC ?? "https://forno.celo.org"],
-    },
-  },
-  blockExplorers: {
-    default: {
-      name: "Celoscan",
-      url: "https://celoscan.io",
-    },
-  },
-  testnet: false,
-});
+export { celo };
 
-// Keep testnet export for backward compatibility (but not in config)
-export const celoSepolia = defineChain({
-  id: 11142220,
-  name: "Celo Sepolia",
-  nativeCurrency: { name: "CELO", symbol: "CELO", decimals: 18 },
-  rpcUrls: {
-    default: {
-      http: ["https://forno.celo-sepolia.celo-testnet.org"],
-    },
-  },
-  blockExplorers: {
-    default: {
-      name: "Blockscout",
-      url: "https://celo-sepolia.blockscout.com",
-    },
-  },
-  testnet: true,
-});
+const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "";
 
-// WalletConnect Project ID - Get yours at https://cloud.walletconnect.com
-const projectId =
-  process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "YOUR_PROJECT_ID";
+const networks = [celo] as [typeof celo, ...typeof celo[]];
 
-export const wagmiConfig = createConfig({
-  chains: [celo],
-  connectors: [
-    injected({
-      shimDisconnect: true,
-    }),
-    walletConnect({
-      projectId,
-      metadata: {
-        name: "TrueCall",
-        description: "Blockchain-powered football predictions",
-        url: "https://truecall.xyz",
-        icons: ["https://truecall.xyz/logo.png"],
-      },
-      showQrModal: true,
-    }),
-  ],
-  transports: {
-    [celo.id]: http(
-      process.env.NEXT_PUBLIC_CELO_RPC ?? "https://forno.celo.org",
-    ),
-  },
+export const wagmiAdapter = new WagmiAdapter({
   ssr: true,
-  storage: createStorage({
-    storage:
-      typeof window !== "undefined" ? window.localStorage : cookieStorage,
-  }),
+  projectId,
+  networks,
+});
+
+export const wagmiConfig = wagmiAdapter.wagmiConfig;
+
+createAppKit({
+  adapters: [wagmiAdapter],
+  projectId,
+  networks,
+  defaultNetwork: celo,
+  metadata: {
+    name: "TrueCall",
+    description: "Blockchain-powered football predictions",
+    url: "https://truecall.xyz",
+    icons: ["https://truecall.xyz/logo.png"],
+  },
+  features: {
+    analytics: false,
+    email: false,
+    socials: [],
+  },
+  themeMode: "dark",
+  themeVariables: {
+    "--w3m-color-mix": "#f97316",
+    "--w3m-color-mix-strength": 20,
+    "--w3m-accent": "#f97316",
+    "--w3m-border-radius-master": "8px",
+  },
 });

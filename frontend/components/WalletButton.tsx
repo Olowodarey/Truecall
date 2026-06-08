@@ -4,7 +4,7 @@ import { useWallet } from "@/contexts/WalletContext";
 import { useEffect, useState } from "react";
 
 export default function WalletButton() {
-  const { isConnected, address, connectWallet, disconnectWallet } = useWallet();
+  const { isConnected, address, connectWallet, disconnectWallet, isConnecting } = useWallet();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -43,9 +43,10 @@ export default function WalletButton() {
   return (
     <button
       onClick={connectWallet}
-      className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg transition-colors text-sm font-medium"
+      disabled={isConnecting}
+      className="bg-orange-500 hover:bg-orange-600 disabled:opacity-60 text-white px-4 py-2 rounded-lg transition-colors text-sm font-medium"
     >
-      Connect Wallet
+      {isConnecting ? "Connecting..." : "Connect Wallet"}
     </button>
   );
 }

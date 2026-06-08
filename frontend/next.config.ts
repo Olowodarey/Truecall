@@ -10,6 +10,8 @@ const nextConfig: NextConfig = {
       ...config.resolve.fallback,
       "pino-pretty": false,
       "@react-native-async-storage/async-storage": false,
+      accounts: false,
+      "@metamask/connect-evm": false,
     };
 
     // Ignore specific warnings
