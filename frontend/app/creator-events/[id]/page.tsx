@@ -235,15 +235,14 @@ export default function CreatorEventDetailPage() {
 
   useEffect(() => {
     if (joinDone && joinTx) {
-      // Wait a moment for blockchain to be indexed
+      // Give the chain/backend a moment to index the new state, then reload
+      // the whole page so everything (join state, participant count,
+      // matches) is guaranteed fresh — no stale client state to reconcile.
       setTimeout(() => {
-        setInviteCode("");
-        setJoinError(null);
-        resetJoin();
-        load();
+        window.location.reload();
       }, 1500);
     }
-  }, [joinDone, joinTx, load, resetJoin]);
+  }, [joinDone, joinTx]);
 
   useEffect(() => {
     if (joinWriteError) {
@@ -252,14 +251,13 @@ export default function CreatorEventDetailPage() {
   }, [joinWriteError]);
   useEffect(() => {
     if (predictDone) {
-      setPredictMatchId(null);
-      setHomeScore("");
-      setAwayScore("");
-      setPredictError(null);
-      resetPredict();
-      load();
+      // Same as join — reload the page so the new prediction, standings,
+      // etc. are guaranteed to reflect the latest on-chain state.
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
     }
-  }, [predictDone, load, resetPredict]);
+  }, [predictDone]);
 
   useEffect(() => {
     if (predictWriteError) {
