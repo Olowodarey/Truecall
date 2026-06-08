@@ -654,10 +654,10 @@ export default function CreatorEventDetailPage() {
                 This helps creators know you're a real person and builds trust
                 in the community.
               </p>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                 <button
                   onClick={() => router.push("/profile")}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-5 rounded-lg transition flex items-center gap-2"
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-5 rounded-lg transition flex items-center justify-center gap-2 shrink-0"
                 >
                   🐦 Verify Twitter
                 </button>
