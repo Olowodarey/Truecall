@@ -37,7 +37,7 @@ export default function HowItWorksSection() {
             </span>
             <h2 className="text-4xl lg:text-5xl font-bold text-white mb-8 leading-tight">
               How It{" "}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-yellow-400">
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-amber-500">
                 Works
               </span>
             </h2>
@@ -69,7 +69,7 @@ export default function HowItWorksSection() {
                 <linearGradient id="gradient" x1="0%" y1="0%" x2="0%" y2="100%">
                   <stop offset="0%" stopColor="#fb923c" />
                   <stop offset="50%" stopColor="#f59e0b" />
-                  <stop offset="100%" stopColor="#eab308" />
+                  <stop offset="100%" stopColor="#d97706" />
                 </linearGradient>
               </defs>
             </svg>

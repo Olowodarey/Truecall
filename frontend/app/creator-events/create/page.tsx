@@ -345,7 +345,7 @@ export default function CreateCreatorEventPage() {
             </p>
             <button
               onClick={connectWallet}
-              className="bg-gradient-to-r from-orange-500 to-yellow-500 text-white font-bold py-3 px-8 rounded-lg hover:from-orange-600 hover:to-yellow-600 transition"
+              className="bg-gradient-to-r from-amber-500 to-amber-600 text-white font-bold py-3 px-8 rounded-lg hover:from-amber-600 hover:to-amber-700 transition"
             >
               Connect Wallet
             </button>
@@ -713,7 +713,7 @@ export default function CreateCreatorEventPage() {
             <button
               type="submit"
               disabled={busy || feeWei === BigInt(0)}
-              className="w-full bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold py-3.5 px-6 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold py-3.5 px-6 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {busy ? (
                 <>

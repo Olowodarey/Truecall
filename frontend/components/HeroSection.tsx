@@ -65,7 +65,7 @@ export default function HeroSection() {
           {/* Main Heading */}
           <div className="space-y-4">
             <h1 className="text-5xl lg:text-7xl font-bold text-white leading-tight">
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-yellow-400">
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-amber-500">
                 TrueCall
               </span>
             </h1>

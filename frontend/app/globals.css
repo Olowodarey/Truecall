@@ -27,8 +27,13 @@ body {
 
 /* Custom animations for the 3D elements */
 @keyframes float {
-  0%, 100% { transform: translateY(0px) rotate(45deg); }
-  50% { transform: translateY(-10px) rotate(45deg); }
+  0%,
+  100% {
+    transform: translateY(0px) rotate(45deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(45deg);
+  }
 }
 
 .animate-float {
@@ -37,7 +42,7 @@ body {
 
 /* Gradient text utilities */
 .gradient-text {
-  background: linear-gradient(135deg, #f97316, #eab308);
+  background: linear-gradient(135deg, #f59e0b, #d97706);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;

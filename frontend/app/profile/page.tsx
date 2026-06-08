@@ -350,7 +350,7 @@ export default function ProfilePage() {
             <button
               onClick={connectWallet}
               disabled={isConnecting}
-              className="px-8 py-3 bg-gradient-to-r from-orange-500 to-yellow-500 text-white font-bold rounded-xl hover:shadow-lg transition disabled:opacity-60 disabled:cursor-not-allowed"
+              className="px-8 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white font-bold rounded-xl hover:shadow-lg transition disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {isConnecting ? "Waiting for wallet…" : "Connect Wallet"}
             </button>

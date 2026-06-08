@@ -31,7 +31,7 @@ export default function AboutPage() {
           <div className="text-center mb-16">
             <h1 className="text-5xl lg:text-6xl font-bold text-white mb-4">
               About{" "}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-yellow-400">
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-amber-500">
                 TrueCall
               </span>
             </h1>
@@ -225,7 +225,7 @@ export default function AboutPage() {
             </section>
 
             {/* Creator Events */}
-            <section className="bg-gradient-to-r from-orange-500/10 to-yellow-500/10 border border-orange-500/30 rounded-2xl p-8">
+            <section className="bg-gradient-to-r from-amber-500/10 to-amber-600/10 border border-amber-500/30 rounded-2xl p-8">
               <div className="flex items-center gap-3 mb-4">
                 <span className="text-4xl">🎪</span>
                 <h2 className="text-3xl font-bold text-white">
@@ -240,7 +240,7 @@ export default function AboutPage() {
               </p>
               <button
                 onClick={() => router.push("/creator-events/create")}
-                className="bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold py-3 px-8 rounded-lg transition-all"
+                className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold py-3 px-8 rounded-lg transition-all"
               >
                 Create Your Event →
               </button>

@@ -59,7 +59,7 @@ export default function CreatorEventsSection() {
           <h2 className="text-4xl lg:text-5xl font-bold text-white mb-5 leading-tight">
             Host Your Own
             <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-yellow-400">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-amber-500">
               Prediction Event
             </span>
           </h2>
@@ -108,7 +108,7 @@ export default function CreatorEventsSection() {
         </div>
 
         {/* Anti-cheat callout */}
-        <div className="bg-gradient-to-r from-orange-900/20 to-yellow-900/20 border border-orange-500/20 rounded-2xl p-8 mb-12 text-center max-w-3xl mx-auto">
+        <div className="bg-gradient-to-r from-amber-900/20 to-amber-800/20 border border-amber-500/20 rounded-2xl p-8 mb-12 text-center max-w-3xl mx-auto">
           <p className="text-gray-200 text-lg leading-relaxed">
             Every prediction is stored on-chain the moment it's submitted — with
             a block timestamp that can never be changed. When the AI Oracle
@@ -122,7 +122,7 @@ export default function CreatorEventsSection() {
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Link
             href="/creator-events/create"
-            className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold py-3.5 px-10 rounded-lg transition text-lg"
+            className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold py-3.5 px-10 rounded-lg transition text-lg"
           >
             Create an Event →
           </Link>

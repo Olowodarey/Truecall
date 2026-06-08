@@ -580,7 +580,7 @@ export default function CreatorEventDetailPage() {
                   <span className="text-red-400 text-xs">FULL</span>
                 )}
                 {participantCount >= 150 && participantCount < 200 && (
-                  <span className="text-yellow-400 text-xs">FILLING UP</span>
+                  <span className="text-amber-400 text-xs">FILLING UP</span>
                 )}
               </p>
             </div>
@@ -638,7 +638,7 @@ export default function CreatorEventDetailPage() {
               )}
             </div>
           ) : !isVerified ? (
-            <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-xl p-5">
+            <div className="bg-amber-900/20 border border-amber-500/30 rounded-xl p-5">
               <h3 className="text-white font-bold mb-2 flex items-center gap-2">
                 <span>🔒</span>
                 Twitter Verification Required
@@ -937,7 +937,7 @@ export default function CreatorEventDetailPage() {
                         {format(new Date(m.kickoffTime * 1000), "MMM d, HH:mm")}
                       </span>
                       {kickedOff && m.status === "OPEN" && (
-                        <span className="text-yellow-400 text-xs">
+                        <span className="text-amber-400 text-xs">
                           Awaiting result
                         </span>
                       )}

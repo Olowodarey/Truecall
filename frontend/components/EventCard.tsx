@@ -64,7 +64,7 @@ export default function EventCard({ event }: EventCardProps) {
         </div>
       </div>
 
-      <button className="w-full bg-linear-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300">
+      <button className="w-full bg-linear-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300">
         View Event →
       </button>
     </div>

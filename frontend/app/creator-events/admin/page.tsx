@@ -194,7 +194,7 @@ export default function CreatorAdminPage() {
             </p>
             <button
               onClick={connectWallet}
-              className="bg-gradient-to-r from-orange-500 to-yellow-500 text-white font-bold py-3 px-8 rounded-lg hover:from-orange-600 hover:to-yellow-600 transition"
+              className="bg-gradient-to-r from-amber-500 to-amber-600 text-white font-bold py-3 px-8 rounded-lg hover:from-amber-600 hover:to-amber-700 transition"
             >
               Connect Wallet
             </button>

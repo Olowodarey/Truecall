@@ -20,8 +20,8 @@ export default function Home() {
               x2="100%"
               y2="100%"
             >
-              <stop offset="0%" stopColor="#f97316" stopOpacity="0.3" />
-              <stop offset="100%" stopColor="#eab308" stopOpacity="0.2" />
+              <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.3" />
+              <stop offset="100%" stopColor="#d97706" stopOpacity="0.2" />
             </linearGradient>
           </defs>
           <path

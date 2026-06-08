@@ -160,7 +160,7 @@ export default function CreatorEventsPage() {
                 ) : (
                   <button
                     onClick={() => router.push("/profile")}
-                    className="inline-flex items-center gap-2 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 px-3 py-1.5 rounded-lg text-yellow-400 text-sm transition"
+                    className="inline-flex items-center gap-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-3 py-1.5 rounded-lg text-amber-400 text-sm transition"
                   >
                     <span>⚠️</span>
                     <span>Verify Twitter to Join Events</span>
@@ -181,7 +181,7 @@ export default function CreatorEventsPage() {
             {isConnected ? (
               <button
                 onClick={() => router.push("/creator-events/create")}
-                className="bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white font-bold py-2.5 px-5 rounded-lg transition text-sm"
+                className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold py-2.5 px-5 rounded-lg transition text-sm"
               >
                 + Create Event
               </button>
