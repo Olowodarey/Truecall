@@ -89,10 +89,12 @@ export class DatabaseCacheService {
   }
 
   /**
-   * CRON: Sync finished matches every 1 hour
+   * CRON: Sync finished matches every 45 minutes
    * API Calls: 2 per execution (1 for World Cup, 1 for Friendlies)
+   * Total: 32 syncs/day × 2 calls = 64 calls/day
+   * Combined with priority sync (24 calls/day) = 88 calls/day (within 100 limit)
    */
-  @Cron('0 * * * *') // Every hour
+  @Cron('*/45 * * * *') // Every 45 minutes
   async syncFinishedMatches() {
     if (!this.canMakeApiCalls(2)) {
       this.logger.warn('⚠️ Daily API limit reached, skipping finished sync');
