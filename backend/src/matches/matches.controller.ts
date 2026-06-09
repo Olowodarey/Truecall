@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, Logger } from '@nestjs/common';
+import { Controller, Get, Param, Post, Query, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { DatabaseCacheService } from './database-cache.service';
 
@@ -53,6 +53,28 @@ export class MatchesController {
     return {
       message: 'Sync triggered successfully',
       stats: await this.databaseCache.getDatabaseStats(),
+    };
+  }
+
+  /**
+   * Force-refresh a single match directly from the API by its fixture ID.
+   * Use this to unstick a match whose status hasn't updated via the CRON.
+   * Example: POST /matches/admin/refresh/1546502
+   */
+  @Post('admin/refresh/:fixtureId')
+  @ApiOperation({ summary: 'Force-refresh a single match from API-Football by fixture ID' })
+  @ApiParam({ name: 'fixtureId', description: 'API-Football fixture ID (numbers only, e.g. 1546502)' })
+  async forceRefreshMatch(@Param('fixtureId') fixtureId: string) {
+    this.logger.log(`Force refresh requested for fixture ${fixtureId}`);
+    const fixture = await this.databaseCache.forceRefreshMatch(fixtureId);
+    if (!fixture) {
+      return { error: `Fixture ${fixtureId} not found in API-Football` };
+    }
+    return {
+      message: 'Match refreshed successfully',
+      status: fixture.fixture.status.short,
+      home: `${fixture.teams.home.name} ${fixture.score.fulltime.home ?? '?'}`,
+      away: `${fixture.teams.away.name} ${fixture.score.fulltime.away ?? '?'}`,
     };
   }
 

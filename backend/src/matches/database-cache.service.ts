@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, MoreThan, Not, LessThanOrEqual } from 'typeorm';
+import { Repository, In, MoreThan } from 'typeorm';
 import { Cron } from '@nestjs/schedule';
 import { WorldCupApiService, WorldCupFixture } from './world-cup-api.service';
 import { MatchCache, ApiCallLog } from './entities/match-cache.entity';
@@ -93,14 +93,14 @@ export class DatabaseCacheService {
 
   /**
    * CRON: Sync finished matches every 30 minutes.
-   * Queries only the specific fixtures already in the DB that have kicked off
-   * but haven't reached FT yet — avoids the free-tier restriction on broad
-   * date-range queries (which return 0 results).
-   * API Calls: ceil(pendingCount / 20) — typically 1 call per run.
+   * Queries today + yesterday by specific date — the free tier returns data
+   * for ?date= queries unlike broad from/to ranges without a league filter.
+   * API Calls: 2 per run (today + yesterday). Total: 96/day + 8 priority = ~104/day.
+   * With key rotation (4 keys) budget is ~380/day, so this is well within limits.
    */
   @Cron('*/30 * * * *') // Every 30 minutes
   async syncFinishedMatches() {
-    if (!this.canMakeApiCalls(1)) {
+    if (!this.canMakeApiCalls(2)) {
       this.logger.warn('⚠️ Daily API limit reached, skipping finished sync');
       return;
     }
@@ -108,39 +108,30 @@ export class DatabaseCacheService {
     this.logger.log('🔄 Syncing finished priority matches...');
 
     try {
-      // Find matches that have kicked off but aren't finished yet
-      const pending = await this.matchRepo.find({
-        where: {
-          status: Not(In(['FT', 'AET', 'PEN', 'PST', 'CANC', 'AWD', 'WO'])),
-          kickoff_time: LessThanOrEqual(new Date()),
-        },
-      });
-
-      const apiIds = pending
-        .filter((m) => m.api_match_id.startsWith('api_'))
-        .map((m) => m.api_match_id.replace('api_', ''));
-
-      if (apiIds.length === 0) {
-        this.logger.log('ℹ️ No pending matches to check');
-        return;
-      }
-
-      this.logger.log(`Checking ${apiIds.length} pending match(es): ${apiIds.join(', ')}`);
-
-      const callsNeeded = Math.ceil(apiIds.length / 20);
-      const matches = await this.worldCupApi.getMatchesByIds(apiIds);
+      const matches = await this.worldCupApi.getFinishedPriorityMatches();
       await this.storeMatches(matches);
 
-      const finished = matches.filter((m) => m.fixture.status.short === 'FT');
-
-      await this.trackApiCalls('finished_matches', finished.length, callsNeeded);
+      await this.trackApiCalls('finished_matches', matches.length, 2);
       this.logger.log(
-        `✅ Checked ${matches.length} matches — ${finished.length} now FT (${callsNeeded} API call(s))`,
+        `✅ Synced ${matches.length} finished priority matches (2 API calls)`,
       );
     } catch (error) {
       this.logger.error('Failed to sync finished matches', error);
-      await this.trackApiCalls('finished_matches', 0, 1, false);
+      await this.trackApiCalls('finished_matches', 0, 2, false);
     }
+  }
+
+  /**
+   * Force-refresh a single match from the API by its fixture ID.
+   * Uses ?id= (singular) which works on the free tier for any league.
+   * Called by the admin endpoint to unstick matches that were missed by the CRON.
+   */
+  async forceRefreshMatch(fixtureId: string): Promise<any | null> {
+    const fixture = await this.worldCupApi.getSingleFixture(fixtureId);
+    if (!fixture) return null;
+    await this.storeMatches([fixture]);
+    await this.trackApiCalls('force_refresh', 1, 1);
+    return fixture;
   }
 
   /**

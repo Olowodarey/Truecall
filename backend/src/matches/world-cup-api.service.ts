@@ -133,36 +133,35 @@ export class WorldCupApiService {
   }
 
   /**
-   * Get finished matches (FT status only) from priority leagues
-   * Optimized: 1 call, then filter
+   * Get finished priority matches using date-based queries.
+   * Queries today + yesterday by specific date — the free tier returns data
+   * for date-based queries even without a league filter, unlike from/to ranges.
+   * 2 API calls per invocation.
    */
   async getFinishedPriorityMatches(): Promise<WorldCupFixture[]> {
     try {
-      const today = new Date();
-      const twoDaysAgo = new Date();
-      twoDaysAgo.setDate(today.getDate() - 2);
+      const today = new Date().toISOString().split('T')[0];
+      const yesterday = new Date(Date.now() - 86_400_000)
+        .toISOString()
+        .split('T')[0];
 
-      const from = twoDaysAgo.toISOString().split('T')[0];
-      const to = today.toISOString().split('T')[0];
+      this.logger.log(`Checking finished matches for ${yesterday} and ${today}`);
 
-      this.logger.log(`Fetching all finished matches from ${from} to ${to}`);
+      const [todayRes, yesterdayRes] = await Promise.all([
+        this.client.get('/fixtures', { params: { date: today } }),
+        this.client.get('/fixtures', { params: { date: yesterday } }),
+      ]);
 
-      // Get all matches for the date range (1 API call)
-      const response = await this.client.get('/fixtures', {
-        params: { from, to },
-      });
+      const allMatches: WorldCupFixture[] = [
+        ...todayRes.data.response,
+        ...yesterdayRes.data.response,
+      ];
 
-      const allMatches = response.data.response;
-
-      // Filter for priority leagues AND finished status
-      const finished = allMatches.filter((match: WorldCupFixture) => {
-        const leagueName = match.league.name.toLowerCase();
+      const finished = allMatches.filter((m: WorldCupFixture) => {
+        const leagueName = m.league.name.toLowerCase();
         const isPriority =
-          match.league.id === this.WORLD_CUP_ID ||
-          leagueName.includes('friend');
-        const isFinished = match.fixture.status.short === 'FT';
-
-        return isPriority && isFinished;
+          m.league.id === this.WORLD_CUP_ID || leagueName.includes('friend');
+        return isPriority && m.fixture.status.short === 'FT';
       });
 
       this.logger.log(
@@ -172,6 +171,24 @@ export class WorldCupApiService {
     } catch (error) {
       this.logger.error('Failed to fetch finished matches', error.message);
       return [];
+    }
+  }
+
+  /**
+   * Fetch a single fixture by its API-Football ID.
+   * Uses the ?id= (singular) parameter which works on the free tier
+   * for any league without needing league+season filters.
+   */
+  async getSingleFixture(fixtureId: string): Promise<WorldCupFixture | null> {
+    try {
+      const response = await this.client.get('/fixtures', {
+        params: { id: fixtureId },
+      });
+      const fixtures: WorldCupFixture[] = response.data.response;
+      return fixtures.length > 0 ? fixtures[0] : null;
+    } catch (error) {
+      this.logger.error(`Failed to fetch fixture ${fixtureId}`, error.message);
+      return null;
     }
   }
 
