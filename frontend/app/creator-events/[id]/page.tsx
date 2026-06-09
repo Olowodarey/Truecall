@@ -73,6 +73,23 @@ export default function CreatorEventDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Toast
+  const [toast, setToast] = useState<{
+    type: "success" | "error" | "info";
+    message: string;
+  } | null>(null);
+  const showToast = useCallback(
+    (type: "success" | "error" | "info", message: string) => {
+      setToast({ type, message });
+    },
+    [],
+  );
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 5000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
   // Creator Twitter info
   const [creatorTwitter, setCreatorTwitter] = useState<string | null>(null);
   const [creatorAvatar, setCreatorAvatar] = useState<string | null>(null);
@@ -240,38 +257,50 @@ export default function CreatorEventDetailPage() {
   }, [load]);
 
   useEffect(() => {
+    if (joinMining) showToast("info", "Joining event on-chain…");
+  }, [joinMining, showToast]);
+
+  useEffect(() => {
     if (joinDone && joinTx) {
-      // Give the chain/backend a moment to index the new state, then reload
-      // the whole page so everything (join state, participant count,
-      // matches) is guaranteed fresh — no stale client state to reconcile.
-      setTimeout(() => {
-        window.location.reload();
-      }, 1500);
+      showToast("success", "You joined! Refreshing…");
+      setTimeout(() => window.location.reload(), 1500);
     }
-  }, [joinDone, joinTx]);
+  }, [joinDone, joinTx, showToast]);
 
   useEffect(() => {
     if (joinWriteError) {
-      setJoinError(formatContractError(joinWriteError));
+      const msg = formatContractError(joinWriteError);
+      setJoinError(msg);
+      showToast("error", msg);
     }
-  }, [joinWriteError]);
+  }, [joinWriteError, showToast]);
+
+  useEffect(() => {
+    if (predictMining) showToast("info", "Submitting prediction on-chain…");
+  }, [predictMining, showToast]);
+
   useEffect(() => {
     if (predictDone) {
-      // Same as join — reload the page so the new prediction, standings,
-      // etc. are guaranteed to reflect the latest on-chain state.
-      setTimeout(() => {
-        window.location.reload();
-      }, 1500);
+      showToast("success", "Prediction submitted! Refreshing…");
+      setTimeout(() => window.location.reload(), 1500);
     }
-  }, [predictDone]);
+  }, [predictDone, showToast]);
 
   useEffect(() => {
     if (predictWriteError) {
-      setPredictError(formatContractError(predictWriteError));
+      const msg = formatContractError(predictWriteError);
+      setPredictError(msg);
+      showToast("error", msg);
     }
-  }, [predictWriteError]);
+  }, [predictWriteError, showToast]);
+
+  useEffect(() => {
+    if (addMatchMining) showToast("info", "Adding match on-chain…");
+  }, [addMatchMining, showToast]);
+
   useEffect(() => {
     if (addMatchDone) {
+      showToast("success", "Match added!");
       setShowAddMatch(false);
       setNewMatch({
         homeTeam: "",
@@ -283,13 +312,15 @@ export default function CreatorEventDetailPage() {
       resetAddMatch();
       load();
     }
-  }, [addMatchDone, load, resetAddMatch]);
+  }, [addMatchDone, load, resetAddMatch, showToast]);
 
   useEffect(() => {
     if (addMatchWriteError) {
-      setAddMatchError(formatContractError(addMatchWriteError));
+      const msg = formatContractError(addMatchWriteError);
+      setAddMatchError(msg);
+      showToast("error", msg);
     }
-  }, [addMatchWriteError]);
+  }, [addMatchWriteError, showToast]);
 
   // ── Join ─────────────────────────────────────────────────────────────────────
 
@@ -500,6 +531,34 @@ export default function CreatorEventDetailPage() {
   return (
     <div className="relative pt-20 min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 pb-20">
       <Header />
+
+      {/* Toast notification */}
+      {toast && (
+        <div
+          className={`fixed top-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 rounded-xl shadow-2xl text-sm font-semibold transition-all max-w-sm w-[90vw] ${
+            toast.type === "success"
+              ? "bg-green-600 text-white"
+              : toast.type === "error"
+                ? "bg-red-600 text-white"
+                : "bg-gray-700 text-white border border-gray-600"
+          }`}
+        >
+          <span>
+            {toast.type === "success"
+              ? "✅"
+              : toast.type === "error"
+                ? "❌"
+                : "⏳"}
+          </span>
+          <span className="flex-1">{toast.message}</span>
+          <button
+            onClick={() => setToast(null)}
+            className="ml-2 opacity-70 hover:opacity-100 text-lg leading-none"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       <main className="container mx-auto px-4 max-w-4xl mt-8">
         <button
           onClick={() => router.push("/creator-events")}
