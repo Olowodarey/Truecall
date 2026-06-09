@@ -73,6 +73,14 @@ export class WorldCupApiService {
    * Get all priority matches (World Cup + Friendlies) for the next 7 days
    * Single date-range query: 1 API call, filtered client-side
    */
+  /**
+   * Get all priority matches for the next 7 days.
+   * Two parallel queries (2 API calls):
+   *   1. World Cup specific — league=1&season=2026 guarantees we get Group Stage fixtures
+   *      even on the free tier where the general date query may omit them.
+   *   2. General date range — used to pick up International Friendlies by name.
+   * Results are merged and deduplicated by fixture ID.
+   */
   async getAllPriorityMatches(): Promise<WorldCupFixture[]> {
     try {
       const today = new Date();
@@ -82,28 +90,42 @@ export class WorldCupApiService {
       const from = today.toISOString().split('T')[0];
       const to = in7Days.toISOString().split('T')[0];
 
-      this.logger.log(`Fetching all matches from ${from} to ${to} (7 days)`);
-
-      const response = await this.client.get('/fixtures', {
-        params: { from, to },
-      });
-
-      const allMatches = response.data.response;
-
-      // Filter for World Cup and Friendlies
-      const priorityMatches = allMatches.filter((match: WorldCupFixture) => {
-        const leagueName = match.league.name.toLowerCase();
-        return (
-          match.league.id === this.WORLD_CUP_ID ||
-          leagueName.includes('friend')
-        );
-      });
-
       this.logger.log(
-        `Fetched ${allMatches.length} total matches, filtered to ${priorityMatches.length} priority matches (next 7 days)`,
+        `Fetching World Cup (league=${this.WORLD_CUP_ID}, season=${this.SEASON}) + Friendlies from ${from} to ${to}`,
       );
 
-      return priorityMatches;
+      // Run both queries in parallel to keep the total wall-clock time low
+      const [wcResponse, generalResponse] = await Promise.all([
+        this.client.get('/fixtures', {
+          params: {
+            from,
+            to,
+            league: this.WORLD_CUP_ID,
+            season: this.SEASON,
+          },
+        }),
+        this.client.get('/fixtures', { params: { from, to } }),
+      ]);
+
+      const worldCupMatches: WorldCupFixture[] = wcResponse.data.response;
+
+      const friendlies: WorldCupFixture[] = generalResponse.data.response.filter(
+        (m: WorldCupFixture) => m.league.name.toLowerCase().includes('friend'),
+      );
+
+      // Deduplicate: World Cup query is the authority; skip any friendly that
+      // happens to share a fixture ID with a World Cup match (shouldn't happen
+      // in practice but keeps the merge safe).
+      const wcIds = new Set(worldCupMatches.map((m) => m.fixture.id));
+      const uniqueFriendlies = friendlies.filter((m) => !wcIds.has(m.fixture.id));
+
+      const result = [...worldCupMatches, ...uniqueFriendlies];
+
+      this.logger.log(
+        `✅ ${worldCupMatches.length} World Cup + ${uniqueFriendlies.length} Friendlies = ${result.length} total (2 API calls, 7-day window)`,
+      );
+
+      return result;
     } catch (error) {
       this.logger.error('Failed to fetch priority matches', error.message);
       return [];
