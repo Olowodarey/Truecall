@@ -36,7 +36,7 @@ export default function SharePredictionButton({
 
     // Add hashtags and link
     const hashtags = `#TrueCall #FootballPrediction #${eventName.replace(/\s+/g, "")}`;
-    const eventUrl = `https://truecall.xyz/creator-events/${eventId}`;
+    const eventUrl = `https://truecall.vercel.app/creator-events/${eventId}`;
 
     const fullText = `${predictionText}${creatorMention}\n${hashtags}\n\n🔗 Join: ${eventUrl}`;
 

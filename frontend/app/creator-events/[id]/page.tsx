@@ -94,6 +94,12 @@ export default function CreatorEventDetailPage() {
   const [creatorTwitter, setCreatorTwitter] = useState<string | null>(null);
   const [creatorAvatar, setCreatorAvatar] = useState<string | null>(null);
 
+  // Pinned tweet (creator can link their event tweet so predictors reply under it)
+  const [creatorTweetId, setCreatorTweetId] = useState<string | null>(null);
+  const [tweetUrlInput, setTweetUrlInput] = useState("");
+  const [tweetSaving, setTweetSaving] = useState(false);
+  const [tweetSaveMsg, setTweetSaveMsg] = useState<string | null>(null);
+
   // Join state
   const [inviteCode, setInviteCode] = useState("");
   const [joinError, setJoinError] = useState<string | null>(null);
@@ -202,6 +208,10 @@ export default function CreatorEventDetailPage() {
         .then((r) => (r.ok ? r.json() : null))
         .catch(() => null);
 
+      const tweetMetaPromise = fetch(`/api/creator-events/${eventId}/tweet`)
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null);
+
       const userDataPromise = address
         ? Promise.all([
             fetchCreatorHasJoined(eventId, address),
@@ -225,11 +235,13 @@ export default function CreatorEventDetailPage() {
           ])
         : null;
 
-      const [creatorProfile, participantsData, userData] = await Promise.all([
-        creatorProfilePromise,
-        participantsPromise,
-        userDataPromise,
-      ]);
+      const [creatorProfile, participantsData, tweetMeta, userData] =
+        await Promise.all([
+          creatorProfilePromise,
+          participantsPromise,
+          tweetMetaPromise,
+          userDataPromise,
+        ]);
 
       if (creatorProfile) {
         setCreatorTwitter(creatorProfile.twitterHandle || null);
@@ -237,6 +249,7 @@ export default function CreatorEventDetailPage() {
       }
 
       setParticipantCount(participantsData?.count || 0);
+      setCreatorTweetId(tweetMeta?.tweetId || null);
 
       if (userData) {
         const [joined, verified, predictionResults] = userData;
@@ -329,6 +342,36 @@ export default function CreatorEventDetailPage() {
       showToast("error", msg);
     }
   }, [addMatchWriteError, showToast]);
+
+  // ── Pin Tweet ────────────────────────────────────────────────────────────────
+
+  const saveTweetUrl = async () => {
+    if (!tweetUrlInput.trim() || !address) return;
+    setTweetSaving(true);
+    setTweetSaveMsg(null);
+    try {
+      const res = await fetch(`/api/creator-events/${eventId}/tweet`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tweetUrl: tweetUrlInput.trim(),
+          creatorAddress: address,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setCreatorTweetId(data.tweetId);
+        setTweetUrlInput("");
+        setTweetSaveMsg("Tweet linked! Users will reply under it when sharing.");
+      } else {
+        setTweetSaveMsg(data.message || "Failed to link tweet");
+      }
+    } catch {
+      setTweetSaveMsg("Failed to connect to server");
+    } finally {
+      setTweetSaving(false);
+    }
+  };
 
   // ── Join ─────────────────────────────────────────────────────────────────────
 
@@ -688,6 +731,67 @@ export default function CreatorEventDetailPage() {
                   variant="primary"
                 />
               </div>
+            </div>
+          )}
+
+          {/* Pin Tweet section — creator only */}
+          {isCreator && isOpen && (
+            <div className="mb-6 p-4 bg-gray-800/40 border border-gray-700/50 rounded-xl">
+              <p className="text-white font-semibold mb-1 flex items-center gap-2">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                </svg>
+                Pin Your Event Tweet
+              </p>
+              <p className="text-gray-400 text-xs mb-3">
+                Paste your event tweet URL. When participants share their
+                predictions they&apos;ll reply directly under your tweet.
+              </p>
+              {creatorTweetId && (
+                <div className="flex items-center gap-2 mb-3 p-2 bg-green-500/10 border border-green-500/30 rounded-lg">
+                  <span className="text-green-400 text-xs">✅ Tweet pinned</span>
+                  <a
+                    href={`https://x.com/i/web/status/${creatorTweetId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-400 text-xs underline ml-auto"
+                  >
+                    View tweet ↗
+                  </a>
+                </div>
+              )}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={tweetUrlInput}
+                  onChange={(e) => {
+                    setTweetUrlInput(e.target.value);
+                    setTweetSaveMsg(null);
+                  }}
+                  placeholder="https://x.com/yourhandle/status/1234567890..."
+                  disabled={tweetSaving}
+                  className="flex-1 min-w-0 px-3 py-2 bg-gray-700/50 border border-gray-600 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                />
+                <button
+                  onClick={saveTweetUrl}
+                  disabled={tweetSaving || !tweetUrlInput.trim()}
+                  className="shrink-0 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm rounded-lg transition disabled:opacity-50"
+                >
+                  {tweetSaving ? "Saving…" : creatorTweetId ? "Update" : "Link"}
+                </button>
+              </div>
+              {tweetSaveMsg && (
+                <p
+                  className={`text-xs mt-2 ${
+                    tweetSaveMsg.startsWith("Tweet linked") ||
+                    tweetSaveMsg.startsWith("Tweet pinned")
+                      ? "text-green-400"
+                      : "text-red-400"
+                  }`}
+                >
+                  {tweetSaveMsg}
+                </p>
+              )}
             </div>
           )}
 
@@ -1095,6 +1199,7 @@ export default function CreatorEventDetailPage() {
                             eventId={eventId}
                             matchId={m.matchId}
                             variant="secondary"
+                            replyToTweetId={creatorTweetId}
                           />
                         </div>
                       </div>

@@ -24,8 +24,8 @@ createAppKit({
   metadata: {
     name: "TrueCall",
     description: "Blockchain-powered football predictions",
-    url: "https://truecall.xyz",
-    icons: ["https://truecall.xyz/logo.png"],
+    url: "https://truecall.vercel.app",
+    icons: ["https://truecall.vercel.app/logo.png"],
   },
   features: {
     analytics: false,

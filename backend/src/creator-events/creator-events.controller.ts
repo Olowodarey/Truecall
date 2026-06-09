@@ -2,14 +2,18 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Param,
   ParseIntPipe,
   Body,
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { ApiTags, ApiOperation, ApiParam, ApiBody } from '@nestjs/swagger';
 import { CreatorEventsService } from './creator-events.service';
+import { EventMeta } from './event-meta.entity';
 import { UsersService } from '../users/users.service';
 
 // ─── DTOs ─────────────────────────────────────────────────────────────────────
@@ -44,6 +48,8 @@ export class CreatorEventsController {
   constructor(
     private readonly svc: CreatorEventsService,
     private readonly usersService: UsersService,
+    @InjectRepository(EventMeta)
+    private readonly eventMetaRepo: Repository<EventMeta>,
   ) {}
 
   // ── Events ──────────────────────────────────────────────────────────────────
@@ -65,12 +71,63 @@ export class CreatorEventsController {
   @ApiParam({ name: 'id', type: Number })
   async getEvent(@Param('id', ParseIntPipe) id: number) {
     try {
-      return await this.svc.getEvent(id);
+      const [event, meta] = await Promise.all([
+        this.svc.getEvent(id),
+        this.eventMetaRepo.findOne({ where: { eventId: id } }),
+      ]);
+      return { ...event, tweetId: meta?.tweetId ?? null };
     } catch (e) {
       throw new BadRequestException(
         e instanceof Error ? e.message : 'Event not found',
       );
     }
+  }
+
+  @Get(':id/tweet')
+  @ApiOperation({ summary: 'Get the pinned tweet ID for an event' })
+  @ApiParam({ name: 'id', type: Number })
+  async getEventTweet(@Param('id', ParseIntPipe) id: number) {
+    const meta = await this.eventMetaRepo.findOne({ where: { eventId: id } });
+    return { eventId: id, tweetId: meta?.tweetId ?? null };
+  }
+
+  @Patch(':id/tweet')
+  @ApiOperation({ summary: 'Creator: pin a tweet to their event' })
+  @ApiParam({ name: 'id', type: Number })
+  async setEventTweet(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { tweetUrl: string; creatorAddress: string },
+  ) {
+    // Extract tweet ID from URL (supports x.com and twitter.com)
+    const match = body.tweetUrl?.match(/status\/(\d+)/);
+    if (!match) {
+      throw new BadRequestException(
+        'Invalid tweet URL — must contain /status/<id>',
+      );
+    }
+    const tweetId = match[1];
+
+    // Verify the caller is the event creator
+    let event: any;
+    try {
+      event = await this.svc.getEvent(id);
+    } catch {
+      throw new BadRequestException('Event not found');
+    }
+    if (
+      !body.creatorAddress ||
+      body.creatorAddress.toLowerCase() !== event.creator.toLowerCase()
+    ) {
+      throw new BadRequestException('Only the event creator can pin a tweet');
+    }
+
+    await this.eventMetaRepo.upsert(
+      { eventId: id, tweetUrl: body.tweetUrl, tweetId },
+      ['eventId'],
+    );
+
+    this.logger.log(`Event ${id}: creator pinned tweet ${tweetId}`);
+    return { eventId: id, tweetId };
   }
 
   @Get(':id/matches')
