@@ -135,6 +135,42 @@ export class DatabaseCacheService {
   }
 
   /**
+   * Manually set a match result to FT in the DB.
+   * Used for Friendlies whose results are locked behind the paid API tier.
+   * Once updated, the AI oracle reads FT from DB and submits on-chain.
+   */
+  async setMatchResult(
+    apiMatchId: string,
+    homeScore: number,
+    awayScore: number,
+  ): Promise<{ home: string; away: string } | null> {
+    const match = await this.matchRepo.findOne({ where: { api_match_id: apiMatchId } });
+    if (!match) return null;
+
+    const updatedData = {
+      ...match.match_data,
+      status: 'FT',
+      comment: 'Full Time',
+      finalHomeScore: homeScore,
+      finalAwayScore: awayScore,
+    };
+
+    await this.matchRepo.update(
+      { api_match_id: apiMatchId },
+      {
+        status: 'FT',
+        home_score: homeScore,
+        away_score: awayScore,
+        match_data: updatedData,
+        updated_at: new Date(),
+      },
+    );
+
+    this.logger.log(`✅ Manually set ${apiMatchId} to FT: ${homeScore}-${awayScore}`);
+    return { home: match.home_team, away: match.away_team };
+  }
+
+  /**
    * Store matches in database
    */
   private async storeMatches(fixtures: WorldCupFixture[]) {
