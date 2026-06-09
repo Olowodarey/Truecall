@@ -47,6 +47,13 @@ export const CREATOR_EVENT_MANAGER_ABI = [
   },
   {
     type: "function",
+    name: "completeEvent",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "eventId", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "function",
     name: "submitPrediction",
     stateMutability: "nonpayable",
     inputs: [

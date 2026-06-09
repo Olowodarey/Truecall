@@ -179,6 +179,17 @@ export default function CreatorEventDetailPage() {
   const { isLoading: addMatchMining, isSuccess: addMatchDone } =
     useWaitForTransactionReceipt({ hash: addMatchTx });
 
+  // wagmi — complete event (creator, < 5 matches)
+  const {
+    writeContract: completeEventWrite,
+    data: completeEventTx,
+    isPending: completeEventPending,
+    error: completeEventWriteError,
+    reset: resetCompleteEvent,
+  } = useWriteContract();
+  const { isLoading: completeEventMining, isSuccess: completeEventDone } =
+    useWaitForTransactionReceipt({ hash: completeEventTx });
+
   const isCreator =
     event && address?.toLowerCase() === event.creator.toLowerCase();
 
@@ -342,6 +353,24 @@ export default function CreatorEventDetailPage() {
       showToast("error", msg);
     }
   }, [addMatchWriteError, showToast]);
+
+  useEffect(() => {
+    if (completeEventMining) showToast("info", "Completing event on-chain…");
+  }, [completeEventMining, showToast]);
+
+  useEffect(() => {
+    if (completeEventDone) {
+      showToast("success", "Event completed! Refreshing…");
+      setTimeout(() => window.location.reload(), 1500);
+    }
+  }, [completeEventDone, showToast]);
+
+  useEffect(() => {
+    if (completeEventWriteError) {
+      showToast("error", formatContractError(completeEventWriteError));
+      resetCompleteEvent();
+    }
+  }, [completeEventWriteError, showToast, resetCompleteEvent]);
 
   // ── Pin Tweet ────────────────────────────────────────────────────────────────
 
@@ -549,6 +578,19 @@ export default function CreatorEventDetailPage() {
         newMatch.apiMatchId.trim() || `match-${Date.now()}`,
         BigInt(kickoffTs),
       ],
+      chainId: celo.id,
+    });
+  };
+
+  // ── Complete Event ───────────────────────────────────────────────────────────
+
+  const handleCompleteEvent = () => {
+    resetCompleteEvent();
+    completeEventWrite({
+      address: CREATOR_EVENT_MANAGER_ADDRESS,
+      abi: CREATOR_EVENT_MANAGER_ABI,
+      functionName: "completeEvent",
+      args: [BigInt(eventId)],
       chainId: celo.id,
     });
   };
@@ -936,14 +978,34 @@ export default function CreatorEventDetailPage() {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-2xl font-bold text-white">Matches</h2>
-            {isCreator && isOpen && matches.length < 5 && (
-              <button
-                onClick={() => setShowAddMatch(!showAddMatch)}
-                className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-lg text-sm transition"
-              >
-                {showAddMatch ? "Cancel" : "+ Add Match"}
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {isCreator && isOpen && matches.length < 5 && (
+                <button
+                  onClick={() => setShowAddMatch(!showAddMatch)}
+                  className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-lg text-sm transition"
+                >
+                  {showAddMatch ? "Cancel" : "+ Add Match"}
+                </button>
+              )}
+              {/* Complete Event — shown when creator has < 5 matches and all are verified */}
+              {isCreator &&
+                isOpen &&
+                matches.length > 0 &&
+                matches.length < 5 &&
+                matches.every((m) => m.status === "VERIFIED") && (
+                  <button
+                    onClick={handleCompleteEvent}
+                    disabled={completeEventPending || completeEventMining}
+                    className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded-lg text-sm transition disabled:opacity-50"
+                  >
+                    {completeEventPending
+                      ? "Confirm…"
+                      : completeEventMining
+                        ? "Completing…"
+                        : "Complete Event"}
+                  </button>
+                )}
+            </div>
           </div>
 
           {/* Add match form */}

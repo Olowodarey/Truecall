@@ -183,6 +183,7 @@ contract CreatorEventManager is
     error EventMatchLimitReached();
     error EventFull();
     error InsufficientFee();
+    error NotAllMatchesVerified();
 
     // ─── State ────────────────────────────────────────────────────────────────
 
@@ -545,24 +546,27 @@ contract CreatorEventManager is
         _checkAndCompleteEvent(eventId);
     }
 
-    /// @notice Internal helper to check if event should be marked as completed
-    /// @dev Called after each match result submission
+    /// @notice Internal helper to check if event should be auto-completed.
+    /// @dev Only auto-completes when the event has all MAX_MATCHES_PER_EVENT matches
+    ///      and every one of them is VERIFIED.  Events with fewer matches stay OPEN
+    ///      so the creator can keep adding; they call completeEvent() when done.
     function _checkAndCompleteEvent(uint256 eventId) internal {
         Event storage ev = events[eventId];
-        
-        // Only check if event is still OPEN
+
         if (ev.status != EventStatus.OPEN) return;
-        
+
         uint256[] memory matchIds = _eventMatches[eventId];
-        
-        // Check if all matches are verified
+
+        // Only auto-complete once the event is full (5 matches).
+        // Events with fewer matches must be closed manually by the creator.
+        if (matchIds.length < MAX_MATCHES_PER_EVENT) return;
+
         for (uint256 i = 0; i < matchIds.length; i++) {
             if (matches[matchIds[i]].status != MatchStatus.VERIFIED) {
-                return; // At least one match not verified yet
+                return;
             }
         }
-        
-        // All matches verified - mark event as completed
+
         ev.status = EventStatus.COMPLETED;
         emit EventCompleted(eventId, block.timestamp);
     }
@@ -584,6 +588,30 @@ contract CreatorEventManager is
 
         ev.status = EventStatus.CANCELLED;
         emit EventCancelled(eventId);
+    }
+
+    // ─── Creator: Manually Complete Event ────────────────────────────────────
+
+    /// @notice Creator closes their event once all existing matches are verified.
+    ///         Required when the event has fewer than MAX_MATCHES_PER_EVENT because
+    ///         _checkAndCompleteEvent only auto-completes full (5-match) events.
+    function completeEvent(uint256 eventId) external whenNotPaused {
+        Event storage ev = events[eventId];
+
+        if (ev.creator != msg.sender) revert OnlyCreator();
+        if (ev.status != EventStatus.OPEN) revert EventNotOpen();
+
+        uint256[] memory matchIds = _eventMatches[eventId];
+        require(matchIds.length > 0, "Event has no matches");
+
+        for (uint256 i = 0; i < matchIds.length; i++) {
+            if (matches[matchIds[i]].status != MatchStatus.VERIFIED) {
+                revert NotAllMatchesVerified();
+            }
+        }
+
+        ev.status = EventStatus.COMPLETED;
+        emit EventCompleted(eventId, block.timestamp);
     }
 
     // ─── Views ────────────────────────────────────────────────────────────────
