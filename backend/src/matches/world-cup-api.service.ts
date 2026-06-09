@@ -70,40 +70,37 @@ export class WorldCupApiService {
   }
 
   /**
-   * Get all priority matches (World Cup + Friendlies) from a single API call
-   * More efficient: 1 call instead of 2!
+   * Get all priority matches (World Cup + Friendlies) for the next 7 days
+   * Single date-range query: 1 API call, filtered client-side
    */
   async getAllPriorityMatches(): Promise<WorldCupFixture[]> {
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const tomorrowStr = tomorrow.toISOString().split('T')[0];
+      const today = new Date();
+      const in7Days = new Date();
+      in7Days.setDate(today.getDate() + 7);
 
-      this.logger.log(`Fetching all matches for ${today} and ${tomorrowStr}`);
+      const from = today.toISOString().split('T')[0];
+      const to = in7Days.toISOString().split('T')[0];
 
-      // Fetch all matches for today and tomorrow (1 call each)
-      const [todayRes, tomorrowRes] = await Promise.all([
-        this.client.get('/fixtures', { params: { date: today } }),
-        this.client.get('/fixtures', { params: { date: tomorrowStr } }),
-      ]);
+      this.logger.log(`Fetching all matches from ${from} to ${to} (7 days)`);
 
-      const allMatches = [
-        ...todayRes.data.response,
-        ...tomorrowRes.data.response,
-      ];
+      const response = await this.client.get('/fixtures', {
+        params: { from, to },
+      });
+
+      const allMatches = response.data.response;
 
       // Filter for World Cup and Friendlies
       const priorityMatches = allMatches.filter((match: WorldCupFixture) => {
         const leagueName = match.league.name.toLowerCase();
         return (
-          match.league.id === this.WORLD_CUP_ID || // World Cup
-          leagueName.includes('friend') // Any friendlies (includes Women's)
+          match.league.id === this.WORLD_CUP_ID ||
+          leagueName.includes('friend')
         );
       });
 
       this.logger.log(
-        `Fetched ${allMatches.length} total matches, filtered to ${priorityMatches.length} priority matches (World Cup + Friendlies)`,
+        `Fetched ${allMatches.length} total matches, filtered to ${priorityMatches.length} priority matches (next 7 days)`,
       );
 
       return priorityMatches;

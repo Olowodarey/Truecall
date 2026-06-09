@@ -89,9 +89,15 @@ export default function CreateCreatorEventPage() {
   const [fixturesLoading, setFixturesLoading] = useState(false);
   const [fixturesLoaded, setFixturesLoaded] = useState(false);
   const [search, setSearch] = useState("");
+  const [selectedLeague, setSelectedLeague] = useState("All");
   const [activePickerIndex, setActivePickerIndex] = useState<number | null>(
     null,
   );
+
+  const leagues = [
+    "All",
+    ...Array.from(new Set(fixtures.map((f) => f.league))).sort(),
+  ];
 
   // Freeze args at submit time to avoid stale closure issues
   const pendingArgsRef = useRef<{
@@ -145,13 +151,14 @@ export default function CreateCreatorEventPage() {
     }
   };
 
-  const filteredFixtures = fixtures.filter(
-    (f) =>
+  const filteredFixtures = fixtures.filter((f) => {
+    const matchesLeague = selectedLeague === "All" || f.league === selectedLeague;
+    const matchesSearch =
       search === "" ||
       f.homeTeam.toLowerCase().includes(search.toLowerCase()) ||
-      f.awayTeam.toLowerCase().includes(search.toLowerCase()) ||
-      f.league.toLowerCase().includes(search.toLowerCase()),
-  );
+      f.awayTeam.toLowerCase().includes(search.toLowerCase());
+    return matchesLeague && matchesSearch;
+  });
 
   // ── Match row helpers ─────────────────────────────────────────────────────
 
@@ -211,11 +218,13 @@ export default function CreateCreatorEventPage() {
 
     setActivePickerIndex(null);
     setSearch("");
+    setSelectedLeague("All");
   };
 
   const openPicker = (i: number) => {
     setActivePickerIndex(activePickerIndex === i ? null : i);
     setSearch("");
+    setSelectedLeague("All");
     loadFixtures();
   };
 
@@ -549,37 +558,59 @@ export default function CreateCreatorEventPage() {
                     {/* Fixture picker */}
                     {activePickerIndex === i && (
                       <div className="bg-gray-800 border border-gray-600 rounded-lg overflow-hidden">
-                        <div className="p-3 border-b border-gray-700">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-gray-400">
-                                {fixtures.length > 0
-                                  ? `${fixtures.length} matches available`
-                                  : "Real-time API"}
-                              </span>
-                              {!fixturesLoading && fixtures.length > 0 && (
+                        <div className="p-3 border-b border-gray-700 space-y-2">
+                          {/* League filter pills */}
+                          {leagues.length > 1 && (
+                            <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+                              {leagues.map((league) => (
                                 <button
+                                  key={league}
                                   type="button"
                                   onClick={() => {
-                                    setFixturesLoaded(false);
-                                    setFixtures([]);
-                                    loadFixtures();
+                                    setSelectedLeague(league);
+                                    setSearch("");
                                   }}
-                                  className="text-xs text-blue-400 hover:text-blue-300 transition"
+                                  className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold transition ${
+                                    selectedLeague === league
+                                      ? "bg-orange-500 text-white"
+                                      : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                                  }`}
                                 >
-                                  🔄 Refresh
+                                  {league}
                                 </button>
-                              )}
+                              ))}
                             </div>
+                          )}
+                          {/* Search + refresh row */}
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={search}
+                              onChange={(e) => setSearch(e.target.value)}
+                              placeholder="Search team…"
+                              autoFocus
+                              className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                            />
+                            {!fixturesLoading && fixtures.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setFixturesLoaded(false);
+                                  setFixtures([]);
+                                  setSelectedLeague("All");
+                                  loadFixtures();
+                                }}
+                                className="text-xs text-blue-400 hover:text-blue-300 transition flex-shrink-0"
+                                title="Refresh matches"
+                              >
+                                🔄
+                              </button>
+                            )}
                           </div>
-                          <input
-                            type="text"
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            placeholder="Search team or league…"
-                            autoFocus
-                            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                          />
+                          <p className="text-xs text-gray-500">
+                            {filteredFixtures.length} match{filteredFixtures.length !== 1 ? "es" : ""}
+                            {selectedLeague !== "All" ? ` · ${selectedLeague}` : ""}
+                          </p>
                         </div>
                         {fixturesLoading ? (
                           <div className="flex justify-center py-6">

@@ -64,30 +64,30 @@ export class DatabaseCacheService {
 
   /**
    * CRON: Sync World Cup + Friendlies every 6 hours
-   * API Calls: 2 per execution (today + tomorrow date queries)
-   * Total: 4 syncs/day × 2 calls = 8 calls/day
+   * API Calls: 1 per execution (7-day date range query, filtered client-side)
+   * Total: 4 syncs/day × 1 call = 4 calls/day
    * PUBLIC: Can also be manually triggered
    */
   @Cron('0 */6 * * *') // Every 6 hours
   async syncPriorityMatches() {
-    if (!this.canMakeApiCalls(2)) {
+    if (!this.canMakeApiCalls(1)) {
       this.logger.warn('⚠️ Daily API limit reached, skipping priority sync');
       return;
     }
 
-    this.logger.log('🏆 Syncing World Cup & Friendlies matches...');
+    this.logger.log('🏆 Syncing World Cup & Friendlies matches (next 7 days)...');
 
     try {
       const matches = await this.worldCupApi.getAllPriorityMatches();
       await this.storeMatches(matches);
 
-      await this.trackApiCalls('priority_matches', matches.length, 2);
+      await this.trackApiCalls('priority_matches', matches.length, 1);
       this.logger.log(
-        `✅ Synced ${matches.length} priority matches (2 API calls)`,
+        `✅ Synced ${matches.length} priority matches (1 API call, 7-day window)`,
       );
     } catch (error) {
       this.logger.error('Failed to sync priority matches', error);
-      await this.trackApiCalls('priority_matches', 0, 2, false);
+      await this.trackApiCalls('priority_matches', 0, 1, false);
     }
   }
 
