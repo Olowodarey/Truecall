@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, MoreThan } from 'typeorm';
+import { Repository, In, MoreThan, Not, LessThanOrEqual } from 'typeorm';
 import { Cron } from '@nestjs/schedule';
 import { WorldCupApiService, WorldCupFixture } from './world-cup-api.service';
 import { MatchCache, ApiCallLog } from './entities/match-cache.entity';
@@ -92,11 +92,11 @@ export class DatabaseCacheService {
   }
 
   /**
-   * CRON: Sync finished matches every 30 minutes
-   * API Calls: 1 per execution (single date-range query, filtered client-side)
-   * Total: 48 syncs/day × 1 call = 48 calls/day
-   * Combined with priority sync (8 calls/day) = 56 calls/day (well under 100 limit)
-
+   * CRON: Sync finished matches every 30 minutes.
+   * Queries only the specific fixtures already in the DB that have kicked off
+   * but haven't reached FT yet — avoids the free-tier restriction on broad
+   * date-range queries (which return 0 results).
+   * API Calls: ceil(pendingCount / 20) — typically 1 call per run.
    */
   @Cron('*/30 * * * *') // Every 30 minutes
   async syncFinishedMatches() {
@@ -108,12 +108,34 @@ export class DatabaseCacheService {
     this.logger.log('🔄 Syncing finished priority matches...');
 
     try {
-      const matches = await this.worldCupApi.getFinishedPriorityMatches();
+      // Find matches that have kicked off but aren't finished yet
+      const pending = await this.matchRepo.find({
+        where: {
+          status: Not(In(['FT', 'AET', 'PEN', 'PST', 'CANC', 'AWD', 'WO'])),
+          kickoff_time: LessThanOrEqual(new Date()),
+        },
+      });
+
+      const apiIds = pending
+        .filter((m) => m.api_match_id.startsWith('api_'))
+        .map((m) => m.api_match_id.replace('api_', ''));
+
+      if (apiIds.length === 0) {
+        this.logger.log('ℹ️ No pending matches to check');
+        return;
+      }
+
+      this.logger.log(`Checking ${apiIds.length} pending match(es): ${apiIds.join(', ')}`);
+
+      const callsNeeded = Math.ceil(apiIds.length / 20);
+      const matches = await this.worldCupApi.getMatchesByIds(apiIds);
       await this.storeMatches(matches);
 
-      await this.trackApiCalls('finished_matches', matches.length, 1);
+      const finished = matches.filter((m) => m.fixture.status.short === 'FT');
+
+      await this.trackApiCalls('finished_matches', finished.length, callsNeeded);
       this.logger.log(
-        `✅ Synced ${matches.length} finished matches (1 API call)`,
+        `✅ Checked ${matches.length} matches — ${finished.length} now FT (${callsNeeded} API call(s))`,
       );
     } catch (error) {
       this.logger.error('Failed to sync finished matches', error);

@@ -176,6 +176,33 @@ export class WorldCupApiService {
   }
 
   /**
+   * Get current status of specific fixtures by their API-Football IDs.
+   * Uses the ?ids=ID1-ID2-... format (up to 20 per call, batched automatically).
+   * This works reliably on the free tier unlike broad date-range queries.
+   */
+  async getMatchesByIds(fixtureIds: string[]): Promise<WorldCupFixture[]> {
+    if (fixtureIds.length === 0) return [];
+
+    const results: WorldCupFixture[] = [];
+    const BATCH_SIZE = 20;
+
+    for (let i = 0; i < fixtureIds.length; i += BATCH_SIZE) {
+      const batch = fixtureIds.slice(i, i + BATCH_SIZE);
+      try {
+        this.logger.log(`Fetching batch of ${batch.length} fixtures by ID: ${batch.join(', ')}`);
+        const response = await this.client.get('/fixtures', {
+          params: { ids: batch.join('-') },
+        });
+        results.push(...(response.data.response as WorldCupFixture[]));
+      } catch (error) {
+        this.logger.error(`Failed to fetch fixtures batch [${batch.join(',')}]`, error.message);
+      }
+    }
+
+    return results;
+  }
+
+  /**
    * Check if API is configured
    */
   isConfigured(): boolean {
