@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
+import { ApiKeyRotatorService } from './api-key-rotator.service';
 
 export interface WorldCupFixture {
   fixture: {
@@ -31,8 +32,10 @@ export class WorldCupApiService {
   private readonly FRIENDLIES_ID = 10;
   private readonly SEASON = 2026;
 
-  constructor(private configService: ConfigService) {
-    const apiKey = this.configService.get<string>('API_FOOTBALL_KEY');
+  constructor(
+    private configService: ConfigService,
+    private keyRotator: ApiKeyRotatorService,
+  ) {
     const baseUrl = this.configService.get<string>(
       'API_FOOTBALL_BASE_URL',
       'https://v3.football.api-sports.io',
@@ -40,91 +43,30 @@ export class WorldCupApiService {
 
     this.client = axios.create({
       baseURL: baseUrl,
-      headers: { 'x-apisports-key': apiKey },
       timeout: 30000,
     });
-  }
 
-  /**
-   * Get World Cup matches for today and tomorrow
-   */
-  async getWorldCupMatches(): Promise<WorldCupFixture[]> {
-    try {
-      const today = new Date().toISOString().split('T')[0];
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const tomorrowStr = tomorrow.toISOString().split('T')[0];
+    // Set the active key for the current time window before every request
+    this.client.interceptors.request.use((config) => {
+      config.headers['x-apisports-key'] = this.keyRotator.currentKey;
+      return config;
+    });
 
-      this.logger.log(
-        `Fetching World Cup matches for ${today} and ${tomorrowStr}`,
-      );
-
-      const [todayRes, tomorrowRes] = await Promise.all([
-        this.client.get('/fixtures', {
-          params: {
-            league: this.WORLD_CUP_ID,
-            season: this.SEASON,
-            date: today,
-          },
-        }),
-        this.client.get('/fixtures', {
-          params: {
-            league: this.WORLD_CUP_ID,
-            season: this.SEASON,
-            date: tomorrowStr,
-          },
-        }),
-      ]);
-
-      const allMatches = [
-        ...todayRes.data.response,
-        ...tomorrowRes.data.response,
-      ];
-
-      this.logger.log(`Fetched ${allMatches.length} World Cup matches`);
-      return allMatches;
-    } catch (error) {
-      this.logger.error('Failed to fetch World Cup matches', error.message);
-      return [];
-    }
-  }
-
-  /**
-   * Get International Friendlies
-   */
-  async getInternationalFriendlies(): Promise<WorldCupFixture[]> {
-    try {
-      const today = new Date();
-      const nextWeek = new Date();
-      nextWeek.setDate(today.getDate() + 7);
-
-      const from = today.toISOString().split('T')[0];
-      const to = nextWeek.toISOString().split('T')[0];
-
-      this.logger.log(
-        `Fetching International Friendlies from ${from} to ${to}`,
-      );
-
-      const response = await this.client.get('/fixtures', {
-        params: {
-          league: this.FRIENDLIES_ID,
-          season: this.SEASON,
-          from,
-          to,
-        },
-      });
-
-      this.logger.log(
-        `Fetched ${response.data.results} International Friendlies`,
-      );
-      return response.data.response;
-    } catch (error) {
-      this.logger.error(
-        'Failed to fetch International Friendlies',
-        error.message,
-      );
-      return [];
-    }
+    // On 429, retry once with the next key in the rotation
+    this.client.interceptors.response.use(
+      (res) => res,
+      async (err) => {
+        if (err.response?.status === 429 && !(err.config as any)._retried) {
+          const fallbackKey = this.keyRotator.nextKey;
+          if (fallbackKey) {
+            (err.config as any)._retried = true;
+            err.config.headers['x-apisports-key'] = fallbackKey;
+            return this.client.request(err.config);
+          }
+        }
+        throw err;
+      },
+    );
   }
 
   /**
@@ -218,7 +160,6 @@ export class WorldCupApiService {
    * Check if API is configured
    */
   isConfigured(): boolean {
-    const apiKey = this.configService.get<string>('API_FOOTBALL_KEY');
-    return !!apiKey && apiKey !== 'YOUR_API_FOOTBALL_KEY';
+    return this.keyRotator.isConfigured();
   }
 }

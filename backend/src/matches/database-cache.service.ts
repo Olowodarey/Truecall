@@ -4,6 +4,7 @@ import { Repository, In, MoreThan } from 'typeorm';
 import { Cron } from '@nestjs/schedule';
 import { WorldCupApiService, WorldCupFixture } from './world-cup-api.service';
 import { MatchCache, ApiCallLog } from './entities/match-cache.entity';
+import { ApiKeyRotatorService } from './api-key-rotator.service';
 
 @Injectable()
 export class DatabaseCacheService {
@@ -17,6 +18,7 @@ export class DatabaseCacheService {
     @InjectRepository(ApiCallLog)
     private apiLogRepo: Repository<ApiCallLog>,
     private worldCupApi: WorldCupApiService,
+    private keyRotator: ApiKeyRotatorService,
   ) {
     this.initializeDailyCount();
     this.doInitialSync();
@@ -61,11 +63,12 @@ export class DatabaseCacheService {
   }
 
   /**
-   * CRON: Sync World Cup + Friendlies every 2 hours
-   * API Calls: 2 per execution (1 for World Cup, 1 for Friendlies)
+   * CRON: Sync World Cup + Friendlies every 6 hours
+   * API Calls: 2 per execution (today + tomorrow date queries)
+   * Total: 4 syncs/day × 2 calls = 8 calls/day
    * PUBLIC: Can also be manually triggered
    */
-  @Cron('0 */2 * * *') // Every 2 hours
+  @Cron('0 */6 * * *') // Every 6 hours
   async syncPriorityMatches() {
     if (!this.canMakeApiCalls(2)) {
       this.logger.warn('⚠️ Daily API limit reached, skipping priority sync');
@@ -89,14 +92,14 @@ export class DatabaseCacheService {
   }
 
   /**
-   * CRON: Sync finished matches every 45 minutes
-   * API Calls: 2 per execution (1 for World Cup, 1 for Friendlies)
-   * Total: 32 syncs/day × 2 calls = 64 calls/day
-   * Combined with priority sync (24 calls/day) = 88 calls/day (within 100 limit)
+   * CRON: Sync finished matches every 30 minutes
+   * API Calls: 1 per execution (single date-range query, filtered client-side)
+   * Total: 48 syncs/day × 1 call = 48 calls/day
+   * Combined with priority sync (8 calls/day) = 56 calls/day (well under 100 limit)
    */
-  @Cron('*/45 * * * *') // Every 45 minutes
+  @Cron('*/30 * * * *') // Every 30 minutes
   async syncFinishedMatches() {
-    if (!this.canMakeApiCalls(2)) {
+    if (!this.canMakeApiCalls(1)) {
       this.logger.warn('⚠️ Daily API limit reached, skipping finished sync');
       return;
     }
@@ -107,13 +110,13 @@ export class DatabaseCacheService {
       const matches = await this.worldCupApi.getFinishedPriorityMatches();
       await this.storeMatches(matches);
 
-      await this.trackApiCalls('finished_matches', matches.length, 2);
+      await this.trackApiCalls('finished_matches', matches.length, 1);
       this.logger.log(
-        `✅ Synced ${matches.length} finished matches (2 API calls)`,
+        `✅ Synced ${matches.length} finished matches (1 API call)`,
       );
     } catch (error) {
       this.logger.error('Failed to sync finished matches', error);
-      await this.trackApiCalls('finished_matches', 0, 2, false);
+      await this.trackApiCalls('finished_matches', 0, 1, false);
     }
   }
 
@@ -237,10 +240,10 @@ export class DatabaseCacheService {
   }
 
   /**
-   * Check if we can make API calls
+   * Check if we can make API calls (true if any key still has budget)
    */
-  private canMakeApiCalls(count: number): boolean {
-    return this.dailyCallCount + count <= this.dailyLimit;
+  private canMakeApiCalls(_count: number): boolean {
+    return this.keyRotator.hasAvailableKey();
   }
 
   /**
@@ -292,6 +295,7 @@ export class DatabaseCacheService {
           : percentUsed < 95
             ? 'warning'
             : 'critical',
+      keyRotation: this.keyRotator.getStats(),
     };
   }
 

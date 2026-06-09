@@ -36,7 +36,7 @@ export interface CreatorMatch {
 
 export interface MatchWinner {
   user: string;
-  submittedAt: number; // original prediction timestamp
+  submittedAt: number;
   twitterHandle?: string | null;
   twitterAvatar?: string | null;
 }
@@ -60,11 +60,6 @@ export const fetchCreatorEvent = (id: number): Promise<CreatorEvent> =>
 export const fetchCreatorEventMatches = (id: number): Promise<CreatorMatch[]> =>
   get(`/${id}/matches`);
 
-export const fetchCreatorParticipants = (
-  id: number,
-): Promise<{ eventId: number; count: number; participants: string[] }> =>
-  get(`/${id}/participants`);
-
 export const fetchCreatorHasJoined = (
   id: number,
   address: string,
@@ -73,29 +68,14 @@ export const fetchCreatorHasJoined = (
 
 // ─── Matches ──────────────────────────────────────────────────────────────────
 
-export const fetchCreatorMatch = (matchId: number): Promise<CreatorMatch> =>
-  get(`/match/${matchId}`);
-
 export const fetchMatchWinners = (
   matchId: number,
 ): Promise<{ matchId: number; count: number; winners: MatchWinner[] }> =>
   get(`/match/${matchId}/winners`);
 
-export const fetchCreatorPrediction = (
-  matchId: number,
-  address: string,
-): Promise<CreatorPrediction> => get(`/match/${matchId}/prediction/${address}`);
-
-// ─── Verification ─────────────────────────────────────────────────────────────
-
-export const fetchVerificationStatus = (
-  address: string,
-): Promise<{ user: string; verified: boolean }> =>
-  get(`/verify/status/${address}`);
-
 // ─── Fee ──────────────────────────────────────────────────────────────────────
 
 export const fetchCreationFee = (): Promise<{
-  amount: string; // formatted CELO e.g. "0.1"
-  amountRaw: string; // wei string
+  amount: string;
+  amountRaw: string;
 }> => get("/fee");
