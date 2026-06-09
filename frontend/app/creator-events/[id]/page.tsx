@@ -734,6 +734,54 @@ export default function CreatorEventDetailPage() {
             </div>
           )}
 
+          {/* Pinned tweet — visible to all users when a tweet is linked */}
+          {creatorTweetId && (
+            <a
+              href={`https://x.com/i/web/status/${creatorTweetId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-between gap-3 mb-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl hover:bg-blue-500/20 transition group"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="shrink-0 w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
+                  <svg
+                    className="w-4 h-4 text-blue-400"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                  </svg>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-white text-sm font-semibold">
+                    Creator&apos;s Event Tweet
+                  </p>
+                  <p className="text-blue-400 text-xs truncate">
+                    {creatorTwitter
+                      ? `@${creatorTwitter} — drop your prediction as a reply!`
+                      : "Drop your prediction as a reply!"}
+                  </p>
+                </div>
+              </div>
+              <span className="shrink-0 text-blue-400 text-xs font-semibold group-hover:text-blue-300 transition flex items-center gap-1">
+                View on X
+                <svg
+                  className="w-3 h-3"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                  />
+                </svg>
+              </span>
+            </a>
+          )}
+
           {/* Pin Tweet section — creator only */}
           {isCreator && isOpen && (
             <div className="mb-6 p-4 bg-gray-800/40 border border-gray-700/50 rounded-xl">
