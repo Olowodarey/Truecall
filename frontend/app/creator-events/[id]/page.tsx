@@ -119,12 +119,20 @@ export default function CreatorEventDetailPage() {
   const [fixturesLoading, setFixturesLoading] = useState(false);
   const [fixturesLoaded, setFixturesLoaded] = useState(false);
   const [search, setSearch] = useState("");
-  const [selectedLeague, setSelectedLeague] = useState("All");
+  const [selectedLeague, setSelectedLeague] = useState("World Cup");
   const [showFixturePicker, setShowFixturePicker] = useState(false);
 
+  const otherLeagues = Array.from(new Set(fixtures.map((f) => f.league)))
+    .filter((l) => !l.toLowerCase().includes("world cup"))
+    .sort();
+  const hasWorldCup = fixtures.some((f) =>
+    f.league.toLowerCase().includes("world cup"),
+  );
   const leagues = [
     "All",
-    ...Array.from(new Set(fixtures.map((f) => f.league))).sort(),
+    "Today",
+    ...(hasWorldCup ? ["World Cup"] : []),
+    ...otherLeagues,
   ];
 
   // Winners modal
@@ -392,8 +400,24 @@ export default function CreatorEventDetailPage() {
     }
   };
 
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
+
   const filteredFixtures = fixtures.filter((f) => {
-    const matchesLeague = selectedLeague === "All" || f.league === selectedLeague;
+    let matchesLeague: boolean;
+    if (selectedLeague === "All") {
+      matchesLeague = true;
+    } else if (selectedLeague === "Today") {
+      if (!f.kickoffTime) return false;
+      const d = new Date(f.kickoffTime * 1000);
+      matchesLeague = d >= todayStart && d <= todayEnd;
+    } else if (selectedLeague === "World Cup") {
+      matchesLeague = f.league.toLowerCase().includes("world cup");
+    } else {
+      matchesLeague = f.league === selectedLeague;
+    }
     const matchesSearch =
       search === "" ||
       f.homeTeam.toLowerCase().includes(search.toLowerCase()) ||
@@ -433,13 +457,13 @@ export default function CreatorEventDetailPage() {
     });
     setShowFixturePicker(false);
     setSearch("");
-    setSelectedLeague("All");
+    setSelectedLeague("World Cup");
   };
 
   const openFixturePicker = () => {
     setShowFixturePicker(!showFixturePicker);
     setSearch("");
-    setSelectedLeague("All");
+    setSelectedLeague("World Cup");
     loadFixtures();
   };
 
