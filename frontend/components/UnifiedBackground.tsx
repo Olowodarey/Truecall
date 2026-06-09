@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 
 const Antigravity = dynamic(() => import("./Antigravity"), { ssr: false });
@@ -24,6 +24,19 @@ export default function UnifiedBackground({
   opacity = 0.4,
   className = "",
 }: UnifiedBackgroundProps) {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
   const getBackgroundClass = () => {
     switch (variant) {
       case "hero":
@@ -39,8 +52,8 @@ export default function UnifiedBackground({
 
   return (
     <div className={`absolute inset-0 ${getBackgroundClass()} ${className}`}>
-      {/* Antigravity particle system */}
-      {showParticles && (
+      {/* Antigravity particle system - disabled on mobile */}
+      {showParticles && !isMobile && (
         <div className="absolute inset-0" style={{ opacity }}>
           <Antigravity
             count={particleCount}

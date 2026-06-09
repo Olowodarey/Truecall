@@ -35,6 +35,15 @@ export default function HeroSection() {
   const router = useRouter();
   const [currentTab, setCurrentTab] = useState(0);
 
+  // Auto-advance to next tab every 10 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTab((prev) => (prev + 1) % heroContent.length);
+    }, 5000); // 10 seconds
+
+    return () => clearInterval(interval);
+  }, []);
+
   const nextTab = () => {
     setCurrentTab((prev) => (prev + 1) % heroContent.length);
   };
