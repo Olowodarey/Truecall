@@ -81,14 +81,14 @@ export default function FeaturesSection() {
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeWidth={2}
-            d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"
           />
         </svg>
       ),
-      title: "1 CELO Platform Fee",
+      title: "Free for Predictors",
       description:
-        "Creators pay just 1 CELO to create an event. This small fee keeps the platform sustainable while ensuring quality events. Users join for free and compete for prizes.",
-      highlight: "Transparent Pricing",
+        "Joining events and submitting predictions costs nothing. Works seamlessly with any Celo wallet — no gas fees, no hidden costs to play.",
+      highlight: "Always Free to Play",
     },
   ];
 
@@ -157,7 +157,7 @@ export default function FeaturesSection() {
                 onClick={() => router.push("/creator-events/create")}
                 className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white px-8 py-3 rounded-lg font-semibold transition-all transform hover:scale-105"
               >
-                Create Event (1 CELO)
+                Create Event
               </button>
               <button
                 onClick={() => router.push("/creator-events")}

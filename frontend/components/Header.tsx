@@ -9,6 +9,7 @@ import { UserRound, Menu, X } from "lucide-react";
 const NAV_LINKS = [
   { href: "/creator-events", label: "Events" },
   { href: "/creator-events/create", label: "Create Event" },
+  { href: "/faq", label: "FAQ" },
 ];
 
 export default function Header() {

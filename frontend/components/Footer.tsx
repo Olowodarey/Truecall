@@ -13,6 +13,7 @@ export default function Footer() {
         { name: "Creator Events", href: "/creator-events" },
         { name: "About TrueCall", href: "/about" },
         { name: "How It Works", href: "/about" },
+        { name: "FAQ", href: "/faq" },
       ],
     },
     {
@@ -26,6 +27,7 @@ export default function Footer() {
       title: "COMMUNITY",
       links: [
         { name: "Twitter", href: "https://x.com/Truecall89" },
+        { name: "Telegram", href: "https://t.me/Truecall98" },
         { name: "GitHub", href: "https://github.com/Olowodarey/Truecall" },
       ],
     },
@@ -66,6 +68,20 @@ export default function Footer() {
                   viewBox="0 0 24 24"
                 >
                   <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                </svg>
+              </a>
+              <a
+                href="https://t.me/Truecall98"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M21.94 5.36c.26-1.07-.45-1.59-1.31-1.27L2.6 11.43c-1.05.42-1.04.99-.18 1.25l4.62 1.44 1.79 5.5c.21.58.36.81.74.81.39 0 .55-.18.76-.4l1.83-1.78 4.45 3.3c.82.45 1.41.22 1.62-.76l2.71-12.93zM8.36 13.39l9.9-6.24c.47-.28.9-.13.55.18l-8.43 7.6-.32 3.43-1.7-4.97z" />
                 </svg>
               </a>
               <a
