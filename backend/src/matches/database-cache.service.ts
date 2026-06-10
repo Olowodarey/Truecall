@@ -5,6 +5,7 @@ import { Cron } from '@nestjs/schedule';
 import { WorldCupApiService, WorldCupFixture } from './world-cup-api.service';
 import { MatchCache, ApiCallLog } from './entities/match-cache.entity';
 import { ApiKeyRotatorService } from './api-key-rotator.service';
+import { FootballDataOrgService } from './football-data-org.service';
 
 @Injectable()
 export class DatabaseCacheService {
@@ -19,6 +20,7 @@ export class DatabaseCacheService {
     private apiLogRepo: Repository<ApiCallLog>,
     private worldCupApi: WorldCupApiService,
     private keyRotator: ApiKeyRotatorService,
+    private footballDataOrg: FootballDataOrgService,
   ) {
     this.initializeDailyCount();
     this.doInitialSync();
@@ -70,25 +72,31 @@ export class DatabaseCacheService {
    */
   @Cron('0 */6 * * *') // Every 6 hours
   async syncPriorityMatches() {
-    if (!this.canMakeApiCalls(2)) {
-      this.logger.warn('⚠️ Daily API limit reached, skipping priority sync');
-      return;
+    this.logger.log('🏆 Syncing World Cup & Friendlies matches...');
+
+    // World Cup fixtures come from football-data.org (api-football's free
+    // tier blocks the current/2026 season entirely).
+    const worldCup = await this.footballDataOrg.getUpcomingWorldCupMatches();
+
+    let friendlies: WorldCupFixture[] = [];
+    if (this.canMakeApiCalls(2)) {
+      try {
+        friendlies = await this.worldCupApi.getAllPriorityMatches();
+        await this.trackApiCalls('priority_matches', friendlies.length, 2);
+      } catch (error) {
+        this.logger.error('Failed to sync friendlies', error);
+        await this.trackApiCalls('priority_matches', 0, 2, false);
+      }
+    } else {
+      this.logger.warn('⚠️ Daily API-Football limit reached, skipping friendlies sync');
     }
 
-    this.logger.log('🏆 Syncing World Cup & Friendlies matches (next 7 days)...');
+    const matches = [...worldCup, ...friendlies];
+    await this.storeMatches(matches);
 
-    try {
-      const matches = await this.worldCupApi.getAllPriorityMatches();
-      await this.storeMatches(matches);
-
-      await this.trackApiCalls('priority_matches', matches.length, 2);
-      this.logger.log(
-        `✅ Synced ${matches.length} priority matches (2 API calls, 7-day window)`,
-      );
-    } catch (error) {
-      this.logger.error('Failed to sync priority matches', error);
-      await this.trackApiCalls('priority_matches', 0, 2, false);
-    }
+    this.logger.log(
+      `✅ Synced ${worldCup.length} World Cup + ${friendlies.length} Friendlies = ${matches.length} total`,
+    );
   }
 
   /**
@@ -100,25 +108,29 @@ export class DatabaseCacheService {
    */
   @Cron('*/30 * * * *') // Every 30 minutes
   async syncFinishedMatches() {
-    if (!this.canMakeApiCalls(2)) {
-      this.logger.warn('⚠️ Daily API limit reached, skipping finished sync');
-      return;
-    }
-
     this.logger.log('🔄 Syncing finished priority matches...');
 
-    try {
-      const matches = await this.worldCupApi.getFinishedPriorityMatches();
-      await this.storeMatches(matches);
+    const worldCup = await this.footballDataOrg.getFinishedWorldCupMatches();
 
-      await this.trackApiCalls('finished_matches', matches.length, 2);
-      this.logger.log(
-        `✅ Synced ${matches.length} finished priority matches (2 API calls)`,
-      );
-    } catch (error) {
-      this.logger.error('Failed to sync finished matches', error);
-      await this.trackApiCalls('finished_matches', 0, 2, false);
+    let legacyFinished: WorldCupFixture[] = [];
+    if (this.canMakeApiCalls(2)) {
+      try {
+        legacyFinished = await this.worldCupApi.getFinishedPriorityMatches();
+        await this.trackApiCalls('finished_matches', legacyFinished.length, 2);
+      } catch (error) {
+        this.logger.error('Failed to sync finished matches', error);
+        await this.trackApiCalls('finished_matches', 0, 2, false);
+      }
+    } else {
+      this.logger.warn('⚠️ Daily API-Football limit reached, skipping finished friendlies sync');
     }
+
+    const matches = [...worldCup, ...legacyFinished];
+    await this.storeMatches(matches);
+
+    this.logger.log(
+      `✅ Synced ${worldCup.length} finished World Cup + ${legacyFinished.length} finished Friendlies = ${matches.length} total`,
+    );
   }
 
   /**
@@ -127,7 +139,10 @@ export class DatabaseCacheService {
    * Called by the admin endpoint to unstick matches that were missed by the CRON.
    */
   async forceRefreshMatch(fixtureId: string): Promise<any | null> {
-    const fixture = await this.worldCupApi.getSingleFixture(fixtureId);
+    let fixture = await this.footballDataOrg.getMatchById(fixtureId);
+    if (!fixture) {
+      fixture = await this.worldCupApi.getSingleFixture(fixtureId);
+    }
     if (!fixture) return null;
     await this.storeMatches([fixture]);
     await this.trackApiCalls('force_refresh', 1, 1);

@@ -6,6 +6,7 @@ import { BlockchainModule } from '../blockchain/blockchain.module';
 import { WorldCupApiService } from './world-cup-api.service';
 import { DatabaseCacheService } from './database-cache.service';
 import { ApiKeyRotatorService } from './api-key-rotator.service';
+import { FootballDataOrgService } from './football-data-org.service';
 import { MatchCache, ApiCallLog } from './entities/match-cache.entity';
 
 @Module({
@@ -18,6 +19,7 @@ import { MatchCache, ApiCallLog } from './entities/match-cache.entity';
   providers: [
     ApiKeyRotatorService,
     WorldCupApiService,
+    FootballDataOrgService,
     DatabaseCacheService,
   ],
   exports: [DatabaseCacheService],
