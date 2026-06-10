@@ -94,9 +94,17 @@ export default function ProfilePage() {
   // Handle verification success
   useEffect(() => {
     if (verifySuccess) {
-      refetchVerificationStatus();
       setVerifyError(null);
       resetVerify();
+
+      // The public RPC node can briefly serve a stale block right after the
+      // tx is mined, so the first refetch sometimes still reports
+      // unverified. Refetch immediately and retry a few times.
+      refetchVerificationStatus();
+      const retries = [1000, 3000, 6000].map((delay) =>
+        setTimeout(() => refetchVerificationStatus(), delay),
+      );
+      return () => retries.forEach(clearTimeout);
     }
   }, [verifySuccess, refetchVerificationStatus, resetVerify]);
 

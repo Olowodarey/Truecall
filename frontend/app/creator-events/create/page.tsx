@@ -399,7 +399,7 @@ export default function CreateCreatorEventPage() {
               Event Created!
             </h2>
             <p className="text-green-400 font-medium mb-2">
-              Transaction confirmed on Celo Sepolia
+              Transaction confirmed on Celo Mainnet
             </p>
             <p className="text-gray-400 text-sm mb-2">
               Share your invite code with participants:

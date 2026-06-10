@@ -1704,19 +1704,6 @@ function SettingsTab({
             </p>
           </a>
 
-          <a
-            href="https://faucet.celo.org"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="bg-gray-700/30 border border-gray-600 hover:border-gray-500 rounded-xl p-4 transition group"
-          >
-            <p className="text-white font-semibold mb-1 group-hover:text-blue-400">
-              Celo Faucet →
-            </p>
-            <p className="text-gray-400 text-xs">
-              Get testnet CELO for testing
-            </p>
-          </a>
         </div>
       </div>
     </div>
