@@ -108,29 +108,36 @@ export class DatabaseCacheService {
    */
   @Cron('*/30 * * * *') // Every 30 minutes
   async syncFinishedMatches() {
-    this.logger.log('🔄 Syncing finished priority matches...');
-
-    const worldCup = await this.footballDataOrg.getFinishedWorldCupMatches();
-
-    let legacyFinished: WorldCupFixture[] = [];
-    if (this.canMakeApiCalls(2)) {
-      try {
-        legacyFinished = await this.worldCupApi.getFinishedPriorityMatches();
-        await this.trackApiCalls('finished_matches', legacyFinished.length, 2);
-      } catch (error) {
-        this.logger.error('Failed to sync finished matches', error);
-        await this.trackApiCalls('finished_matches', 0, 2, false);
-      }
-    } else {
+    if (!this.canMakeApiCalls(2)) {
       this.logger.warn('⚠️ Daily API-Football limit reached, skipping finished friendlies sync');
+      return;
     }
 
-    const matches = [...worldCup, ...legacyFinished];
-    await this.storeMatches(matches);
+    this.logger.log('🔄 Syncing finished friendlies...');
 
-    this.logger.log(
-      `✅ Synced ${worldCup.length} finished World Cup + ${legacyFinished.length} finished Friendlies = ${matches.length} total`,
-    );
+    try {
+      const matches = await this.worldCupApi.getFinishedPriorityMatches();
+      await this.storeMatches(matches);
+      await this.trackApiCalls('finished_matches', matches.length, 2);
+      this.logger.log(`✅ Synced ${matches.length} finished friendlies`);
+    } catch (error) {
+      this.logger.error('Failed to sync finished matches', error);
+      await this.trackApiCalls('finished_matches', 0, 2, false);
+    }
+  }
+
+  /**
+   * CRON: Poll World Cup live scores & results every 2 minutes via football-data.org.
+   * Free tier allows 10 calls/min, so this is well within budget (1 call/2min).
+   * Picks up IN_PLAY/PAUSED score updates and FT results for the AI oracle.
+   */
+  @Cron('*/2 * * * *') // Every 2 minutes
+  async syncWorldCupLive() {
+    const matches = await this.footballDataOrg.getLiveAndFinishedWorldCupMatches();
+    if (matches.length > 0) {
+      await this.storeMatches(matches);
+      this.logger.log(`✅ Synced ${matches.length} live/finished World Cup matches`);
+    }
   }
 
   /**

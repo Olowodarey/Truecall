@@ -116,20 +116,21 @@ export class FootballDataOrgService {
   }
 
   /**
-   * Fetch finished World Cup matches (1 API call).
+   * Fetch World Cup matches that are live or finished (1 API call).
+   * Used for frequent polling: live scores keep the frontend up to date,
+   * and FINISHED results let the AI oracle submit on-chain.
    */
-  async getFinishedWorldCupMatches(): Promise<WorldCupFixture[]> {
+  async getLiveAndFinishedWorldCupMatches(): Promise<WorldCupFixture[]> {
     if (!this.client) return [];
 
     try {
       const response = await this.client.get('/competitions/WC/matches', {
-        params: { status: 'FINISHED' },
+        params: { status: 'IN_PLAY,PAUSED,FINISHED' },
       });
       const matches: FdMatch[] = response.data.matches ?? [];
-      this.logger.log(`✅ ${matches.length} finished World Cup matches (football-data.org)`);
       return matches.map((m) => this.toFixture(m));
     } catch (error) {
-      this.logger.error('Failed to fetch finished World Cup matches', error.message);
+      this.logger.error('Failed to fetch live/finished World Cup matches', error.message);
       return [];
     }
   }
