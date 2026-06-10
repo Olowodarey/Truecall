@@ -5,7 +5,7 @@ import { useWallet } from "@/contexts/WalletContext";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import UnifiedBackground from "@/components/UnifiedBackground";
-import { Twitter, CheckCircle, XCircle, Shield } from "lucide-react";
+import { Twitter, CheckCircle, XCircle, Shield, RefreshCw } from "lucide-react";
 import {
   generateCodeVerifier,
   generateCodeChallenge,
@@ -465,6 +465,20 @@ export default function ProfilePage() {
                   displayed to creators and other participants.
                 </p>
               </div>
+
+              <button
+                onClick={handleLinkTwitter}
+                disabled={linking}
+                className="w-full py-3 px-4 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/50 text-blue-400 font-semibold rounded-xl transition disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <RefreshCw className={`w-4 h-4 ${linking ? "animate-spin" : ""}`} />
+                {linking ? "Refreshing..." : "Refresh Twitter Info"}
+              </button>
+
+              <p className="text-gray-500 text-xs text-center -mt-2">
+                Changed your Twitter username or photo? Refresh to update it
+                here.
+              </p>
 
               <button
                 onClick={handleUnlinkTwitter}

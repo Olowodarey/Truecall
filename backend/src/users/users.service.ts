@@ -66,6 +66,8 @@ export class UsersService {
       });
     }
 
+    const previousHandle = user.twitterHandle;
+
     // Update Twitter data
     user.twitterHandle = twitterHandle;
     user.twitterId = twitterId;
@@ -74,7 +76,11 @@ export class UsersService {
 
     await this.userRepository.save(user);
 
-    this.logger.log(`Linked Twitter @${twitterHandle} to ${address}`);
+    if (previousHandle && previousHandle !== twitterHandle) {
+      this.logger.log(`Refreshed Twitter handle for ${address}: @${previousHandle} → @${twitterHandle}`);
+    } else {
+      this.logger.log(`Linked Twitter @${twitterHandle} to ${address}`);
+    }
 
     return {
       address: user.address,
