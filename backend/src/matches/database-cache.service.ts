@@ -4,6 +4,7 @@ import { Repository, In, MoreThan } from 'typeorm';
 import { Cron } from '@nestjs/schedule';
 import { WorldCupApiService, WorldCupFixture } from './world-cup-api.service';
 import { MatchCache, ApiCallLog } from './entities/match-cache.entity';
+import { SyncLock } from './entities/sync-lock.entity';
 import { ApiKeyRotatorService } from './api-key-rotator.service';
 import { FootballDataOrgService } from './football-data-org.service';
 
@@ -18,6 +19,8 @@ export class DatabaseCacheService {
     private matchRepo: Repository<MatchCache>,
     @InjectRepository(ApiCallLog)
     private apiLogRepo: Repository<ApiCallLog>,
+    @InjectRepository(SyncLock)
+    private syncLockRepo: Repository<SyncLock>,
     private worldCupApi: WorldCupApiService,
     private keyRotator: ApiKeyRotatorService,
     private footballDataOrg: FootballDataOrgService,
@@ -65,18 +68,96 @@ export class DatabaseCacheService {
   }
 
   /**
+   * Try to claim a cron job for this replica. Uses an atomic UPDATE so that
+   * if multiple Railway replicas fire the same @Cron at once, only one wins.
+   * Returns false if another replica already ran this job within `minIntervalMs`.
+   */
+  private async tryAcquireLock(jobName: string, minIntervalMs: number): Promise<boolean> {
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - minIntervalMs);
+
+    const result = await this.syncLockRepo
+      .createQueryBuilder()
+      .update(SyncLock)
+      .set({ last_run_at: now })
+      .where('job_name = :jobName AND last_run_at < :cutoff', { jobName, cutoff })
+      .execute();
+
+    if (result.affected && result.affected > 0) return true;
+
+    // Row may not exist yet on first run — try to insert it.
+    try {
+      await this.syncLockRepo.insert({ job_name: jobName, last_run_at: now });
+      return true;
+    } catch {
+      return false; // another replica inserted first, or ran recently
+    }
+  }
+
+  /**
+   * Record the outcome of a sync job for the /matches/stats/worldcup endpoint.
+   */
+  private async recordSyncResult(jobName: string, matchCount: number, error?: string) {
+    await this.syncLockRepo.update(
+      { job_name: jobName },
+      {
+        last_success_at: error ? undefined : new Date(),
+        last_match_count: matchCount,
+        last_error: error ?? null,
+      },
+    );
+  }
+
+  /**
+   * Health/visibility for the football-data.org-backed World Cup sync jobs.
+   */
+  async getWorldCupSyncStats() {
+    const jobs = await this.syncLockRepo.find({
+      where: [{ job_name: 'world_cup_live' }, { job_name: 'priority_matches' }],
+    });
+
+    const toStatus = (jobName: string) => {
+      const job = jobs.find((j) => j.job_name === jobName);
+      if (!job) return { lastRunAt: null, lastSuccessAt: null, lastMatchCount: null, lastError: null };
+      return {
+        lastRunAt: job.last_run_at,
+        lastSuccessAt: job.last_success_at,
+        lastMatchCount: job.last_match_count,
+        lastError: job.last_error,
+      };
+    };
+
+    return {
+      configured: this.footballDataOrg.isConfigured(),
+      live: toStatus('world_cup_live'),
+      upcoming: toStatus('priority_matches'),
+    };
+  }
+
+  /**
    * CRON: Sync World Cup + Friendlies every 6 hours
    * API Calls: 2 per execution (World Cup targeted + general Friendlies, parallel)
    * Total: 4 syncs/day × 2 calls = 8 calls/day
    * PUBLIC: Can also be manually triggered
    */
   @Cron('0 */6 * * *') // Every 6 hours
-  async syncPriorityMatches() {
+  async syncPriorityMatches(force = false) {
+    if (!force && !(await this.tryAcquireLock('priority_matches', 5.5 * 60 * 60 * 1000))) {
+      return;
+    }
+
     this.logger.log('🏆 Syncing World Cup & Friendlies matches...');
 
     // World Cup fixtures come from football-data.org (api-football's free
     // tier blocks the current/2026 season entirely).
-    const worldCup = await this.footballDataOrg.getUpcomingWorldCupMatches();
+    let worldCup: WorldCupFixture[] = [];
+    try {
+      worldCup = await this.footballDataOrg.getUpcomingWorldCupMatches();
+      await this.recordSyncResult('priority_matches', worldCup.length);
+    } catch (error) {
+      this.logger.error('Failed to sync World Cup fixtures', error.message);
+      await this.recordSyncResult('priority_matches', 0, error.message);
+    }
 
     let friendlies: WorldCupFixture[] = [];
     if (this.canMakeApiCalls(2)) {
@@ -108,6 +189,10 @@ export class DatabaseCacheService {
    */
   @Cron('*/30 * * * *') // Every 30 minutes
   async syncFinishedMatches() {
+    if (!(await this.tryAcquireLock('finished_matches', 25 * 60 * 1000))) {
+      return;
+    }
+
     if (!this.canMakeApiCalls(2)) {
       this.logger.warn('⚠️ Daily API-Football limit reached, skipping finished friendlies sync');
       return;
@@ -133,10 +218,20 @@ export class DatabaseCacheService {
    */
   @Cron('*/2 * * * *') // Every 2 minutes
   async syncWorldCupLive() {
-    const matches = await this.footballDataOrg.getLiveAndFinishedWorldCupMatches();
-    if (matches.length > 0) {
-      await this.storeMatches(matches);
-      this.logger.log(`✅ Synced ${matches.length} live/finished World Cup matches`);
+    if (!(await this.tryAcquireLock('world_cup_live', 100 * 1000))) {
+      return;
+    }
+
+    try {
+      const matches = await this.footballDataOrg.getLiveAndFinishedWorldCupMatches();
+      if (matches.length > 0) {
+        await this.storeMatches(matches);
+        this.logger.log(`✅ Synced ${matches.length} live/finished World Cup matches`);
+      }
+      await this.recordSyncResult('world_cup_live', matches.length);
+    } catch (error) {
+      this.logger.error('Failed to sync World Cup live matches', error.message);
+      await this.recordSyncResult('world_cup_live', 0, error.message);
     }
   }
 

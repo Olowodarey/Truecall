@@ -8,11 +8,12 @@ import { DatabaseCacheService } from './database-cache.service';
 import { ApiKeyRotatorService } from './api-key-rotator.service';
 import { FootballDataOrgService } from './football-data-org.service';
 import { MatchCache, ApiCallLog } from './entities/match-cache.entity';
+import { SyncLock } from './entities/sync-lock.entity';
 
 @Module({
   imports: [
     BlockchainModule,
-    TypeOrmModule.forFeature([MatchCache, ApiCallLog]),
+    TypeOrmModule.forFeature([MatchCache, ApiCallLog, SyncLock]),
     ScheduleModule.forRoot(),
   ],
   controllers: [MatchesController],

@@ -39,6 +39,12 @@ export class MatchesController {
     return this.databaseCache.getDatabaseStats();
   }
 
+  @Get('stats/worldcup')
+  @ApiOperation({ summary: 'Get football-data.org World Cup sync health (last run/success/error per job)' })
+  async getWorldCupSyncStats() {
+    return this.databaseCache.getWorldCupSyncStats();
+  }
+
   @Get('priority')
   @ApiOperation({ summary: 'Get upcoming priority matches (World Cup + Friendlies)' })
   async getPriorityMatches() {
@@ -49,7 +55,7 @@ export class MatchesController {
   @ApiOperation({ summary: 'Manually trigger priority matches sync' })
   async triggerSync() {
     this.logger.log('Manual sync triggered');
-    await this.databaseCache.syncPriorityMatches();
+    await this.databaseCache.syncPriorityMatches(true);
     return {
       message: 'Sync triggered successfully',
       stats: await this.databaseCache.getDatabaseStats(),
