@@ -3,7 +3,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useWallet } from "@/contexts/WalletContext";
-import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import {
+  useWriteContract,
+  useWaitForTransactionReceipt,
+  useReadContract,
+} from "wagmi";
 import { celo } from "@/lib/wagmi";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -192,6 +196,20 @@ export default function CreatorEventDetailPage() {
 
   const isCreator =
     event && address?.toLowerCase() === event.creator.toLowerCase();
+
+  // On-chain verification status — set via selfVerify() on the contract.
+  // joinEvent() reverts with NotVerified() if this is false, and admins can
+  // revoke it after a user has already joined, so it's checked separately
+  // from `isVerified` (which only reflects Twitter linkage).
+  const { data: isVerifiedOnChain } = useReadContract({
+    address: CREATOR_EVENT_MANAGER_ADDRESS,
+    abi: CREATOR_EVENT_MANAGER_ABI,
+    functionName: "isVerified",
+    args: address ? [address as `0x${string}`] : undefined,
+    query: {
+      enabled: !!address && isConnected,
+    },
+  });
 
   // ── Load ─────────────────────────────────────────────────────────────────────
 
@@ -409,9 +427,9 @@ export default function CreatorEventDetailPage() {
     if (!inviteCode.trim()) return setJoinError("Enter the invite code");
 
     // Check verification status before attempting transaction
-    if (!isVerified) {
+    if (!isVerified || !isVerifiedOnChain) {
       setJoinError(
-        "🔒 You must verify your Twitter account before joining creator events",
+        "🔒 You must verify your Twitter account and bind your wallet on-chain before joining creator events",
       );
       return;
     }
@@ -907,24 +925,51 @@ export default function CreatorEventDetailPage() {
                   <span className="text-green-400">✓ Verified</span>
                 </div>
               )}
+              {!isVerifiedOnChain && (
+                <p className="mt-2 text-amber-400 text-sm font-normal">
+                  ⚠️ Your on-chain verification was revoked — re-verify on{" "}
+                  <button
+                    onClick={() => router.push("/profile")}
+                    className="underline font-semibold"
+                  >
+                    your profile
+                  </button>{" "}
+                  to keep predicting.
+                </p>
+              )}
             </div>
-          ) : !isVerified ? (
+          ) : !isVerified || !isVerifiedOnChain ? (
             <div className="bg-amber-900/20 border border-amber-500/30 rounded-xl p-5">
               <h3 className="text-white font-bold mb-2 flex items-center gap-2">
                 <span>🔒</span>
-                Twitter Verification Required
+                Verification Required to Join
               </h3>
               <p className="text-gray-400 text-sm mb-4">
-                You need to verify your Twitter account to join creator events.
-                This helps creators know you're a real person and builds trust
-                in the community.
+                You need to verify your Twitter account and bind your wallet
+                on-chain before you can join creator events and submit
+                predictions. This helps creators know you're a real person
+                and builds trust in the community.
               </p>
+              <ul className="text-sm space-y-1 mb-4">
+                <li
+                  className={isVerified ? "text-green-400" : "text-gray-400"}
+                >
+                  {isVerified ? "✅" : "⬜"} Twitter account linked
+                </li>
+                <li
+                  className={
+                    isVerifiedOnChain ? "text-green-400" : "text-gray-400"
+                  }
+                >
+                  {isVerifiedOnChain ? "✅" : "⬜"} Wallet verified on-chain
+                </li>
+              </ul>
               <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                 <button
                   onClick={() => router.push("/profile")}
                   className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-5 rounded-lg transition flex items-center justify-center gap-2 shrink-0"
                 >
-                  🐦 Verify Twitter
+                  🐦 Go to Profile to Verify
                 </button>
                 <div className="flex-1 bg-gray-900/50 rounded-lg p-3">
                   <p className="text-gray-500 text-xs mb-1">Your wallet:</p>
@@ -1216,7 +1261,10 @@ export default function CreatorEventDetailPage() {
               {matches.map((m) => {
                 const kickedOff = now >= m.kickoffTime;
                 const canPredict =
-                  hasJoined && m.status === "OPEN" && !kickedOff;
+                  hasJoined &&
+                  !!isVerifiedOnChain &&
+                  m.status === "OPEN" &&
+                  !kickedOff;
 
                 return (
                   <div
