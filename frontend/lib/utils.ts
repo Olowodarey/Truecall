@@ -1,6 +1,7 @@
-import { ADMIN_ADDRESS } from "@/lib/constants";
+import { ADMIN_ADDRESSES } from "@/lib/constants";
 
 export function isAdminAddress(address: string | undefined): boolean {
-  if (!address || !ADMIN_ADDRESS) return false;
-  return address.toLowerCase() === ADMIN_ADDRESS.toLowerCase();
+  if (!address || ADMIN_ADDRESSES.length === 0) return false;
+  const lower = address.toLowerCase();
+  return ADMIN_ADDRESSES.some((a) => a.toLowerCase() === lower);
 }

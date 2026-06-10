@@ -18,11 +18,8 @@ import {
   CREATOR_EVENT_MANAGER_ADDRESS,
   CREATOR_EVENT_MANAGER_ABI,
 } from "@/lib/creator-contracts";
-
-import { ADMIN_ADDRESS } from "@/lib/constants";
-
-// ─── Config ───────────────────────────────────────────────────────────────────
-const ADMIN = ADMIN_ADDRESS;
+import { fetchOpenMatches, type OpenMatch } from "@/lib/creator-api";
+import { isAdminAddress } from "@/lib/utils";
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -32,7 +29,7 @@ export default function CreatorAdminPage() {
   const chainId = useChainId();
   const { switchChainAsync } = useSwitchChain();
   const isWrongNetwork = chainId !== celo.id;
-  const isAdmin = address?.toLowerCase() === ADMIN.toLowerCase();
+  const isAdmin = isAdminAddress(address ?? undefined);
 
   // ── On-chain reads ────────────────────────────────────────────────────────
 
@@ -179,6 +176,96 @@ export default function CreatorAdminPage() {
     });
   };
 
+  // ── Submit Match Result ──────────────────────────────────────────────────
+
+  const [openMatches, setOpenMatches] = useState<OpenMatch[]>([]);
+  const [openMatchesLoading, setOpenMatchesLoading] = useState(false);
+  const [selectedMatchId, setSelectedMatchId] = useState<number | null>(null);
+  const [resultHomeScore, setResultHomeScore] = useState("");
+  const [resultAwayScore, setResultAwayScore] = useState("");
+  const [resultError, setResultError] = useState<string | null>(null);
+
+  const loadOpenMatches = async () => {
+    setOpenMatchesLoading(true);
+    try {
+      const matches = await fetchOpenMatches();
+      setOpenMatches(matches);
+      if (
+        selectedMatchId !== null &&
+        !matches.some((m) => m.matchId === selectedMatchId)
+      ) {
+        setSelectedMatchId(null);
+      }
+    } catch {
+      setResultError("Failed to load open matches");
+    } finally {
+      setOpenMatchesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAdmin) loadOpenMatches();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin]);
+
+  const {
+    writeContract: submitResultWrite,
+    data: submitResultTx,
+    isPending: submitResultPending,
+    error: submitResultWriteError,
+    reset: resetSubmitResult,
+  } = useWriteContract();
+  const { isLoading: submitResultMining, isSuccess: submitResultDone } =
+    useWaitForTransactionReceipt({ hash: submitResultTx });
+
+  useEffect(() => {
+    if (submitResultDone) {
+      setResultHomeScore("");
+      setResultAwayScore("");
+      setSelectedMatchId(null);
+      resetSubmitResult();
+      loadOpenMatches();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submitResultDone, resetSubmitResult]);
+
+  const selectedMatch = openMatches.find(
+    (m) => m.matchId === selectedMatchId,
+  );
+
+  const handleSubmitResult = async () => {
+    setResultError(null);
+
+    if (selectedMatchId === null) {
+      setResultError("Select a match");
+      return;
+    }
+
+    const home = parseInt(resultHomeScore, 10);
+    const away = parseInt(resultAwayScore, 10);
+    if (isNaN(home) || isNaN(away) || home < 0 || away < 0) {
+      setResultError("Enter valid scores (0 or higher) for both teams");
+      return;
+    }
+
+    resetSubmitResult();
+
+    if (isWrongNetwork) {
+      try {
+        await switchChainAsync({ chainId: celo.id });
+      } catch {
+        return;
+      }
+    }
+
+    submitResultWrite({
+      address: CREATOR_EVENT_MANAGER_ADDRESS,
+      abi: CREATOR_EVENT_MANAGER_ABI,
+      functionName: "submitMatchResult",
+      args: [BigInt(selectedMatchId), home, away],
+    });
+  };
+
   // ── Guards ────────────────────────────────────────────────────────────────
 
   if (!isConnected)
@@ -296,6 +383,140 @@ export default function CreatorAdminPage() {
               </p>
             </div>
           ))}
+        </div>
+
+        {/* ── Submit Match Result ──────────────────────────────────────────── */}
+        <div className="bg-gray-800/50 border border-gray-700 rounded-2xl p-6 mb-6">
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="text-white font-bold text-lg">
+              Submit Match Result
+            </h2>
+            <button
+              onClick={loadOpenMatches}
+              disabled={openMatchesLoading}
+              className="text-gray-400 hover:text-white text-xs disabled:opacity-50"
+            >
+              {openMatchesLoading ? "Refreshing…" : "↻ Refresh"}
+            </button>
+          </div>
+          <p className="text-gray-400 text-sm mb-5">
+            Manually verify a match's final score (oracle/admin backup).
+            Determines winners and may auto-complete the event.
+          </p>
+
+          {openMatches.length === 0 ? (
+            <p className="text-gray-500 text-sm">
+              {openMatchesLoading
+                ? "Loading open matches…"
+                : "No OPEN matches found across any event."}
+            </p>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Match
+                </label>
+                <select
+                  value={selectedMatchId ?? ""}
+                  onChange={(e) => {
+                    setSelectedMatchId(
+                      e.target.value === "" ? null : Number(e.target.value),
+                    );
+                    setResultError(null);
+                  }}
+                  disabled={submitResultPending || submitResultMining}
+                  className="w-full px-4 py-2.5 bg-gray-700/50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
+                >
+                  <option value="">Select a match…</option>
+                  {openMatches.map((m) => (
+                    <option key={m.matchId} value={m.matchId}>
+                      [{m.eventName}] {m.homeTeam} vs {m.awayTeam} (match #
+                      {m.matchId}) —{" "}
+                      {new Date(m.kickoffTime * 1000).toLocaleString()}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {selectedMatch && (
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <p className="text-gray-400 text-xs mb-1">
+                      {selectedMatch.homeTeam}
+                    </p>
+                    <input
+                      type="number"
+                      min={0}
+                      max={20}
+                      value={resultHomeScore}
+                      onChange={(e) => setResultHomeScore(e.target.value)}
+                      placeholder="0"
+                      disabled={submitResultPending || submitResultMining}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-center text-xl font-bold focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
+                    />
+                  </div>
+                  <span className="text-gray-500 font-bold text-xl mt-5">
+                    –
+                  </span>
+                  <div className="flex-1">
+                    <p className="text-gray-400 text-xs mb-1">
+                      {selectedMatch.awayTeam}
+                    </p>
+                    <input
+                      type="number"
+                      min={0}
+                      max={20}
+                      value={resultAwayScore}
+                      onChange={(e) => setResultAwayScore(e.target.value)}
+                      placeholder="0"
+                      disabled={submitResultPending || submitResultMining}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-center text-xl font-bold focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <button
+                onClick={handleSubmitResult}
+                disabled={
+                  submitResultPending ||
+                  submitResultMining ||
+                  selectedMatchId === null
+                }
+                className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitResultPending
+                  ? "Confirm in wallet…"
+                  : submitResultMining
+                    ? "Submitting…"
+                    : "Submit Result"}
+              </button>
+
+              {resultError && (
+                <p className="text-red-400 text-sm">⚠️ {resultError}</p>
+              )}
+              {submitResultWriteError && (
+                <p className="text-red-400 text-sm">
+                  ⚠️ {submitResultWriteError.message?.split(".")[0]}
+                </p>
+              )}
+              {submitResultDone && (
+                <div className="flex items-center gap-2 text-green-400 text-sm">
+                  <span>✅ Result submitted</span>
+                  {submitResultTx && (
+                    <a
+                      href={`https://celoscan.io/tx/${submitResultTx}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-gray-400 hover:text-orange-400 underline"
+                    >
+                      tx
+                    </a>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="grid md:grid-cols-2 gap-6">

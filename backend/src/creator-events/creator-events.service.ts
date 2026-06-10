@@ -247,6 +247,31 @@ export class CreatorEventsService implements OnModuleInit {
     });
   }
 
+  /**
+   * Flat list of all OPEN matches across every event, with the event name
+   * attached — used by the admin dashboard to pick a match to submit a
+   * result for, without hunting down eventId/matchId manually.
+   */
+  async getOpenMatches() {
+    return this.cached('openMatches', TTL.MATCH, async () => {
+      const events = await this.getAllEvents();
+      const matchesPerEvent = await Promise.all(
+        events.map((ev) => this.getEventMatches(ev.eventId)),
+      );
+
+      const open: any[] = [];
+      events.forEach((ev, i) => {
+        for (const m of matchesPerEvent[i]) {
+          if (m.status === 'OPEN') {
+            open.push({ ...m, eventName: ev.eventName });
+          }
+        }
+      });
+
+      return open.sort((a, b) => a.kickoffTime - b.kickoffTime);
+    });
+  }
+
   async getMatchWinners(matchId: number) {
     return this.cached(`winners:${matchId}`, TTL.WINNERS, async () => {
       const winners = (await this.publicClient.readContract({

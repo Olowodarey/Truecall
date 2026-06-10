@@ -66,6 +66,14 @@ export class CreatorEventsController {
     return this.svc.getCreationFee();
   }
 
+  @Get('admin/open-matches')
+  @ApiOperation({
+    summary: 'Admin: list all OPEN matches across every event (for submitting results)',
+  })
+  async getOpenMatches() {
+    return this.svc.getOpenMatches();
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get a single creator event by ID' })
   @ApiParam({ name: 'id', type: Number })

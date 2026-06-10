@@ -34,6 +34,10 @@ export interface CreatorMatch {
   verifiedAt: number;
 }
 
+export interface OpenMatch extends CreatorMatch {
+  eventName: string;
+}
+
 export interface MatchWinner {
   user: string;
   submittedAt: number;
@@ -59,6 +63,9 @@ export const fetchCreatorEvent = (id: number): Promise<CreatorEvent> =>
 
 export const fetchCreatorEventMatches = (id: number): Promise<CreatorMatch[]> =>
   get(`/${id}/matches`);
+
+export const fetchOpenMatches = (): Promise<OpenMatch[]> =>
+  get(`/admin/open-matches`);
 
 export const fetchCreatorHasJoined = (
   id: number,
