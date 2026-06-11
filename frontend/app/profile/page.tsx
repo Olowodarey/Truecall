@@ -24,6 +24,7 @@ import {
   CREATOR_EVENT_MANAGER_ABI,
 } from "@/lib/creator-contracts";
 import { formatContractError } from "@/lib/error-formatter";
+import { setOAuthValue } from "@/lib/oauth-storage";
 
 interface UserProfile {
   address: string;
@@ -191,16 +192,18 @@ export default function ProfilePage() {
       }
     }
 
-    // Store wallet address in localStorage for callback (popup needs access)
-    localStorage.setItem("twitter_auth_address", address);
+    // Store wallet address for the callback. Written to a cookie (+ localStorage)
+    // so it survives the iOS Safari / native X app redirect, where localStorage
+    // alone is frequently dropped. See lib/oauth-storage.ts.
+    setOAuthValue("twitter_auth_address", address);
 
     // Generate state for security
     const state = generateRandomString(32);
-    localStorage.setItem("twitter_auth_state", state);
+    setOAuthValue("twitter_auth_state", state);
 
     // Generate PKCE code verifier using XDK
     const codeVerifier = generateCodeVerifier();
-    localStorage.setItem("twitter_code_verifier", codeVerifier);
+    setOAuthValue("twitter_code_verifier", codeVerifier);
 
     // Generate PKCE code challenge using XDK
     const codeChallenge = await generateCodeChallenge(codeVerifier);

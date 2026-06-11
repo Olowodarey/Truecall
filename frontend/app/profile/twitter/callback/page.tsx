@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import UnifiedBackground from "@/components/UnifiedBackground";
+import { getOAuthValue, clearOAuthValue } from "@/lib/oauth-storage";
 
 function TwitterCallbackContent() {
   const searchParams = useSearchParams();
@@ -65,9 +66,9 @@ function TwitterCallbackContent() {
         return;
       }
 
-      const storedState = localStorage.getItem("twitter_auth_state");
-      const address = localStorage.getItem("twitter_auth_address");
-      const codeVerifier = localStorage.getItem("twitter_code_verifier");
+      const storedState = getOAuthValue("twitter_auth_state");
+      const address = getOAuthValue("twitter_auth_address");
+      const codeVerifier = getOAuthValue("twitter_code_verifier");
 
       console.log("🔍 State validation:", {
         receivedState: state,
@@ -132,10 +133,10 @@ function TwitterCallbackContent() {
         setStatus("success");
         setMessage(`Successfully linked @${data.profile.twitterHandle}!`);
 
-        // Clean up localStorage
-        localStorage.removeItem("twitter_auth_state");
-        localStorage.removeItem("twitter_auth_address");
-        localStorage.removeItem("twitter_code_verifier");
+        // Clean up cookie + localStorage
+        clearOAuthValue("twitter_auth_state");
+        clearOAuthValue("twitter_auth_address");
+        clearOAuthValue("twitter_code_verifier");
 
         // Send success to parent window
         if (window.opener) {

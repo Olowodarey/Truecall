@@ -1,6 +1,7 @@
 import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
 import { createAppKit } from "@reown/appkit/react";
 import { celo } from "@reown/appkit/networks";
+import { cookieStorage, createStorage } from "wagmi";
 
 export { celo };
 
@@ -12,9 +13,27 @@ export const wagmiAdapter = new WagmiAdapter({
   ssr: true,
   projectId,
   networks,
+  // Persist the connection in a cookie rather than only in-memory. On iOS,
+  // tapping "connect" deep-links to the wallet app and Safari unloads the
+  // backgrounded tab; on return the page reloads and an in-memory session is
+  // lost. cookieStorage survives that reload so the wallet stays connected.
+  //
+  // Cast: the adapter bundles its own @wagmi/core copy, so wagmi's createStorage
+  // return type and the adapter's expected Storage type are structurally equal
+  // but nominally distinct. Identical at runtime.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  storage: createStorage({ storage: cookieStorage }) as any,
 });
 
 export const wagmiConfig = wagmiAdapter.wagmiConfig;
+
+// WalletConnect verifies metadata.url against the real page origin. A mismatch
+// makes iOS wallets show a "cannot verify domain" warning or refuse to connect,
+// so derive it from the live origin instead of hardcoding.
+const appOrigin =
+  typeof window !== "undefined"
+    ? window.location.origin
+    : "https://truecall.vercel.app";
 
 createAppKit({
   adapters: [wagmiAdapter],
@@ -24,8 +43,8 @@ createAppKit({
   metadata: {
     name: "TrueCall",
     description: "Blockchain-powered football predictions",
-    url: "https://truecall.vercel.app",
-    icons: ["https://truecall.vercel.app/logo.png"],
+    url: appOrigin,
+    icons: [`${appOrigin}/logo.png`],
   },
   features: {
     analytics: false,
