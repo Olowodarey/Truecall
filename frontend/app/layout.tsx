@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
+import { cookieToInitialState } from "wagmi";
 import "./globals.css";
 import ClientProviders from "@/components/ClientProviders";
+import { wagmiConfig } from "@/lib/wagmi";
 
 export const metadata: Metadata = {
   title: "TrueCall - Football Prediction Platform",
@@ -12,15 +15,22 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const initialState = cookieToInitialState(
+    wagmiConfig,
+    (await headers()).get("cookie"),
+  );
+
   return (
     <html lang="en">
       <body className="antialiased">
-        <ClientProviders>{children}</ClientProviders>
+        <ClientProviders initialState={initialState}>
+          {children}
+        </ClientProviders>
       </body>
     </html>
   );

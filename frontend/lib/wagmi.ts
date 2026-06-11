@@ -13,10 +13,13 @@ export const wagmiAdapter = new WagmiAdapter({
   ssr: true,
   projectId,
   networks,
-  // Persist the connection in a cookie rather than only in-memory. On iOS,
-  // tapping "connect" deep-links to the wallet app and Safari unloads the
-  // backgrounded tab; on return the page reloads and an in-memory session is
-  // lost. cookieStorage survives that reload so the wallet stays connected.
+  // Persist the connection in a cookie so it survives the page reload iOS
+  // Safari does when returning from a wallet-app deep link. Paired with
+  // cookieToInitialState in layout.tsx/ClientProviders so the server-rendered
+  // state matches the cookie on the very first paint — without that, the
+  // client flips from "disconnected" to a stale "connected" state after
+  // mount, which confuses AppKit's modal into showing the Account/Disconnect
+  // view instead of the wallet picker.
   //
   // Cast: the adapter bundles its own @wagmi/core copy, so wagmi's createStorage
   // return type and the adapter's expected Storage type are structurally equal
