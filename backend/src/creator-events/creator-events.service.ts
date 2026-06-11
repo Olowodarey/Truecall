@@ -355,6 +355,28 @@ export class CreatorEventsService implements OnModuleInit {
     };
   }
 
+  /**
+   * Events created by, and events joined by, the given address. Used by the
+   * profile page's "My Events" section.
+   */
+  async getUserEvents(address: string) {
+    const normalized = address.toLowerCase();
+    const events = await this.getAllEvents();
+
+    const created = events.filter(
+      (e) => e.creator.toLowerCase() === normalized,
+    );
+
+    const participantsPerEvent = await Promise.all(
+      events.map((e) => this.getParticipants(e.eventId)),
+    );
+    const joined = events.filter((e, i) =>
+      participantsPerEvent[i].some((p) => p.toLowerCase() === normalized),
+    );
+
+    return { created, joined };
+  }
+
   async getCreationFee() {
     return this.cached('creationFee', TTL.FEE, async () => {
       const fee = (await this.publicClient.readContract({

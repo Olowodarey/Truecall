@@ -66,6 +66,15 @@ export class CreatorEventsController {
     return this.svc.getCreationFee();
   }
 
+  @Get('user/:address')
+  @ApiOperation({
+    summary: 'Get events created by and joined by a specific address',
+  })
+  @ApiParam({ name: 'address', type: String })
+  async getUserEvents(@Param('address') address: string) {
+    return this.svc.getUserEvents(address);
+  }
+
   @Get('admin/open-matches')
   @ApiOperation({
     summary: 'Admin: list all OPEN matches across every event (for submitting results)',

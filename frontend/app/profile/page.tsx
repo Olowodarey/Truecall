@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useWallet } from "@/contexts/WalletContext";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import UnifiedBackground from "@/components/UnifiedBackground";
-import { Twitter, CheckCircle, XCircle, Shield, RefreshCw } from "lucide-react";
+import { Twitter, CheckCircle, XCircle, Shield, RefreshCw, Trophy, Megaphone } from "lucide-react";
+import { fetchUserEvents, type CreatorEvent } from "@/lib/creator-api";
 import {
   generateCodeVerifier,
   generateCodeChallenge,
@@ -35,11 +37,16 @@ interface UserProfile {
 }
 
 export default function ProfilePage() {
+  const router = useRouter();
   const { isConnected, address, connectWallet, isConnecting } = useWallet();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [linking, setLinking] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
+  const [createdEvents, setCreatedEvents] = useState<CreatorEvent[]>([]);
+  const [joinedEvents, setJoinedEvents] = useState<CreatorEvent[]>([]);
+  const [eventsTab, setEventsTab] = useState<"joined" | "created">("joined");
+  const [eventsLoading, setEventsLoading] = useState(true);
   // Mounted guard: wagmi reads as disconnected during SSR, so we must wait
   // for the client to hydrate before trusting isConnected
   const [mounted, setMounted] = useState(false);
@@ -87,6 +94,7 @@ export default function ProfilePage() {
 
     if (isConnected && address) {
       loadProfile();
+      loadUserEvents();
     } else {
       setLoading(false);
     }
@@ -127,6 +135,20 @@ export default function ProfilePage() {
       console.error("Failed to load profile", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadUserEvents = async () => {
+    if (!address) return;
+    try {
+      setEventsLoading(true);
+      const { created, joined } = await fetchUserEvents(address);
+      setCreatedEvents(created);
+      setJoinedEvents(joined);
+    } catch (error) {
+      console.error("Failed to load user events", error);
+    } finally {
+      setEventsLoading(false);
     }
   };
 
@@ -448,7 +470,7 @@ export default function ProfilePage() {
         </div>
 
         {/* Twitter Verification Section */}
-        <div className="bg-gray-800/50 backdrop-blur-xl rounded-3xl border border-gray-700 p-8">
+        <div className="bg-gray-800/50 backdrop-blur-xl rounded-3xl border border-gray-700 p-8 mb-6">
           <div className="flex items-center gap-3 mb-6">
             <Twitter className="w-6 h-6 text-blue-400" />
             <h2 className="text-2xl font-bold text-white">
@@ -531,6 +553,97 @@ export default function ProfilePage() {
                 Secure OAuth authentication via Twitter
               </p>
             </div>
+          )}
+        </div>
+
+        {/* My Events Section */}
+        <div className="bg-gray-800/50 backdrop-blur-xl rounded-3xl border border-gray-700 p-8 mb-6">
+          <div className="flex items-center gap-3 mb-6">
+            <Trophy className="w-6 h-6 text-amber-400" />
+            <h2 className="text-2xl font-bold text-white">My Events</h2>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex gap-2 mb-6">
+            <button
+              onClick={() => setEventsTab("joined")}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
+                eventsTab === "joined"
+                  ? "bg-orange-500 text-white"
+                  : "bg-gray-700/50 text-gray-400 hover:text-white"
+              }`}
+            >
+              Joined ({joinedEvents.length})
+            </button>
+            <button
+              onClick={() => setEventsTab("created")}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
+                eventsTab === "created"
+                  ? "bg-orange-500 text-white"
+                  : "bg-gray-700/50 text-gray-400 hover:text-white"
+              }`}
+            >
+              Created ({createdEvents.length})
+            </button>
+          </div>
+
+          {eventsLoading ? (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-orange-500" />
+            </div>
+          ) : (
+            (() => {
+              const list =
+                eventsTab === "joined" ? joinedEvents : createdEvents;
+
+              if (list.length === 0) {
+                return (
+                  <div className="bg-gray-700/20 border border-gray-700/50 rounded-xl p-8 text-center">
+                    <Megaphone className="w-8 h-8 text-gray-500 mx-auto mb-3" />
+                    <p className="text-gray-400 text-sm">
+                      {eventsTab === "joined"
+                        ? "You haven't joined any prediction events yet."
+                        : "You haven't created any prediction events yet."}
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="space-y-3">
+                  {list.map((ev) => (
+                    <div
+                      key={ev.eventId}
+                      onClick={() =>
+                        router.push(`/creator-events/${ev.eventId}`)
+                      }
+                      className="bg-gray-700/20 border border-gray-700/50 hover:border-orange-500/40 rounded-xl p-4 cursor-pointer transition flex items-center justify-between gap-4"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-white font-semibold truncate">
+                          {ev.eventName}
+                        </p>
+                        <p className="text-gray-500 text-xs mt-1">
+                          #{ev.eventId} ·{" "}
+                          {new Date(ev.createdAt * 1000).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <span
+                        className={`shrink-0 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                          ev.status === "OPEN"
+                            ? "bg-green-500/10 text-green-400 border-green-500/30"
+                            : ev.status === "COMPLETED"
+                              ? "bg-blue-500/10 text-blue-400 border-blue-500/30"
+                              : "bg-red-500/10 text-red-400 border-red-500/30"
+                        }`}
+                      >
+                        {ev.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()
           )}
         </div>
 

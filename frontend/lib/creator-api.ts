@@ -18,7 +18,7 @@ export interface CreatorEvent {
   creator: string;
   eventName: string;
   createdAt: number;
-  status: "OPEN" | "CANCELLED";
+  status: "OPEN" | "COMPLETED" | "CANCELLED";
 }
 
 export interface CreatorMatch {
@@ -72,6 +72,14 @@ export const fetchCreatorHasJoined = (
   address: string,
 ): Promise<{ eventId: number; user: string; joined: boolean }> =>
   get(`/${id}/joined/${address}`);
+
+export interface UserEvents {
+  created: CreatorEvent[];
+  joined: CreatorEvent[];
+}
+
+export const fetchUserEvents = (address: string): Promise<UserEvents> =>
+  get(`/user/${address}`);
 
 // ─── Matches ──────────────────────────────────────────────────────────────────
 
