@@ -288,6 +288,36 @@ export class CreatorEventsService implements OnModuleInit {
     });
   }
 
+  /**
+   * Leaderboard for an event: how many matches each participant correctly
+   * predicted, ranked highest first. Used for the creator's shareable
+   * leaderboard image.
+   */
+  async getEventLeaderboard(eventId: number) {
+    return this.cached(`leaderboard:${eventId}`, TTL.WINNERS, async () => {
+      const matches = await this.getEventMatches(eventId);
+      const verified = matches.filter((m) => m.status === 'VERIFIED');
+
+      const winnersPerMatch = await Promise.all(
+        verified.map((m) => this.getMatchWinners(m.matchId)),
+      );
+
+      const tally = new Map<string, number>();
+      for (const winners of winnersPerMatch) {
+        for (const w of winners) {
+          const key = w.user.toLowerCase();
+          tally.set(key, (tally.get(key) ?? 0) + 1);
+        }
+      }
+
+      const entries = Array.from(tally.entries())
+        .map(([user, wins]) => ({ user, wins }))
+        .sort((a, b) => b.wins - a.wins);
+
+      return { totalMatches: verified.length, entries };
+    });
+  }
+
   async isMatchWinner(matchId: number, user: string) {
     const key = `isWinner:${matchId}:${user.toLowerCase()}`;
     return this.cached(key, TTL.WINNERS, async () => {

@@ -58,6 +58,20 @@ export interface UserWin {
   verifiedAt: number;
 }
 
+export interface LeaderboardEntry {
+  user: string;
+  wins: number;
+  twitterHandle?: string | null;
+  twitterAvatar?: string | null;
+}
+
+export interface EventLeaderboard {
+  eventId: number;
+  eventName: string;
+  totalMatches: number;
+  entries: LeaderboardEntry[];
+}
+
 export interface CreatorPrediction {
   matchId: number;
   user: string;
@@ -103,6 +117,10 @@ export const fetchMatchWinners = (
   matchId: number,
 ): Promise<{ matchId: number; count: number; winners: MatchWinner[] }> =>
   get(`/match/${matchId}/winners`);
+
+export const fetchEventLeaderboard = (
+  eventId: number,
+): Promise<EventLeaderboard> => get(`/${eventId}/leaderboard`);
 
 // ─── Fee ──────────────────────────────────────────────────────────────────────
 

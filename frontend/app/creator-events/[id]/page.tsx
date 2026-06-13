@@ -13,15 +13,18 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SharePredictionButton from "@/components/SharePredictionButton";
 import ShareEventButton from "@/components/ShareEventButton";
+import ShareLeaderboardButton from "@/components/ShareLeaderboardButton";
 import CountdownTimer from "@/components/CountdownTimer";
 import {
   fetchCreatorEvent,
   fetchCreatorEventMatches,
   fetchCreatorHasJoined,
   fetchMatchWinners,
+  fetchEventLeaderboard,
   type CreatorEvent,
   type CreatorMatch,
   type MatchWinner,
+  type EventLeaderboard,
 } from "@/lib/creator-api";
 import {
   CREATOR_EVENT_MANAGER_ADDRESS,
@@ -150,6 +153,9 @@ export default function CreatorEventDetailPage() {
   const [winners, setWinners] = useState<MatchWinner[]>([]);
   const [winnersLoading, setWinnersLoading] = useState(false);
 
+  // Leaderboard
+  const [leaderboard, setLeaderboard] = useState<EventLeaderboard | null>(null);
+
   // wagmi — join
   const {
     writeContract: joinWrite,
@@ -241,6 +247,10 @@ export default function CreatorEventDetailPage() {
         .then((r) => (r.ok ? r.json() : null))
         .catch(() => null);
 
+      const leaderboardPromise = ms.some((m) => m.status === "VERIFIED")
+        ? fetchEventLeaderboard(eventId).catch(() => null)
+        : Promise.resolve(null);
+
       const userDataPromise = address
         ? Promise.all([
             fetchCreatorHasJoined(eventId, address),
@@ -264,13 +274,16 @@ export default function CreatorEventDetailPage() {
           ])
         : null;
 
-      const [creatorProfile, participantsData, tweetMeta, userData] =
+      const [creatorProfile, participantsData, tweetMeta, leaderboardData, userData] =
         await Promise.all([
           creatorProfilePromise,
           participantsPromise,
           tweetMetaPromise,
+          leaderboardPromise,
           userDataPromise,
         ]);
+
+      setLeaderboard(leaderboardData);
 
       if (creatorProfile) {
         setCreatorTwitter(creatorProfile.twitterHandle || null);
@@ -1054,6 +1067,47 @@ export default function CreatorEventDetailPage() {
             </div>
           ) : null}
         </div>
+
+        {/* Leaderboard */}
+        {leaderboard && leaderboard.entries.length > 0 && (
+          <div className="bg-gray-800/40 border border-gray-700/50 rounded-2xl p-6 lg:p-8 mb-8">
+            <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
+              <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                🏆 Leaderboard
+              </h2>
+              <ShareLeaderboardButton data={leaderboard} onToast={showToast} />
+            </div>
+            <div className="space-y-2">
+              {leaderboard.entries.slice(0, 10).map((e, i) => (
+                <div
+                  key={e.user}
+                  className="flex items-center justify-between bg-gray-900/50 border border-gray-700/30 rounded-xl px-4 py-3"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="w-7 text-center text-lg font-bold text-amber-400 shrink-0">
+                      {["🥇", "🥈", "🥉"][i] ?? i + 1}
+                    </span>
+                    {e.twitterAvatar && (
+                      <img
+                        src={e.twitterAvatar}
+                        alt=""
+                        className="w-6 h-6 rounded-full shrink-0"
+                      />
+                    )}
+                    <span className="text-white font-semibold truncate">
+                      {e.twitterHandle
+                        ? `@${e.twitterHandle}`
+                        : `${e.user.slice(0, 6)}…${e.user.slice(-4)}`}
+                    </span>
+                  </div>
+                  <span className="text-amber-400 font-bold text-sm shrink-0">
+                    {e.wins} win{e.wins !== 1 ? "s" : ""}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Matches */}
         <div className="mb-6">

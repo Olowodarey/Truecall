@@ -171,6 +171,33 @@ export class CreatorEventsController {
     return this.svc.getEventMatches(id);
   }
 
+  @Get(':id/leaderboard')
+  @ApiOperation({
+    summary: 'Get the leaderboard (correct-prediction counts) for a creator event',
+  })
+  @ApiParam({ name: 'id', type: Number })
+  async getEventLeaderboard(@Param('id', ParseIntPipe) id: number) {
+    const [event, { totalMatches, entries }] = await Promise.all([
+      this.svc.getEvent(id),
+      this.svc.getEventLeaderboard(id),
+    ]);
+
+    const profiles = await this.usersService.getProfilesByAddresses(
+      entries.map((e) => e.user),
+    );
+
+    return {
+      eventId: id,
+      eventName: event.eventName,
+      totalMatches,
+      entries: entries.map((e) => ({
+        ...e,
+        twitterHandle: profiles.get(e.user.toLowerCase())?.twitterHandle || null,
+        twitterAvatar: profiles.get(e.user.toLowerCase())?.twitterAvatar || null,
+      })),
+    };
+  }
+
   @Get(':id/participants')
   @ApiOperation({ summary: 'Get all participants in a creator event' })
   @ApiParam({ name: 'id', type: Number })
