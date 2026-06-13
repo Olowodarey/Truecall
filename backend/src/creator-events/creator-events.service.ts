@@ -288,6 +288,18 @@ export class CreatorEventsService implements OnModuleInit {
     });
   }
 
+  async isMatchWinner(matchId: number, user: string) {
+    const key = `isWinner:${matchId}:${user.toLowerCase()}`;
+    return this.cached(key, TTL.WINNERS, async () => {
+      return (await this.publicClient.readContract({
+        address: this.contractAddress,
+        abi: CREATOR_EVENT_MANAGER_ABI,
+        functionName: 'isMatchWinner',
+        args: [BigInt(matchId), user as `0x${string}`],
+      })) as boolean;
+    });
+  }
+
   async getParticipants(eventId: number) {
     return this.cached(`participants:${eventId}`, TTL.PARTICIPANTS, async () => {
       return (await this.publicClient.readContract({
@@ -375,6 +387,50 @@ export class CreatorEventsService implements OnModuleInit {
     );
 
     return { created, joined };
+  }
+
+  /**
+   * Verified matches the given address correctly predicted, across every
+   * event they've joined. Used by the profile page's "Winners" tab.
+   */
+  async getUserWins(address: string) {
+    const { joined } = await this.getUserEvents(address);
+    const matchesPerEvent = await Promise.all(
+      joined.map((e) => this.getEventMatches(e.eventId)),
+    );
+
+    const wins: Array<{
+      eventId: number;
+      eventName: string;
+      creator: string;
+      matchId: number;
+      homeTeam: string;
+      awayTeam: string;
+      finalHomeScore: number;
+      finalAwayScore: number;
+      verifiedAt: number;
+    }> = [];
+
+    for (let i = 0; i < joined.length; i++) {
+      const ev = joined[i];
+      for (const m of matchesPerEvent[i]) {
+        if (m.status !== 'VERIFIED') continue;
+        if (!(await this.isMatchWinner(m.matchId, address))) continue;
+        wins.push({
+          eventId: ev.eventId,
+          eventName: ev.eventName,
+          creator: ev.creator,
+          matchId: m.matchId,
+          homeTeam: m.homeTeam,
+          awayTeam: m.awayTeam,
+          finalHomeScore: m.finalHomeScore,
+          finalAwayScore: m.finalAwayScore,
+          verifiedAt: m.verifiedAt,
+        });
+      }
+    }
+
+    return wins.sort((a, b) => b.verifiedAt - a.verifiedAt);
   }
 
   async getCreationFee() {

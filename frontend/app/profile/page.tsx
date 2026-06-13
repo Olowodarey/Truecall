@@ -7,7 +7,13 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import UnifiedBackground from "@/components/UnifiedBackground";
 import { Twitter, CheckCircle, XCircle, Shield, RefreshCw, Trophy, Megaphone } from "lucide-react";
-import { fetchUserEvents, type CreatorEvent } from "@/lib/creator-api";
+import {
+  fetchUserEvents,
+  fetchUserWins,
+  type CreatorEvent,
+  type UserWin,
+} from "@/lib/creator-api";
+import SharePredictionButton from "@/components/SharePredictionButton";
 import {
   generateCodeVerifier,
   generateCodeChallenge,
@@ -45,8 +51,12 @@ export default function ProfilePage() {
   const [verifyError, setVerifyError] = useState<string | null>(null);
   const [createdEvents, setCreatedEvents] = useState<CreatorEvent[]>([]);
   const [joinedEvents, setJoinedEvents] = useState<CreatorEvent[]>([]);
-  const [eventsTab, setEventsTab] = useState<"joined" | "created">("joined");
+  const [wins, setWins] = useState<UserWin[]>([]);
+  const [eventsTab, setEventsTab] = useState<"joined" | "created" | "wins">(
+    "joined",
+  );
   const [eventsLoading, setEventsLoading] = useState(true);
+  const [winsLoading, setWinsLoading] = useState(true);
   // Mounted guard: wagmi reads as disconnected during SSR, so we must wait
   // for the client to hydrate before trusting isConnected
   const [mounted, setMounted] = useState(false);
@@ -95,6 +105,7 @@ export default function ProfilePage() {
     if (isConnected && address) {
       loadProfile();
       loadUserEvents();
+      loadUserWins();
     } else {
       setLoading(false);
     }
@@ -149,6 +160,18 @@ export default function ProfilePage() {
       console.error("Failed to load user events", error);
     } finally {
       setEventsLoading(false);
+    }
+  };
+
+  const loadUserWins = async () => {
+    if (!address) return;
+    try {
+      setWinsLoading(true);
+      setWins(await fetchUserWins(address));
+    } catch (error) {
+      console.error("Failed to load user wins", error);
+    } finally {
+      setWinsLoading(false);
     }
   };
 
@@ -585,9 +608,73 @@ export default function ProfilePage() {
             >
               Created ({createdEvents.length})
             </button>
+            <button
+              onClick={() => setEventsTab("wins")}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
+                eventsTab === "wins"
+                  ? "bg-orange-500 text-white"
+                  : "bg-gray-700/50 text-gray-400 hover:text-white"
+              }`}
+            >
+              Wins ({wins.length})
+            </button>
           </div>
 
-          {eventsLoading ? (
+          {eventsTab === "wins" ? (
+            winsLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-orange-500" />
+              </div>
+            ) : wins.length === 0 ? (
+              <div className="bg-gray-700/20 border border-gray-700/50 rounded-xl p-8 text-center">
+                <Trophy className="w-8 h-8 text-gray-500 mx-auto mb-3" />
+                <p className="text-gray-400 text-sm">
+                  No wins yet. Correctly predict a match score to show up
+                  here.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {wins.map((w) => (
+                  <div
+                    key={`${w.matchId}`}
+                    className="bg-gray-700/20 border border-gray-700/50 rounded-xl p-4"
+                  >
+                    <div className="flex items-start justify-between gap-4 mb-3">
+                      <div className="min-w-0">
+                        <p className="text-white font-semibold truncate">
+                          {w.homeTeam} {w.finalHomeScore} - {w.finalAwayScore}{" "}
+                          {w.awayTeam}
+                        </p>
+                        <p
+                          className="text-gray-500 text-xs mt-1 truncate cursor-pointer hover:text-orange-400"
+                          onClick={() =>
+                            router.push(`/creator-events/${w.eventId}`)
+                          }
+                        >
+                          {w.eventName} · #{w.eventId}
+                        </p>
+                      </div>
+                      <span className="shrink-0 px-2.5 py-0.5 rounded-full text-xs font-bold border bg-amber-500/10 text-amber-400 border-amber-500/30 flex items-center gap-1">
+                        <Trophy className="w-3 h-3" /> Winner
+                      </span>
+                    </div>
+                    <SharePredictionButton
+                      eventName={w.eventName}
+                      homeTeam={w.homeTeam}
+                      awayTeam={w.awayTeam}
+                      homeScore={w.finalHomeScore}
+                      awayScore={w.finalAwayScore}
+                      creatorTwitter={w.creatorTwitter}
+                      eventId={w.eventId}
+                      matchId={w.matchId}
+                      won
+                    />
+                  </div>
+                ))}
+              </div>
+            )
+          ) : eventsLoading ? (
             <div className="flex justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-orange-500" />
             </div>

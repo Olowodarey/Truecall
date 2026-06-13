@@ -75,6 +75,23 @@ export class CreatorEventsController {
     return this.svc.getUserEvents(address);
   }
 
+  @Get('user/:address/wins')
+  @ApiOperation({
+    summary: "Get a user's winning predictions across all joined events",
+  })
+  @ApiParam({ name: 'address', type: String })
+  async getUserWins(@Param('address') address: string) {
+    const wins = await this.svc.getUserWins(address);
+
+    const creators = wins.map((w) => w.creator);
+    const profiles = await this.usersService.getProfilesByAddresses(creators);
+
+    return wins.map((w) => ({
+      ...w,
+      creatorTwitter: profiles.get(w.creator.toLowerCase())?.twitterHandle || null,
+    }));
+  }
+
   @Get('admin/open-matches')
   @ApiOperation({
     summary: 'Admin: list all OPEN matches across every event (for submitting results)',

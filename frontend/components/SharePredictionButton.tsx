@@ -11,6 +11,7 @@ interface SharePredictionButtonProps {
   matchId: number;
   variant?: "primary" | "secondary";
   replyToTweetId?: string | null; // Optional tweet ID to reply to
+  won?: boolean; // If true, share a "I won!" message instead of a prediction
 }
 
 export default function SharePredictionButton({
@@ -24,10 +25,13 @@ export default function SharePredictionButton({
   matchId,
   variant = "secondary",
   replyToTweetId,
+  won = false,
 }: SharePredictionButtonProps) {
   const handleShare = () => {
-    // Build the prediction text
-    const predictionText = `⚽️ My prediction for ${homeTeam} vs ${awayTeam}:\n\n${homeTeam} ${homeScore} - ${awayScore} ${awayTeam}\n\n`;
+    // Build the prediction/win text
+    const predictionText = won
+      ? `🏆 I correctly predicted ${homeTeam} ${homeScore} - ${awayScore} ${awayTeam} and won on TrueCall! ⚽️\n\n`
+      : `⚽️ My prediction for ${homeTeam} vs ${awayTeam}:\n\n${homeTeam} ${homeScore} - ${awayScore} ${awayTeam}\n\n`;
 
     // Add creator mention if available
     const creatorMention = creatorTwitter
@@ -63,16 +67,18 @@ export default function SharePredictionButton({
           : "border border-blue-500/50 hover:border-blue-500 text-blue-400 hover:text-blue-300 bg-blue-500/5 hover:bg-blue-500/10"
       }`}
       title={
-        replyToTweetId
-          ? "Share as reply to creator's tweet"
-          : "Share on X (Twitter)"
+        won
+          ? "Share your win on X (Twitter)"
+          : replyToTweetId
+            ? "Share as reply to creator's tweet"
+            : "Share on X (Twitter)"
       }
     >
       <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
         <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
       </svg>
       <span className="text-sm">
-        {replyToTweetId ? "Reply on X" : "Share on X"}
+        {won ? "Share Win" : replyToTweetId ? "Reply on X" : "Share on X"}
       </span>
     </button>
   );

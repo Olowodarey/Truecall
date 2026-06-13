@@ -45,6 +45,19 @@ export interface MatchWinner {
   twitterAvatar?: string | null;
 }
 
+export interface UserWin {
+  eventId: number;
+  eventName: string;
+  creator: string;
+  creatorTwitter?: string | null;
+  matchId: number;
+  homeTeam: string;
+  awayTeam: string;
+  finalHomeScore: number;
+  finalAwayScore: number;
+  verifiedAt: number;
+}
+
 export interface CreatorPrediction {
   matchId: number;
   user: string;
@@ -80,6 +93,9 @@ export interface UserEvents {
 
 export const fetchUserEvents = (address: string): Promise<UserEvents> =>
   get(`/user/${address}`);
+
+export const fetchUserWins = (address: string): Promise<UserWin[]> =>
+  get(`/user/${address}/wins`);
 
 // ─── Matches ──────────────────────────────────────────────────────────────────
 
