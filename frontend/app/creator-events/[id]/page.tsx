@@ -158,7 +158,7 @@ export default function CreatorEventDetailPage() {
     error: joinWriteError,
     reset: resetJoin,
   } = useWriteContract();
-  const { isLoading: joinMining, isSuccess: joinDone } =
+  const { isLoading: joinMining, isSuccess: joinDone, data: joinReceipt } =
     useWaitForTransactionReceipt({ hash: joinTx });
 
   // wagmi — predict
@@ -169,7 +169,7 @@ export default function CreatorEventDetailPage() {
     error: predictWriteError,
     reset: resetPredict,
   } = useWriteContract();
-  const { isLoading: predictMining, isSuccess: predictDone } =
+  const { isLoading: predictMining, isSuccess: predictDone, data: predictReceipt } =
     useWaitForTransactionReceipt({ hash: predictTx });
 
   // wagmi — add match (creator)
@@ -180,7 +180,7 @@ export default function CreatorEventDetailPage() {
     error: addMatchWriteError,
     reset: resetAddMatch,
   } = useWriteContract();
-  const { isLoading: addMatchMining, isSuccess: addMatchDone } =
+  const { isLoading: addMatchMining, isSuccess: addMatchDone, data: addMatchReceipt } =
     useWaitForTransactionReceipt({ hash: addMatchTx });
 
   // wagmi — complete event (creator, < 5 matches)
@@ -191,7 +191,7 @@ export default function CreatorEventDetailPage() {
     error: completeEventWriteError,
     reset: resetCompleteEvent,
   } = useWriteContract();
-  const { isLoading: completeEventMining, isSuccess: completeEventDone } =
+  const { isLoading: completeEventMining, isSuccess: completeEventDone, data: completeEventReceipt } =
     useWaitForTransactionReceipt({ hash: completeEventTx });
 
   const isCreator =
@@ -312,10 +312,18 @@ export default function CreatorEventDetailPage() {
 
   useEffect(() => {
     if (joinDone && joinTx) {
+      if (joinReceipt?.status === "reverted") {
+        const msg =
+          "❌ Transaction failed. The invite code may be incorrect, you may have already joined, or this event is no longer accepting participants.";
+        setJoinError(msg);
+        showToast("error", msg);
+        resetJoin();
+        return;
+      }
       showToast("success", "You joined! Refreshing…");
       setTimeout(() => window.location.reload(), 1500);
     }
-  }, [joinDone, joinTx, showToast]);
+  }, [joinDone, joinTx, joinReceipt, showToast, resetJoin]);
 
   useEffect(() => {
     if (joinWriteError) {
@@ -331,10 +339,18 @@ export default function CreatorEventDetailPage() {
 
   useEffect(() => {
     if (predictDone) {
+      if (predictReceipt?.status === "reverted") {
+        const msg =
+          "❌ Prediction failed. The match may be locked or already predicted.";
+        setPredictError(msg);
+        showToast("error", msg);
+        resetPredict();
+        return;
+      }
       showToast("success", "Prediction submitted! Refreshing…");
       setTimeout(() => window.location.reload(), 1500);
     }
-  }, [predictDone, showToast]);
+  }, [predictDone, predictReceipt, showToast, resetPredict]);
 
   useEffect(() => {
     if (predictWriteError) {
@@ -350,6 +366,13 @@ export default function CreatorEventDetailPage() {
 
   useEffect(() => {
     if (addMatchDone) {
+      if (addMatchReceipt?.status === "reverted") {
+        const msg = "❌ Failed to add match. The maximum number of matches may have been reached.";
+        setAddMatchError(msg);
+        showToast("error", msg);
+        resetAddMatch();
+        return;
+      }
       showToast("success", "Match added!");
       setShowAddMatch(false);
       setNewMatch({
@@ -362,7 +385,7 @@ export default function CreatorEventDetailPage() {
       resetAddMatch();
       load();
     }
-  }, [addMatchDone, load, resetAddMatch, showToast]);
+  }, [addMatchDone, addMatchReceipt, load, resetAddMatch, showToast]);
 
   useEffect(() => {
     if (addMatchWriteError) {
@@ -378,10 +401,16 @@ export default function CreatorEventDetailPage() {
 
   useEffect(() => {
     if (completeEventDone) {
+      if (completeEventReceipt?.status === "reverted") {
+        const msg = "❌ Failed to complete event.";
+        showToast("error", msg);
+        resetCompleteEvent();
+        return;
+      }
       showToast("success", "Event completed! Refreshing…");
       setTimeout(() => window.location.reload(), 1500);
     }
-  }, [completeEventDone, showToast]);
+  }, [completeEventDone, completeEventReceipt, resetCompleteEvent, showToast]);
 
   useEffect(() => {
     if (completeEventWriteError) {
