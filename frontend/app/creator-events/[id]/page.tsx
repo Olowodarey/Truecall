@@ -453,6 +453,13 @@ export default function CreatorEventDetailPage() {
 
   // ── Predict ──────────────────────────────────────────────────────────────────
 
+  const handleScoreChange = (value: string, setter: (v: string) => void) => {
+    if (value === "") return setter("");
+    const num = parseInt(value);
+    if (isNaN(num) || num < 0 || num > 20) return;
+    setter(value);
+  };
+
   const handlePredict = async (matchId: number) => {
     setPredictError(null);
     const h = parseInt(homeScore);
@@ -1396,7 +1403,7 @@ export default function CreatorEventDetailPage() {
                               min={0}
                               max={20}
                               value={homeScore}
-                              onChange={(e) => setHomeScore(e.target.value)}
+                              onChange={(e) => handleScoreChange(e.target.value, setHomeScore)}
                               placeholder="0"
                               className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-center text-xl font-bold focus:outline-none focus:ring-2 focus:ring-orange-500"
                             />
@@ -1413,7 +1420,7 @@ export default function CreatorEventDetailPage() {
                               min={0}
                               max={20}
                               value={awayScore}
-                              onChange={(e) => setAwayScore(e.target.value)}
+                              onChange={(e) => handleScoreChange(e.target.value, setAwayScore)}
                               placeholder="0"
                               className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-center text-xl font-bold focus:outline-none focus:ring-2 focus:ring-orange-500"
                             />
